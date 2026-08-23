@@ -80,8 +80,10 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.match(page, /OnboardingPage/);
   assert.match(page, /Start setup/);
   assert.match(page, /Bring the studio online/);
-  assert.match(page, /buildDemoWorkspace/);
-  assert.match(page, /Load demo/);
+  assert.doesNotMatch(page, /buildDemoWorkspace/);
+  assert.doesNotMatch(page, /Load demo/);
+  assert.doesNotMatch(page, /demo-cocorise/);
+  assert.doesNotMatch(page, /Demo data/);
   assert.match(page, /MonetizationPage/);
   assert.match(page, /PaywallPage/);
   assert.match(page, /GeoRevenuePage/);

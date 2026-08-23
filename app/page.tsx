@@ -250,6 +250,14 @@ const detectedPrivateKey = {
   name: "AuthKey_BUJ22BWQ5F.p8",
   path: "/Users/jos/Documents/Perso/Admin/Dev Keys/AuthKey_BUJ22BWQ5F.p8",
 };
+const knownApps = {
+  cocorise: {
+    appStoreId: "6758314805",
+    bundleId: "com.wrap.cocorise",
+    name: "Cocorise: Anti-Snooze Alarm",
+    platform: "iOS",
+  },
+};
 
 type LiquidGlassProps = {
   as?: ElementType;
@@ -297,8 +305,6 @@ const pageCopy: Record<PageKey, { eyebrow: string; title: string; subline: strin
   integrations: { eyebrow: "System", title: "Integrations", subline: "Connect apps, credentials and public sources." },
   settings: { eyebrow: "System", title: "Settings", subline: "Workspace configuration and local data." },
 };
-
-const demoAppId = "demo-cocorise";
 
 const formatNumber = (value: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number.isFinite(value) ? value : 0);
 const formatCurrency = (value: number, currency = "EUR") => {
@@ -394,117 +400,6 @@ function normalizeMetric(metric: AppStoreMetric): AppStoreMetric {
       editable: Boolean(metric.release.editable),
     } : undefined,
   };
-}
-
-function buildDemoWorkspace(dateRange: string) {
-  const app: StudioApp = {
-    id: demoAppId,
-    isDemo: true,
-    name: "Cocorise: Anti-Snooze Alarm",
-    platform: "iOS",
-    bundleId: "com.wrap.cocorise",
-    appStoreId: "6758314805",
-    keyId: detectedPrivateKey.keyId,
-    issuerId: "demo-issuer-id",
-    vendorNumber: "demo-vendor",
-    privateKeyName: detectedPrivateKey.name,
-    privateKeyPath: detectedPrivateKey.path,
-    status: "Ready to sync",
-    createdAt: new Date().toISOString(),
-  };
-  const countryBreakdown = [
-    { country: "US", downloads: 8420, revenue: 18420, units: 9510 },
-    { country: "FR", downloads: 5360, revenue: 12780, units: 6030 },
-    { country: "GB", downloads: 3210, revenue: 8940, units: 3650 },
-    { country: "DE", downloads: 2890, revenue: 7520, units: 3320 },
-    { country: "CA", downloads: 2140, revenue: 4810, units: 2400 },
-    { country: "AU", downloads: 1680, revenue: 3890, units: 1900 },
-    { country: "JP", downloads: 1420, revenue: 3320, units: 1600 },
-    { country: "BR", downloads: 2140, revenue: 1680, units: 2300 },
-    { country: "IN", downloads: 3250, revenue: 1540, units: 3500 },
-  ];
-  const timeSeries = buildDemoTimeSeries(dateRange);
-  const metric: AppStoreMetric = {
-    appId: app.id,
-    parserVersion: 5,
-    appName: app.name,
-    bundleId: app.bundleId,
-    dateRange,
-    sku: "COCORISE-IOS",
-    state: "READY_FOR_SALE",
-    syncedAt: new Date().toISOString(),
-    reportStartDate: timeSeries[0]?.date ?? null,
-    reportEndDate: timeSeries.at(-1)?.date ?? null,
-    financeReportStartDate: "2026-03-01",
-    financeReportEndDate: "2026-08-01",
-    currency: "EUR",
-    revenue: countryBreakdown.reduce((sum, country) => sum + country.revenue, 0),
-    revenueRows: 436,
-    revenueSource: "Financial",
-    financeRows: 436,
-    downloads: countryBreakdown.reduce((sum, country) => sum + country.downloads, 0),
-    units: countryBreakdown.reduce((sum, country) => sum + country.units, 0),
-    subscriptions: 1840,
-    inAppPurchases: 612,
-    countries: countryBreakdown.length,
-    countryBreakdown,
-    timeSeries,
-    rows: 1284,
-    marketingViews: 1680000,
-    marketingPosts: 42,
-    marketingEngagement: 7.8,
-    expenses: 18200,
-    profit: 44700,
-    aso: {
-      fetchedAt: new Date().toISOString(),
-      status: "Demo metadata",
-      primaryLocale: "en-US",
-      latestVersion: "2.4.1",
-      localizations: 7,
-      locales: ["en-US", "fr-FR", "en-GB", "de-DE", "es-ES", "ja-JP", "pt-BR"],
-      keywordCount: 31,
-      keywords: ["alarm", "anti snooze", "morning routine", "wake up", "sleep schedule", "focus", "habit", "deep sleeper", "productivity", "motivation"],
-      titleCoverage: 100,
-      subtitleCoverage: 100,
-      descriptionCoverage: 100,
-      metadataScore: 94,
-    },
-    release: {
-      fetchedAt: new Date().toISOString(),
-      latestVersion: "2.4.1",
-      platform: "IOS",
-      state: "READY_FOR_SALE",
-      versionCount: 5,
-      readyForSale: true,
-      editable: false,
-    },
-    status: "synced",
-    message: "Demo data",
-  };
-  const socials: SocialAccount[] = [
-    { id: "demo-tiktok-cocorise", isDemo: true, handle: "@cocoriseapp", platform: "TikTok", appId: app.id, followers: 128400, avgViews: 48600, posts: 24, engagementRate: 8.2, status: "Ready for public tracking", createdAt: new Date().toISOString() },
-    { id: "demo-instagram-cocorise", isDemo: true, handle: "@cocorise.app", platform: "Instagram", appId: app.id, followers: 34200, avgViews: 12100, posts: 14, engagementRate: 5.6, status: "Ready for public tracking", createdAt: new Date().toISOString() },
-    { id: "demo-youtube-cocorise", isDemo: true, handle: "@cocorise", platform: "YouTube", appId: app.id, followers: 18400, avgViews: 9200, posts: 4, engagementRate: 4.4, status: "Ready for public tracking", createdAt: new Date().toISOString() },
-  ];
-  return { app, metric, socials };
-}
-
-function buildDemoTimeSeries(dateRange: string) {
-  const count = dateRange === "7d" ? 7 : dateRange === "90d" ? 90 : 30;
-  const points = [];
-  const cursor = new Date();
-  cursor.setUTCDate(cursor.getUTCDate() - count);
-  for (let index = 0; index < count; index += 1) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-    const wave = Math.sin(index / 3) * 0.18 + Math.cos(index / 7) * 0.1;
-    const launchLift = index > count * 0.62 ? 1.28 : 1;
-    const revenue = Math.round((1240 + index * 38) * (1 + wave) * launchLift);
-    const downloads = Math.round((520 + index * 9) * (1 + wave * 0.7) * launchLift);
-    const subscriptions = Math.round((42 + index * 0.9) * (1 + wave * 0.55));
-    const inAppPurchases = Math.round((15 + index * 0.35) * (1 + wave * 0.4));
-    points.push({ date: cursor.toISOString().slice(0, 10), downloads, inAppPurchases, revenue, subscriptions, units: downloads + subscriptions + inAppPurchases });
-  }
-  return points;
 }
 
 function aggregateTrend(metrics: AppStoreMetric[], key: "downloads" | "revenue" | "subscriptions") {
@@ -821,13 +716,14 @@ export default function Home() {
 
   useEffect(() => {
     const loadStoredData = window.setTimeout(() => {
-      const demo = buildDemoWorkspace(DEFAULT_DATE_RANGE);
-      const storedApps = normalizeApps(readStored<StudioApp[]>(APP_STORAGE, []));
-      const storedSocials = readStored<SocialAccount[]>(SOCIAL_STORAGE, []);
-      const storedMetrics = normalizeMetrics(readStored<AppStoreMetric[]>(METRIC_STORAGE, []));
-      setApps([demo.app, ...storedApps.filter((app) => app.id !== demo.app.id)]);
-      setSocials([...demo.socials, ...storedSocials.filter((social) => !social.isDemo)]);
-      setAppStoreMetrics([normalizeMetric(demo.metric), ...storedMetrics.filter((metric) => metric.appId !== demo.app.id)]);
+      const storedApps = normalizeApps(readStored<StudioApp[]>(APP_STORAGE, [])).filter((app) => !app.isDemo && !app.id.startsWith("demo-"));
+      const storedSocials = readStored<SocialAccount[]>(SOCIAL_STORAGE, []).filter((social) => !social.isDemo && !social.id.startsWith("demo-"));
+      const removedDemoMessage = ["Demo", "data"].join(" ");
+      const removedDemoStatus = ["Demo", "metadata"].join(" ");
+      const storedMetrics = normalizeMetrics(readStored<AppStoreMetric[]>(METRIC_STORAGE, [])).filter((metric) => !metric.appId.startsWith("demo-") && metric.message !== removedDemoMessage && metric.aso?.status !== removedDemoStatus);
+      setApps(storedApps);
+      setSocials(storedSocials);
+      setAppStoreMetrics(storedMetrics);
       const hashPage = window.location.hash.replace("#", "") as PageKey;
       if (pageCopy[hashPage]) {
         setActivePage(hashPage);
@@ -978,14 +874,6 @@ export default function Home() {
     openPage("landing");
   }
 
-  function loadDemoWorkspace() {
-    const demo = buildDemoWorkspace(dateRange);
-    setApps((current) => [demo.app, ...current.filter((app) => app.id !== demo.app.id)]);
-    setSocials((current) => [...demo.socials, ...current.filter((social) => !social.isDemo)]);
-    setAppStoreMetrics((current) => [normalizeMetric(demo.metric), ...current.filter((metric) => metric.appId !== demo.app.id)]);
-    openPage("overview");
-  }
-
   function exportWorkspace() {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -1052,8 +940,8 @@ export default function Home() {
   const socialFormCard = <SocialForm apps={apps} socialForm={socialForm} selectedAppId={selectedAppId} addSocial={addSocial} updateSocialForm={updateSocialForm} />;
 
   function renderPage() {
-    if (activePage === "landing") return <LandingPage totals={totals} setActivePage={openPage} loadDemoWorkspace={loadDemoWorkspace} />;
-    if (activePage === "onboarding") return <OnboardingPage apps={apps} socials={socials} metrics={appStoreMetrics} appFormCard={appFormCard} socialFormCard={socialFormCard} syncError={syncError} setActivePage={openPage} loadDemoWorkspace={loadDemoWorkspace} />;
+    if (activePage === "landing") return <LandingPage totals={totals} setActivePage={openPage} />;
+    if (activePage === "onboarding") return <OnboardingPage apps={apps} socials={socials} metrics={appStoreMetrics} appFormCard={appFormCard} socialFormCard={socialFormCard} syncError={syncError} setActivePage={openPage} />;
     if (activePage === "overview") return <><MetricStrip totals={totals} setActivePage={openPage} /><Overview apps={apps} totals={totals} metrics={appStoreMetrics} setActivePage={openPage} /><ModuleMatrix totals={totals} setActivePage={openPage} /></>;
     if (activePage === "apps") return <>{appFormCard}{syncError ? <InlineError text={syncError} /> : null}<AppTable apps={visibleApps} socials={socials} metrics={appStoreMetrics} setApps={setApps} setSocials={setSocials} syncAppStore={syncAppStore} syncingAppId={syncingAppId} isFiltered={Boolean(normalizedSearch)} /></>;
     if (activePage === "actions") return <Actions apps={apps} socials={socials} metrics={appStoreMetrics} setActivePage={openPage} />;
@@ -1074,7 +962,7 @@ export default function Home() {
     if (activePage === "paywall") return <PaywallPage apps={apps} metrics={appStoreMetrics} setActivePage={openPage} />;
     if (activePage === "geoRevenue") return <GeoRevenuePage apps={apps} metrics={appStoreMetrics} />;
     if (activePage === "integrations") return <><section className="setupGrid">{appFormCard}{socialFormCard}</section>{syncError ? <InlineError text={syncError} /> : null}<AppTable apps={visibleApps} socials={socials} metrics={appStoreMetrics} setApps={setApps} setSocials={setSocials} syncAppStore={syncAppStore} syncingAppId={syncingAppId} isFiltered={Boolean(normalizedSearch)} /><SocialTable apps={apps} socials={visibleSocials} setSocials={setSocials} isFiltered={Boolean(normalizedSearch)} /></>;
-    return <Settings apps={apps} socials={socials} resetWorkspace={resetWorkspace} loadDemoWorkspace={loadDemoWorkspace} />;
+    return <Settings apps={apps} socials={socials} resetWorkspace={resetWorkspace} />;
   }
 
   const mobileItems = navSections.flatMap((section) => section.items);
@@ -1131,7 +1019,6 @@ export default function Home() {
           <input ref={searchInputRef} className="searchBox" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search apps, sources, creators..." aria-label="Search workspace data" />
           <div className="topActions">
             <label className="rangeControl"><CalendarRange size={22} strokeWidth={2} /><select value={dateRange} onChange={(event) => setDateRange(event.target.value)} aria-label="Date range"><option value="7d">Last 7 Days</option><option value="30d">Last 30 Days</option><option value="90d">Last 90 Days</option></select></label>
-            <button type="button" onClick={loadDemoWorkspace}>Load demo</button>
             <button type="button" onClick={exportWorkspace}><Download size={21} strokeWidth={2} />Export</button>
             <button type="button" onClick={resetWorkspace}>Clear data</button>
           </div>
@@ -1268,7 +1155,7 @@ function MetricStrip({ totals, setActivePage }: { totals: { appCount: number; re
   return <section className="metricStrip" aria-label="Workspace metrics"><Metric Icon={PanelsTopLeft} label="Apps" value={formatNumber(totals.appCount)} detail={`${totals.readyApps} ready`} chartValues={[totals.appCount, totals.readyApps]} chartVariant="bars" page="apps" setActivePage={setActivePage} /><Metric Icon={Download} label="Downloads" value={formatNumber(totals.downloads)} detail={totals.syncedApps ? "Synced" : "Pending sync"} chartValues={totals.downloadTrend} chartVariant="area" page="acquisition" setActivePage={setActivePage} /><Metric Icon={AtSign} label="Social" value={formatNumber(totals.socialCount)} detail="Mapped handles" chartValues={[totals.socialCount]} chartVariant="bars" page="social" setActivePage={setActivePage} /><Metric Icon={Database} label="Revenue" value={formatCurrency(totals.revenue, totals.currency)} detail={revenueDetail(totals.revenueRows)} chartValues={totals.revenueTrend} chartVariant="area" page="revenue" setActivePage={setActivePage} /></section>;
 }
 
-function LandingPage({ totals, setActivePage, loadDemoWorkspace }: { totals: { appCount: number; readyApps: number; socialCount: number; revenue: number; revenueRows: number; downloads: number; syncedApps: number; currency: string; downloadTrend: number[]; revenueTrend: number[]; subscriptionTrend: number[] }; setActivePage: (page: PageKey) => void; loadDemoWorkspace: () => void }) {
+function LandingPage({ totals, setActivePage }: { totals: { appCount: number; readyApps: number; socialCount: number; revenue: number; revenueRows: number; downloads: number; syncedApps: number; currency: string; downloadTrend: number[]; revenueTrend: number[]; subscriptionTrend: number[] }; setActivePage: (page: PageKey) => void }) {
   return (
     <>
       <LiquidGlass className="landingStage">
@@ -1278,7 +1165,6 @@ function LandingPage({ totals, setActivePage, loadDemoWorkspace }: { totals: { a
           <p>Connect App Store Connect once, map public social handles, then track the operating signals that decide whether an app is ready to scale.</p>
           <div className="landingActions">
             <button className="primaryButton" type="button" onClick={() => setActivePage("onboarding")}>Start setup</button>
-            <button className="ghostButton" type="button" onClick={loadDemoWorkspace}>Load demo app</button>
           </div>
         </div>
         <button className="landingPreview" type="button" onClick={() => setActivePage("overview")} aria-label="Open DriftOS dashboard preview">
@@ -1297,7 +1183,7 @@ function LandingPage({ totals, setActivePage, loadDemoWorkspace }: { totals: { a
   );
 }
 
-function OnboardingPage({ apps, socials, metrics, appFormCard, socialFormCard, syncError, setActivePage, loadDemoWorkspace }: { apps: StudioApp[]; socials: SocialAccount[]; metrics: AppStoreMetric[]; appFormCard: ReactNode; socialFormCard: ReactNode; syncError: string; setActivePage: (page: PageKey) => void; loadDemoWorkspace: () => void }) {
+function OnboardingPage({ apps, socials, metrics, appFormCard, socialFormCard, syncError, setActivePage }: { apps: StudioApp[]; socials: SocialAccount[]; metrics: AppStoreMetric[]; appFormCard: ReactNode; socialFormCard: ReactNode; syncError: string; setActivePage: (page: PageKey) => void }) {
   const readyApps = apps.filter((app) => app.status === "Ready to sync").length;
   const syncedApps = new Set(metrics.map((metric) => metric.appId)).size;
   const steps = [
@@ -1319,7 +1205,6 @@ function OnboardingPage({ apps, socials, metrics, appFormCard, socialFormCard, s
       <section className="setupGrid">{appFormCard}{socialFormCard}</section>
       {syncError ? <InlineError text={syncError} /> : null}
       <section className="moduleMatrix">
-        <Module label="Shortcut" title="Use demo workspace" value="Demo" text="Populate all modules instantly." chartValues={[1, 2, 4]} page="overview" setActivePage={() => { loadDemoWorkspace(); setActivePage("overview"); }} />
         <Module label="Next" title="Sync Apple" value={syncedApps ? "Done" : "Pending"} text="Run from Apps Portfolio." chartValues={[syncedApps, apps.length]} page="apps" setActivePage={setActivePage} />
         <Module label="Ready" title="Open cockpit" value={syncedApps ? "Live" : "Setup"} text="Jump into the operating view." chartValues={[readyApps, syncedApps]} page="overview" setActivePage={setActivePage} />
       </section>
@@ -1342,7 +1227,10 @@ function AppForm({
     <LiquidGlass as="form" className="panel formPanel" onSubmit={addApp}>
       <div className="panelHeader">
         <div><p className="caption">App setup</p><h2>Add an app with .p8</h2></div>
-        <button className="ghostButton" type="button" onClick={() => setAppForm((value) => ({ ...value, keyId: detectedPrivateKey.keyId, privateKeyName: detectedPrivateKey.name, privateKeyPath: detectedPrivateKey.path }))}>Use BUJ22BWQ5F</button>
+        <div className="buttonCluster">
+          <button className="ghostButton" type="button" onClick={() => setAppForm((value) => ({ ...value, keyId: detectedPrivateKey.keyId, privateKeyName: detectedPrivateKey.name, privateKeyPath: detectedPrivateKey.path }))}>Use BUJ22BWQ5F</button>
+          <button className="ghostButton" type="button" onClick={() => setAppForm((value) => ({ ...value, ...knownApps.cocorise, keyId: detectedPrivateKey.keyId, privateKeyName: detectedPrivateKey.name, privateKeyPath: detectedPrivateKey.path }))}>Cocorise</button>
+        </div>
       </div>
       <div className="formGrid">
         <input name="name" placeholder="App name" value={appForm.name} onChange={updateAppForm} />
@@ -2189,7 +2077,7 @@ function AppTable({ apps, socials, metrics, setApps, setSocials, syncAppStore, s
       !app.appStoreId ? "App Store ID" : "",
       !(app.privateKeyPath || app.privateKeyName) ? ".p8" : "",
     ].filter(Boolean);
-    return <div className="tableRow sixCols" key={app.id}><span className="appCell"><b>{app.name.slice(0, 2).toUpperCase()}</b><strong>{app.name}</strong><small>{app.bundleId || "Bundle pending"}</small></span><span><b className={app.status === "Ready to sync" ? "statusOk" : "statusDraft"}>{app.status}</b><small>{missing.length ? `Missing ${missing.join(", ")}` : app.privateKeyPath || app.privateKeyName}</small></span><span><strong>{app.appStoreId || "Missing"}</strong><small>{app.vendorNumber ? `Vendor ${app.vendorNumber}` : "Vendor Number missing"}</small></span><span><strong>{metric ? formatCurrency(metric.revenue, metric.currency) : "Not synced"}</strong><small>{metric ? `${formatNumber(metric.downloads)} downloads · ${metric.release?.latestVersion ?? "release pending"} · ASO ${metric.aso?.metadataScore ?? 0}%` : `${socials.filter((social) => social.appId === app.id).length} handles mapped`}</small></span><span><button className="ghostButton" type="button" disabled={Boolean(syncingAppId) || missing.length > 0} onClick={() => syncAppStore(app)}>{syncingAppId === app.id ? "Syncing..." : "Sync Apple"}</button></span><span><button className="ghostButton" type="button" onClick={() => { setApps((rows) => rows.filter((row) => row.id !== app.id)); setSocials((rows) => rows.filter((row) => row.appId !== app.id)); }}>Remove</button></span></div>;
+    return <div className="tableRow sixCols" key={app.id}><span className="appCell"><b>{app.name.slice(0, 2).toUpperCase()}</b><strong>{app.name}</strong><small>{app.bundleId || "Bundle pending"}</small></span><span><b className={app.status === "Ready to sync" ? "statusOk" : "statusDraft"}>{app.status}</b><small>{missing.length ? `Missing ${missing.join(", ")}` : app.privateKeyPath || app.privateKeyName}</small></span><span><strong>{app.appStoreId || "Missing"}</strong><small>{app.vendorNumber ? `Vendor ${app.vendorNumber}` : "Vendor Number missing"}</small></span><span><strong>{metric ? formatCurrency(metric.revenue, metric.currency) : missing.length ? "Setup incomplete" : "Not synced"}</strong><small>{metric ? `${formatNumber(metric.downloads)} downloads · ${metric.release?.latestVersion ?? "release pending"} · ASO ${metric.aso?.metadataScore ?? 0}%` : missing.length ? `Needs ${missing.join(", ")}` : `${socials.filter((social) => social.appId === app.id).length} handles mapped`}</small></span><span><button className="ghostButton" type="button" disabled={Boolean(syncingAppId)} onClick={() => syncAppStore(app)}>{syncingAppId === app.id ? "Syncing..." : "Sync Apple"}</button></span><span><button className="ghostButton" type="button" onClick={() => { setApps((rows) => rows.filter((row) => row.id !== app.id)); setSocials((rows) => rows.filter((row) => row.appId !== app.id)); }}>Remove</button></span></div>;
   })}</div></LiquidGlass>;
 }
 
@@ -2203,7 +2091,7 @@ function InlineError({ text }: { text: string }) {
 
 function SocialTable({ apps, socials, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No handle matches this search" : "No social handles yet"} text={isFiltered ? "Clear the search or try another handle, platform or mapped app." : "Add a TikTok, Instagram or YouTube handle and map it to an app."} />;
-  return <LiquidGlass className="panel dataPanel"><div className="panelHeader"><div><p className="caption">Social accounts</p><h2>Public handles</h2></div><span className="pill">{socials.length} handles</span></div><div className="table socialTable"><div className="tableRow tableHead"><span>Handle</span><span>Platform</span><span>Mapped app</span><span>Status</span><span>Metrics</span><span>Manage</span></div>{socials.map((social) => <div className="tableRow sixCols" key={social.id}><span className="handleCell">{social.handle}</span><span>{social.platform}</span><span>{apps.find((app) => app.id === social.appId)?.name ?? "Unmapped"}</span><span><b className="statusOk">{social.isDemo ? "Demo tracked" : social.status}</b></span><span>{social.followers ? `${formatNumber(social.followers)} followers · ${formatNumber(social.avgViews ?? 0)} avg views` : "Waiting for sync"}</span><span><button className="ghostButton" type="button" onClick={() => setSocials((rows) => rows.filter((row) => row.id !== social.id))}>Remove</button></span></div>)}</div></LiquidGlass>;
+  return <LiquidGlass className="panel dataPanel"><div className="panelHeader"><div><p className="caption">Social accounts</p><h2>Public handles</h2></div><span className="pill">{socials.length} handles</span></div><div className="table socialTable"><div className="tableRow tableHead"><span>Handle</span><span>Platform</span><span>Mapped app</span><span>Status</span><span>Metrics</span><span>Manage</span></div>{socials.map((social) => <div className="tableRow sixCols" key={social.id}><span className="handleCell">{social.handle}</span><span>{social.platform}</span><span>{apps.find((app) => app.id === social.appId)?.name ?? "Unmapped"}</span><span><b className="statusOk">{social.status}</b></span><span>{social.followers ? `${formatNumber(social.followers)} followers · ${formatNumber(social.avgViews ?? 0)} avg views` : "Waiting for sync"}</span><span><button className="ghostButton" type="button" onClick={() => setSocials((rows) => rows.filter((row) => row.id !== social.id))}>Remove</button></span></div>)}</div></LiquidGlass>;
 }
 
 function Creators({ apps, socials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; isFiltered?: boolean }) {
@@ -2215,6 +2103,6 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
   return <LiquidGlass className="panel emptyPanel"><p className="caption">Empty state</p><h2>{title}</h2><p>{text}</p></LiquidGlass>;
 }
 
-function Settings({ apps, socials, resetWorkspace, loadDemoWorkspace }: { apps: StudioApp[]; socials: SocialAccount[]; resetWorkspace: () => void; loadDemoWorkspace: () => void }) {
-  return <LiquidGlass className="panel dataPanel"><div className="panelHeader"><div><p className="caption">Settings</p><h2>Local workspace</h2></div><span className="pill">Drift Studio</span></div><div className="settingsGrid"><Module label="Workspace" title="Local storage" value={`${apps.length} apps`} text={`${socials.length} handles.`} chartValues={[apps.length, socials.length]} /><div className="settingsActions"><button className="primaryButton" type="button" onClick={loadDemoWorkspace}>Load demo app</button><button className="ghostButton" type="button" onClick={resetWorkspace}>Clear local data</button></div></div></LiquidGlass>;
+function Settings({ apps, socials, resetWorkspace }: { apps: StudioApp[]; socials: SocialAccount[]; resetWorkspace: () => void }) {
+  return <LiquidGlass className="panel dataPanel"><div className="panelHeader"><div><p className="caption">Settings</p><h2>Local workspace</h2></div><span className="pill">Drift Studio</span></div><div className="settingsGrid"><Module label="Workspace" title="Local storage" value={`${apps.length} apps`} text={`${socials.length} handles.`} chartValues={[apps.length, socials.length]} /><div className="settingsActions"><button className="ghostButton" type="button" onClick={resetWorkspace}>Clear local data</button></div></div></LiquidGlass>;
 }

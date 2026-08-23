@@ -512,6 +512,14 @@ select,
   gap: 16px;
 }
 
+.buttonCluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .topHeader {
   position: sticky;
   top: 18px;
