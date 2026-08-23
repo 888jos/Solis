@@ -92,6 +92,7 @@ type ParsedFinanceRow = {
   currency: string;
   date: string;
   revenue: number;
+  source: string;
   units: number;
 };
 
@@ -100,6 +101,11 @@ const APPLE_FETCH_TIMEOUT_MS = 8_000;
 const APPLE_METADATA_TIMEOUT_MS = 5_000;
 const SALES_REPORT_CONCURRENCY = 8;
 const FINANCE_REPORT_MONTHS = 6;
+const FINANCE_REPORT_CANDIDATES = [
+  { regionCode: "ZZ", reportType: "FINANCIAL" },
+  { regionCode: "ZZ", reportType: "FINANCE_DETAIL" },
+  { regionCode: "Z1", reportType: "FINANCE_DETAIL" },
+];
 
 export const dynamic = "force-dynamic";
 
@@ -470,10 +476,26 @@ async function fetchSalesReportForDate({ appStoreId, appSku, date, token, vendor
 }
 
 async function fetchFinanceReports({ appStoreId, appSku, token, vendorNumber }: { appStoreId: string; appSku: string; token: string; vendorNumber: string }) {
-  const results = await Promise.all(recentFinanceMonths().map((month) => fetchFinanceReportForMonth({ appStoreId, appSku, month, token, vendorNumber }).catch((error) => normalizeAppleNetworkError(error))));
-  const errors = results.filter((result): result is Error => result instanceof Error);
-  const reports = results.filter((result): result is { month: string; rows: ParsedFinanceRow[] } => Boolean(result) && !(result instanceof Error));
-  if (!reports.length && errors.length === results.length) throw errors[0];
+  const results = [];
+  const errors: Error[] = [];
+
+  for (const month of recentFinanceMonths()) {
+    let bestReport: { month: string; rows: ParsedFinanceRow[] } | null = null;
+    for (const candidate of FINANCE_REPORT_CANDIDATES) {
+      const report = await fetchFinanceReportForMonth({ appStoreId, appSku, month, regionCode: candidate.regionCode, reportType: candidate.reportType, token, vendorNumber }).catch((error) => normalizeAppleNetworkError(error));
+      if (report instanceof Error) {
+        errors.push(report);
+        continue;
+      }
+      if (!report) continue;
+      if (!bestReport || report.rows.some((row) => row.revenue !== 0) || (!bestReport.rows.length && report.rows.length)) bestReport = report;
+      if (bestReport.rows.some((row) => row.revenue !== 0)) break;
+    }
+    if (bestReport) results.push(bestReport);
+  }
+
+  const reports = results.filter((result): result is { month: string; rows: ParsedFinanceRow[] } => Boolean(result));
+  if (!reports.length && errors.length) throw errors[0];
   const rows = reports.flatMap((report) => report.rows);
   const selectedRows = selectPrimaryCurrencyRows(rows);
   const reportDates = selectedRows.map((row) => row.date).sort();
@@ -483,7 +505,7 @@ async function fetchFinanceReports({ appStoreId, appSku, token, vendorNumber }: 
   const byDate = new Map<string, ParsedFinanceRow>();
 
   for (const row of selectedRows) {
-    const current = byDate.get(row.date) ?? { currency: row.currency, date: row.date, revenue: 0, units: 0 };
+    const current = byDate.get(row.date) ?? { currency: row.currency, date: row.date, revenue: 0, source: row.source, units: 0 };
     byDate.set(row.date, { ...current, revenue: current.revenue + row.revenue, units: current.units + row.units });
   }
 
@@ -508,22 +530,22 @@ async function fetchFinanceReports({ appStoreId, appSku, token, vendorNumber }: 
   };
 }
 
-async function fetchFinanceReportForMonth({ appStoreId, appSku, month, token, vendorNumber }: { appStoreId: string; appSku: string; month: string; token: string; vendorNumber: string }) {
+async function fetchFinanceReportForMonth({ appStoreId, appSku, month, regionCode, reportType, token, vendorNumber }: { appStoreId: string; appSku: string; month: string; regionCode: string; reportType: string; token: string; vendorNumber: string }) {
   const params = new URLSearchParams({
-    "filter[regionCode]": "ZZ",
+    "filter[regionCode]": regionCode,
     "filter[reportDate]": month,
-    "filter[reportType]": "FINANCIAL",
+    "filter[reportType]": reportType,
     "filter[vendorNumber]": vendorNumber,
   });
   const response = await fetchWithTimeout(`${APPLE_API}/financeReports?${params.toString()}`, {
     headers: { authorization: `Bearer ${token}` },
-  }, `Apple financial report ${month}`, APPLE_FETCH_TIMEOUT_MS);
+  }, `Apple ${reportType} report ${month}/${regionCode}`, APPLE_FETCH_TIMEOUT_MS);
 
   if (response.status === 404 || response.status === 409) return null;
   if (!response.ok) throw new Error(await appleError(response, "Apple financial report failed."));
   const bytes = Buffer.from(await response.arrayBuffer());
   const text = unzipSalesReport(bytes);
-  return { month, ...parseFinanceReport(text, appStoreId, appSku, month) };
+  return { month, ...parseFinanceReport(text, appStoreId, appSku, month, `${reportType}/${regionCode}`) };
 }
 
 function mergeReports(salesReport: Awaited<ReturnType<typeof fetchSalesReports>>, financeReport: Awaited<ReturnType<typeof fetchFinanceReports>> | null, errors: { financeError?: string; salesError?: string } = {}) {
@@ -641,33 +663,34 @@ function parseSalesReport(text: string, appStoreId: string, appSku: string) {
         row["Developer Proceeds"],
         row.Proceeds,
         row["Partner Share"],
-        row["Customer Price"],
         row["Extended Partner Share"],
       );
+      const customerPrice = firstPresentNumber(row["Customer Price"], row["Customer Price in USD"], row["Customer Price USD"]);
       return {
         country: String(row["Country Code"] ?? row["Provider Country"] ?? ""),
         currency: normalizeCurrency(String(row["Currency of Proceeds"] ?? row["Customer Currency"] ?? "")),
         kind: classifyProductType(productType),
-        revenue: unitProceeds * units,
+        revenue: unitProceeds ? unitProceeds * units : customerPrice * units,
         units,
       };
     }),
   };
 }
 
-function parseFinanceReport(text: string, appStoreId: string, appSku: string, month: string) {
+function parseFinanceReport(text: string, appStoreId: string, appSku: string, month: string, source: string) {
   const rows = parseTabularReport(text);
   const matched = rows.filter((row) => matchesApp(row, appStoreId, appSku));
   return {
     rows: matched.map((row) => {
       const units = toNumber(row.Quantity ?? row.Units);
-      const extendedPartnerShare = optionalNumber(row["Extended Partner Share"]);
-      const partnerShare = optionalNumber(row["Partner Share"]);
+      const extendedPartnerShare = optionalNumber(row["Extended Partner Share"] ?? row["Developer Proceeds"]);
+      const partnerShare = optionalNumber(row["Partner Share"] ?? row.Proceeds);
       const revenue = extendedPartnerShare ?? ((partnerShare ?? 0) * units);
       return {
         currency: normalizeCurrency(String(row["Partner Share Currency"] ?? row["Customer Currency"] ?? "")),
-        date: String(row["Begin Date"] ?? row["End Date"] ?? month).slice(0, 10),
+        date: normalizeReportDate(String(row["Begin Date"] ?? row["End Date"] ?? month), month),
         revenue,
+        source,
         units,
       };
     }),
@@ -685,10 +708,21 @@ function parseTabularReport(text: string) {
 }
 
 function matchesApp(row: Record<string, string>, appStoreId: string, appSku: string) {
-  const identifiers = ["Apple Identifier", "App Apple Identifier", "Apple ID", "Adam ID", "Parent Identifier"];
-  const skus = ["SKU", "Vendor Identifier", "ISRC / ISBN"];
+  const identifiers = ["Apple Identifier", "App Apple Identifier", "Apple ID", "Adam ID", "Parent Identifier", "Parent Apple Identifier", "App Adam ID"];
+  const skus = ["SKU", "Vendor Identifier", "ISRC / ISBN", "Vendor ID", "Parent SKU"];
   return identifiers.some((key) => String(row[key] ?? "").trim() === appStoreId)
     || Boolean(appSku && skus.some((key) => String(row[key] ?? "").trim() === appSku));
+}
+
+function normalizeReportDate(value: string, fallbackMonth: string) {
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const slashDate = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashDate) {
+    const [, month, day, year] = slashDate;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  return `${fallbackMonth}-01`;
 }
 
 function classifyProductType(productType: string) {
