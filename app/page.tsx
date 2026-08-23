@@ -782,7 +782,7 @@ export default function Home() {
     const candidate = apps.find((app) => {
       if (app.isDemo) return false;
       const isComplete = app.keyId && app.issuerId && app.vendorNumber && app.appStoreId && app.privateKeyPath;
-      const hasCurrentMetrics = appStoreMetrics.some((metric) => metric.appId === app.id && metric.parserVersion >= 5 && metric.dateRange === dateRange && metric.aso);
+      const hasCurrentMetrics = appStoreMetrics.some((metric) => metric.appId === app.id && metric.parserVersion >= 6 && metric.dateRange === dateRange && metric.aso);
       return isComplete && !hasCurrentMetrics && !attemptedAutoSyncIds.current.has(app.id);
     });
     if (!candidate) return;

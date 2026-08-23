@@ -96,6 +96,13 @@ type ParsedFinanceRow = {
   units: number;
 };
 
+type MatchContext = {
+  appName: string;
+  appSku: string;
+  appStoreId: string;
+  bundleId: string;
+};
+
 const APPLE_API = "https://api.appstoreconnect.apple.com/v1";
 const APPLE_FETCH_TIMEOUT_MS = 8_000;
 const APPLE_METADATA_TIMEOUT_MS = 5_000;
@@ -132,6 +139,12 @@ export async function POST(request: Request) {
     const token = createAppStoreConnectToken({ issuerId: app.issuerId, keyId: app.keyId, privateKey });
     const appInfo = await fetchAppleApp(app.appStoreId, token).catch(() => ({ data: { attributes: {} } } satisfies AppleAppResponse));
     const attrs = appInfo.data?.attributes ?? {};
+    const matchContext = {
+      appName: attrs.name ?? app.name,
+      appSku: attrs.sku ?? "",
+      appStoreId: app.appStoreId,
+      bundleId: attrs.bundleId ?? app.bundleId,
+    };
     const dateRange = body.dateRange ?? "30d";
     let asoError = "";
     const aso = await fetchAsoSnapshot({ appStoreId: app.appStoreId, primaryLocale: attrs.primaryLocale ?? "", token }).catch((error) => {
@@ -140,12 +153,12 @@ export async function POST(request: Request) {
     });
     const release = await fetchReleaseSnapshot({ appStoreId: app.appStoreId, appState: attrs.appStoreState ?? "", token }).catch(() => emptyReleaseSnapshot(attrs.appStoreState ?? ""));
     let salesError = "";
-    const salesReport = await fetchSalesReports({ appStoreId: app.appStoreId, appSku: attrs.sku ?? "", dateRange, token, vendorNumber: app.vendorNumber }).catch((error) => {
+    const salesReport = await fetchSalesReports({ dateRange, matchContext, token, vendorNumber: app.vendorNumber }).catch((error) => {
       salesError = error instanceof Error ? error.message : "Sales reports unavailable.";
       return emptySalesReport(salesError);
     });
     let financeError = "";
-    const financeReport = await fetchFinanceReports({ appStoreId: app.appStoreId, appSku: attrs.sku ?? "", token, vendorNumber: app.vendorNumber }).catch((error) => {
+    const financeReport = await fetchFinanceReports({ matchContext, token, vendorNumber: app.vendorNumber }).catch((error) => {
       financeError = error instanceof Error ? error.message : "Financial reports unavailable.";
       return null;
     });
@@ -155,7 +168,7 @@ export async function POST(request: Request) {
       ok: true,
       metrics: {
         appId: app.id,
-        parserVersion: 5,
+        parserVersion: 6,
         appName: attrs.name ?? app.name,
         bundleId: attrs.bundleId ?? app.bundleId,
         dateRange,
@@ -231,7 +244,10 @@ function toPaddedInteger(value: Buffer) {
 }
 
 async function fetchAppleApp(appStoreId: string, token: string) {
-  const response = await fetchWithTimeout(`${APPLE_API}/apps/${encodeURIComponent(appStoreId)}`, {
+  const params = new URLSearchParams({
+    "fields[apps]": "appStoreState,bundleId,name,primaryLocale,sku",
+  });
+  const response = await fetchWithTimeout(`${APPLE_API}/apps/${encodeURIComponent(appStoreId)}?${params.toString()}`, {
     headers: { authorization: `Bearer ${token}` },
   }, "Apple app metadata", APPLE_METADATA_TIMEOUT_MS);
   if (!response.ok) throw new Error(await appleError(response, "Apple app metadata failed."));
@@ -386,12 +402,12 @@ function emptySalesReport(message: string) {
   };
 }
 
-async function fetchSalesReports({ appStoreId, appSku, dateRange, token, vendorNumber }: { appStoreId: string; appSku: string; dateRange: string; token: string; vendorNumber: string }) {
+async function fetchSalesReports({ dateRange, matchContext, token, vendorNumber }: { dateRange: string; matchContext: MatchContext; token: string; vendorNumber: string }) {
   const days = rangeDays(dateRange);
   const reports = [];
   const errors: Error[] = [];
   const probeDays = days.slice(0, Math.min(3, days.length));
-  const probe = await Promise.all(probeDays.map((date) => fetchSalesReportForDate({ appStoreId, appSku, date, token, vendorNumber })));
+  const probe = await Promise.all(probeDays.map((date) => fetchSalesReportForDate({ date, matchContext, token, vendorNumber })));
 
   for (const result of probe) {
     if (result instanceof Error) errors.push(result);
@@ -405,7 +421,7 @@ async function fetchSalesReports({ appStoreId, appSku, dateRange, token, vendorN
   const remainingDays = days.slice(probeDays.length);
   for (let index = 0; index < remainingDays.length; index += SALES_REPORT_CONCURRENCY) {
     const chunk = remainingDays.slice(index, index + SALES_REPORT_CONCURRENCY);
-    const results = await Promise.all(chunk.map((date) => fetchSalesReportForDate({ appStoreId, appSku, date, token, vendorNumber })));
+    const results = await Promise.all(chunk.map((date) => fetchSalesReportForDate({ date, matchContext, token, vendorNumber })));
     for (const result of results) {
       if (result instanceof Error) errors.push(result);
       else if (result) reports.push(result);
@@ -453,7 +469,7 @@ async function fetchSalesReports({ appStoreId, appSku, dateRange, token, vendorN
   };
 }
 
-async function fetchSalesReportForDate({ appStoreId, appSku, date, token, vendorNumber }: { appStoreId: string; appSku: string; date: string; token: string; vendorNumber: string }) {
+async function fetchSalesReportForDate({ date, matchContext, token, vendorNumber }: { date: string; matchContext: MatchContext; token: string; vendorNumber: string }) {
   try {
     const params = new URLSearchParams({
       "filter[frequency]": "DAILY",
@@ -469,20 +485,20 @@ async function fetchSalesReportForDate({ appStoreId, appSku, date, token, vendor
     if (!response.ok) throw new Error(await appleError(response, "Apple sales report failed."));
     const bytes = Buffer.from(await response.arrayBuffer());
     const text = unzipSalesReport(bytes);
-    return { date, ...parseSalesReport(text, appStoreId, appSku) };
+    return { date, ...parseSalesReport(text, matchContext) };
   } catch (error) {
     return normalizeAppleNetworkError(error);
   }
 }
 
-async function fetchFinanceReports({ appStoreId, appSku, token, vendorNumber }: { appStoreId: string; appSku: string; token: string; vendorNumber: string }) {
+async function fetchFinanceReports({ matchContext, token, vendorNumber }: { matchContext: MatchContext; token: string; vendorNumber: string }) {
   const results = [];
   const errors: Error[] = [];
 
   for (const month of recentFinanceMonths()) {
     let bestReport: { month: string; rows: ParsedFinanceRow[] } | null = null;
     for (const candidate of FINANCE_REPORT_CANDIDATES) {
-      const report = await fetchFinanceReportForMonth({ appStoreId, appSku, month, regionCode: candidate.regionCode, reportType: candidate.reportType, token, vendorNumber }).catch((error) => normalizeAppleNetworkError(error));
+      const report = await fetchFinanceReportForMonth({ matchContext, month, regionCode: candidate.regionCode, reportType: candidate.reportType, token, vendorNumber }).catch((error) => normalizeAppleNetworkError(error));
       if (report instanceof Error) {
         errors.push(report);
         continue;
@@ -530,7 +546,7 @@ async function fetchFinanceReports({ appStoreId, appSku, token, vendorNumber }: 
   };
 }
 
-async function fetchFinanceReportForMonth({ appStoreId, appSku, month, regionCode, reportType, token, vendorNumber }: { appStoreId: string; appSku: string; month: string; regionCode: string; reportType: string; token: string; vendorNumber: string }) {
+async function fetchFinanceReportForMonth({ matchContext, month, regionCode, reportType, token, vendorNumber }: { matchContext: MatchContext; month: string; regionCode: string; reportType: string; token: string; vendorNumber: string }) {
   const params = new URLSearchParams({
     "filter[regionCode]": regionCode,
     "filter[reportDate]": month,
@@ -545,7 +561,7 @@ async function fetchFinanceReportForMonth({ appStoreId, appSku, month, regionCod
   if (!response.ok) throw new Error(await appleError(response, "Apple financial report failed."));
   const bytes = Buffer.from(await response.arrayBuffer());
   const text = unzipSalesReport(bytes);
-  return { month, ...parseFinanceReport(text, appStoreId, appSku, month, `${reportType}/${regionCode}`) };
+  return { month, ...parseFinanceReport(text, matchContext, month, `${reportType}/${regionCode}`) };
 }
 
 function mergeReports(salesReport: Awaited<ReturnType<typeof fetchSalesReports>>, financeReport: Awaited<ReturnType<typeof fetchFinanceReports>> | null, errors: { financeError?: string; salesError?: string } = {}) {
@@ -650,11 +666,11 @@ function unzipSalesReport(bytes: Buffer) {
   }
 }
 
-function parseSalesReport(text: string, appStoreId: string, appSku: string) {
+function parseSalesReport(text: string, matchContext: MatchContext) {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) return { rows: [] as ParsedSalesRow[] };
   const rows = parseTabularReport(text);
-  const matched = rows.filter((row) => matchesApp(row, appStoreId, appSku));
+  const matched = rows.filter((row) => matchesApp(row, matchContext));
   return {
     rows: matched.map((row) => {
       const productType = String(row["Product Type Identifier"] ?? "").toUpperCase();
@@ -677,9 +693,9 @@ function parseSalesReport(text: string, appStoreId: string, appSku: string) {
   };
 }
 
-function parseFinanceReport(text: string, appStoreId: string, appSku: string, month: string, source: string) {
+function parseFinanceReport(text: string, matchContext: MatchContext, month: string, source: string) {
   const rows = parseTabularReport(text);
-  const matched = rows.filter((row) => matchesApp(row, appStoreId, appSku));
+  const matched = rows.filter((row) => matchesApp(row, matchContext));
   return {
     rows: matched.map((row) => {
       const units = toNumber(row.Quantity ?? row.Units);
@@ -707,11 +723,23 @@ function parseTabularReport(text: string) {
   }) as Record<string, string>[];
 }
 
-function matchesApp(row: Record<string, string>, appStoreId: string, appSku: string) {
+function matchesApp(row: Record<string, string>, matchContext: MatchContext) {
   const identifiers = ["Apple Identifier", "App Apple Identifier", "Apple ID", "Adam ID", "Parent Identifier", "Parent Apple Identifier", "App Adam ID"];
-  const skus = ["SKU", "Vendor Identifier", "ISRC / ISBN", "Vendor ID", "Parent SKU"];
-  return identifiers.some((key) => String(row[key] ?? "").trim() === appStoreId)
-    || Boolean(appSku && skus.some((key) => String(row[key] ?? "").trim() === appSku));
+  const skus = ["SKU", "Vendor Identifier", "ISRC / ISBN", "Vendor ID", "Parent SKU", "Product SKU"];
+  const bundleIds = ["Bundle ID", "Bundle Identifier", "App Bundle ID"];
+  const names = ["Title", "App Name", "Product Title", "Parent Title"];
+  const appStoreId = normalizeMatchValue(matchContext.appStoreId);
+  const appSku = normalizeMatchValue(matchContext.appSku);
+  const bundleId = normalizeMatchValue(matchContext.bundleId);
+  const appName = normalizeMatchValue(matchContext.appName);
+  return Boolean(appStoreId && identifiers.some((key) => normalizeMatchValue(row[key]) === appStoreId))
+    || Boolean(appSku && skus.some((key) => normalizeMatchValue(row[key]) === appSku))
+    || Boolean(bundleId && bundleIds.some((key) => normalizeMatchValue(row[key]) === bundleId))
+    || Boolean(appName && names.some((key) => normalizeMatchValue(row[key]) === appName));
+}
+
+function normalizeMatchValue(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function normalizeReportDate(value: string, fallbackMonth: string) {

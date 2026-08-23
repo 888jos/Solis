@@ -225,7 +225,10 @@ test("app store sync endpoint keeps Apple credentials server-side", async () => 
   assert.match(route, /appInfoLocalizations/);
   assert.match(route, /appStoreVersionLocalizations/);
   assert.match(route, /keywords/);
-  assert.match(route, /parserVersion:\s*5/);
+  assert.match(route, /parserVersion:\s*6/);
+  assert.match(route, /fields\[apps\]/);
+  assert.match(route, /Bundle Identifier/);
+  assert.match(route, /Product SKU/);
   assert.match(route, /Partner Share/);
   assert.match(route, /Developer Proceeds/);
   assert.match(route, /timeSeries/);
