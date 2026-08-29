@@ -1,16 +1,24 @@
 import { createSign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { dailyAppMetrics } from "@/db/schema";
+import { getOrCreateLocalSession } from "@/server/backend/auth";
+import { createSyncJob, logBackendEvent, updateSyncJob } from "@/server/backend/jobs";
+import { now } from "@/server/backend/http";
 
 type SyncApp = {
   id: string;
   name: string;
   bundleId: string;
   appStoreId: string;
-  keyId: string;
-  issuerId: string;
-  vendorNumber: string;
-  privateKeyPath: string;
+  credentialPreset?: "cocorise" | "cortifree";
+  sku?: string;
+  keyId?: string;
+  issuerId?: string;
+  vendorNumber?: string;
+  privateKeyPath?: string;
 };
 
 type AppleAppResponse = {
@@ -67,8 +75,10 @@ type AsoLocalization = {
 type ParsedSalesRow = {
   country: string;
   currency: string;
+  developerProceeds: number;
   kind: string;
   revenue: number;
+  tax: number;
   units: number;
 };
 
@@ -84,6 +94,7 @@ type MetricPoint = {
 type CountryBreakdown = {
   country: string;
   downloads: number;
+  proceedsUnits: number;
   revenue: number;
   units: number;
 };
@@ -103,11 +114,45 @@ type MatchContext = {
   bundleId: string;
 };
 
+type ParsedSalesReport = {
+  date: string;
+  rows: ParsedSalesRow[];
+};
+
+type SalesReportCacheEntry = {
+  expiresAt: number;
+  value: ParsedSalesReport | null;
+};
+
+type ExchangeRates = Map<string, number>;
+
 const APPLE_API = "https://api.appstoreconnect.apple.com/v1";
+const ECB_DAILY_RATES_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml";
 const APPLE_FETCH_TIMEOUT_MS = 8_000;
-const APPLE_METADATA_TIMEOUT_MS = 5_000;
-const SALES_REPORT_CONCURRENCY = 8;
-const FINANCE_REPORT_MONTHS = 6;
+const APPLE_METADATA_TIMEOUT_MS = 10_000;
+const SALES_REPORT_CONCURRENCY = 12;
+const SALES_REPORT_BUDGET_MS = 45_000;
+const FINANCE_REPORT_BUDGET_MS = 25_000;
+const SALES_REPORT_CACHE_TTL_MS = 15 * 60_000;
+const MISSING_SALES_REPORT_CACHE_TTL_MS = 2 * 60_000;
+const MAX_SALES_REPORT_CACHE_ENTRIES = 1_000;
+const MAX_CUSTOM_RANGE_DAYS = 3650;
+const SERVER_CREDENTIAL_PRESETS = {
+  cocorise: {
+    issuerId: "c6d73ae8-2d47-4964-92ed-771ec137f6d0",
+    keyId: "BUJ22BWQ5F",
+    privateKeyPath: "/Users/jos/Documents/Perso/Admin/Dev Keys/AuthKey_BUJ22BWQ5F.p8",
+    vendorNumber: "93962715",
+  },
+  cortifree: {
+    issuerId: "c6d73ae8-2d47-4964-92ed-771ec137f6d0",
+    keyId: "BUJ22BWQ5F",
+    privateKeyPath: "/Users/jos/Documents/Perso/Admin/Dev Keys/AuthKey_BUJ22BWQ5F.p8",
+    vendorNumber: "93962715",
+  },
+} satisfies Record<NonNullable<SyncApp["credentialPreset"]>, { issuerId: string; keyId: string; privateKeyPath: string; vendorNumber: string }>;
+const salesReportCache = new Map<string, SalesReportCacheEntry>();
+let exchangeRateCache: { expiresAt: number; rates: ExchangeRates } | null = null;
 const FINANCE_REPORT_CANDIDATES = [
   { regionCode: "ZZ", reportType: "FINANCIAL" },
   { regionCode: "ZZ", reportType: "FINANCE_DETAIL" },
@@ -117,11 +162,29 @@ const FINANCE_REPORT_CANDIDATES = [
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  let jobId = "";
+  let workspaceId = "drift-studio";
+  let jobAppId: string | null = null;
   try {
+    const session = await getOrCreateLocalSession();
+    workspaceId = session.workspaceId;
     const rawBody = await request.text();
     const body = rawBody ? JSON.parse(rawBody) as { app?: SyncApp; dateRange?: string } : {};
-    const app = body.app;
-    if (!app) return json({ ok: false, message: "Missing app payload." }, 400);
+    const rawApp = body.app;
+    if (!rawApp) return json({ ok: false, message: "Missing app payload." }, 400);
+    const app = withServerCredentialPreset(rawApp);
+    jobAppId = app.id;
+    const db = await getDb();
+    const job = await createSyncJob(db, {
+      appId: app.id,
+      dateRange: body.dateRange ?? "30d",
+      kind: "apple_metrics",
+      message: "Apple metrics sync started.",
+      provider: "app_store_connect",
+      status: "running",
+      workspaceId,
+    });
+    jobId = job.id;
 
     const missing = [
       !app.keyId ? "Key ID" : "",
@@ -132,47 +195,73 @@ export async function POST(request: Request) {
     ].filter(Boolean);
 
     if (missing.length) {
+      await updateSyncJob(db, jobId, {
+        error: missing.join(", "),
+        message: "Apple credentials are incomplete.",
+        status: "failed",
+      });
       return json({ ok: false, message: "App Store Connect sync needs complete Apple credentials.", missing }, 400);
     }
 
-    const privateKey = await readFile(app.privateKeyPath, "utf8");
-    const token = createAppStoreConnectToken({ issuerId: app.issuerId, keyId: app.keyId, privateKey });
+    const keyId = app.keyId!;
+    const issuerId = app.issuerId!;
+    const privateKeyPath = app.privateKeyPath!;
+    const vendorNumber = app.vendorNumber!;
+    const privateKey = await readFile(privateKeyPath, "utf8");
+    const token = createAppStoreConnectToken({ issuerId, keyId, privateKey });
     const appInfo = await fetchAppleApp(app.appStoreId, token).catch(() => ({ data: { attributes: {} } } satisfies AppleAppResponse));
     const attrs = appInfo.data?.attributes ?? {};
     const matchContext = {
       appName: attrs.name ?? app.name,
-      appSku: attrs.sku ?? "",
+      appSku: attrs.sku ?? app.sku ?? app.bundleId,
       appStoreId: app.appStoreId,
       bundleId: attrs.bundleId ?? app.bundleId,
     };
-    const dateRange = body.dateRange ?? "30d";
+    const period = resolveDateRange(body.dateRange ?? "30d");
+    const dateRange = period.key;
     let asoError = "";
-    const aso = await fetchAsoSnapshot({ appStoreId: app.appStoreId, primaryLocale: attrs.primaryLocale ?? "", token }).catch((error) => {
-      asoError = error instanceof Error ? error.message : "ASO metadata unavailable.";
-      return emptyAsoSnapshot(attrs.primaryLocale ?? "", asoError);
-    });
-    const release = await fetchReleaseSnapshot({ appStoreId: app.appStoreId, appState: attrs.appStoreState ?? "", token }).catch(() => emptyReleaseSnapshot(attrs.appStoreState ?? ""));
     let salesError = "";
-    const salesReport = await fetchSalesReports({ dateRange, matchContext, token, vendorNumber: app.vendorNumber }).catch((error) => {
-      salesError = error instanceof Error ? error.message : "Sales reports unavailable.";
-      return emptySalesReport(salesError);
-    });
     let financeError = "";
-    const financeReport = await fetchFinanceReports({ matchContext, token, vendorNumber: app.vendorNumber }).catch((error) => {
-      financeError = error instanceof Error ? error.message : "Financial reports unavailable.";
-      return null;
-    });
+    const [aso, release, salesReport, financeReport] = await Promise.all([
+      fetchAsoSnapshot({ appStoreId: app.appStoreId, primaryLocale: attrs.primaryLocale ?? "", token }).catch((error) => {
+        asoError = error instanceof Error ? error.message : "ASO metadata unavailable.";
+        return emptyAsoSnapshot(attrs.primaryLocale ?? "", asoError);
+      }),
+      fetchReleaseSnapshot({ appStoreId: app.appStoreId, appState: attrs.appStoreState ?? "", token }).catch(() => emptyReleaseSnapshot(attrs.appStoreState ?? "")),
+      fetchSalesReports({ period, matchContext, token, vendorNumber }).catch((error) => {
+        salesError = error instanceof Error ? error.message : "Sales reports unavailable.";
+        return emptySalesReport(salesError);
+      }),
+      fetchFinanceReports({ period, matchContext, token, vendorNumber }).catch((error) => {
+        financeError = error instanceof Error ? error.message : "Financial reports unavailable.";
+        return null;
+      }),
+    ]);
     const report = mergeReports(salesReport, financeReport, { financeError, salesError });
+    const writtenRows = await persistRevenueMetrics(db, {
+      appId: app.id,
+      currency: report.currency,
+      report,
+      workspaceId,
+    });
+    await updateSyncJob(db, jobId, {
+      message: "Apple metrics sync completed.",
+      recordsRead: report.rows + report.financeRows,
+      recordsWritten: writtenRows,
+      status: "success",
+    });
 
     return json({
       ok: true,
       metrics: {
         appId: app.id,
-        parserVersion: 6,
+        parserVersion: 13,
         appName: attrs.name ?? app.name,
         bundleId: attrs.bundleId ?? app.bundleId,
         dateRange,
-        sku: attrs.sku ?? "",
+        periodStartDate: period.startDate,
+        periodEndDate: period.endDate,
+        sku: attrs.sku ?? app.sku ?? app.bundleId,
         state: attrs.appStoreState ?? "",
         syncedAt: new Date().toISOString(),
         aso: asoError ? { ...aso, status: "ASO pending" } : aso,
@@ -182,8 +271,101 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "App Store Connect sync failed.";
+    if (jobId) {
+      try {
+        const db = await getDb();
+        await updateSyncJob(db, jobId, { error: message, message: "Apple metrics sync failed.", status: "retryable" });
+        await logBackendEvent(db, {
+          appId: jobAppId,
+          code: "apple_sync_failed",
+          level: "error",
+          message,
+          provider: "app_store_connect",
+          syncJobId: jobId,
+          workspaceId,
+        });
+      } catch {
+        // The response below remains the source of truth if logging itself fails.
+      }
+    }
     return json({ ok: false, message }, 502);
   }
+}
+
+async function persistRevenueMetrics(
+  db: Awaited<ReturnType<typeof getDb>>,
+  input: {
+    appId: string;
+    currency: string;
+    report: ReturnType<typeof mergeReports>;
+    workspaceId: string;
+  },
+) {
+  const timestamp = now();
+  const points = input.report.timeSeries.length
+    ? input.report.timeSeries
+    : input.report.revenue || input.report.downloads || input.report.subscriptions
+      ? [{
+        date: input.report.reportEndDate ?? new Date().toISOString().slice(0, 10),
+        downloads: input.report.downloads,
+        inAppPurchases: input.report.inAppPurchases,
+        revenue: input.report.revenue,
+        subscriptions: input.report.subscriptions,
+        units: input.report.units,
+      }]
+      : [];
+  let written = 0;
+  for (const point of points) {
+    const source = "apple_app_store";
+    const [existing] = await db
+      .select()
+      .from(dailyAppMetrics)
+      .where(and(
+        eq(dailyAppMetrics.appId, input.appId),
+        eq(dailyAppMetrics.date, point.date),
+        eq(dailyAppMetrics.countryCode, "WW"),
+        eq(dailyAppMetrics.source, source),
+      ))
+      .limit(1);
+    const values = {
+      appId: input.appId,
+      arpu: point.downloads > 0 ? point.revenue / point.downloads : 0,
+      cancellations: 0,
+      countryCode: "WW",
+      currency: normalizeCurrency(input.currency),
+      date: point.date,
+      expenses: 0,
+      grossRevenue: point.revenue,
+      installs: point.downloads,
+      mrr: 0,
+      paidUnits: point.subscriptions + point.inAppPurchases,
+      proceeds: point.revenue,
+      refunds: 0,
+      source,
+      subscribers: point.subscriptions,
+      trials: 0,
+      updatedAt: timestamp,
+      workspaceId: input.workspaceId,
+    };
+    if (existing) {
+      await db.update(dailyAppMetrics).set(values).where(eq(dailyAppMetrics.id, existing.id));
+    } else {
+      await db.insert(dailyAppMetrics).values({ id: crypto.randomUUID(), createdAt: timestamp, ...values });
+    }
+    written += 1;
+  }
+  return written;
+}
+
+function withServerCredentialPreset(app: SyncApp): SyncApp {
+  const preset = app.credentialPreset ? SERVER_CREDENTIAL_PRESETS[app.credentialPreset] : null;
+  return {
+    ...app,
+    issuerId: app.issuerId || preset?.issuerId || "",
+    keyId: app.keyId || preset?.keyId || "",
+    privateKeyPath: app.privateKeyPath || preset?.privateKeyPath || "",
+    vendorNumber: app.vendorNumber || preset?.vendorNumber || "",
+  };
 }
 
 function json(payload: unknown, status = 200) {
@@ -384,7 +566,7 @@ function emptySalesReport(message: string) {
   return {
     reportStartDate: null,
     reportEndDate: null,
-    currency: "EUR",
+    currency: "USD",
     revenue: 0,
     revenueRows: 0,
     downloads: 0,
@@ -402,48 +584,39 @@ function emptySalesReport(message: string) {
   };
 }
 
-async function fetchSalesReports({ dateRange, matchContext, token, vendorNumber }: { dateRange: string; matchContext: MatchContext; token: string; vendorNumber: string }) {
-  const days = rangeDays(dateRange);
-  const reports = [];
+async function fetchSalesReports({ period, matchContext, token, vendorNumber }: { period: DatePeriod; matchContext: MatchContext; token: string; vendorNumber: string }) {
+  const days = period.days;
+  const reports: ParsedSalesReport[] = [];
   const errors: Error[] = [];
-  const probeDays = days.slice(0, Math.min(3, days.length));
-  const probe = await Promise.all(probeDays.map((date) => fetchSalesReportForDate({ date, matchContext, token, vendorNumber })));
+  const results = await mapWithConcurrency(days, SALES_REPORT_CONCURRENCY, (date) => fetchSalesReportForDate({ date, matchContext, token, vendorNumber }), SALES_REPORT_BUDGET_MS);
 
-  for (const result of probe) {
+  for (const result of results) {
     if (result instanceof Error) errors.push(result);
     else if (result) reports.push(result);
   }
 
-  if (!reports.length && errors.length === probeDays.length) {
-    throw errors[0];
-  }
-
-  const remainingDays = days.slice(probeDays.length);
-  for (let index = 0; index < remainingDays.length; index += SALES_REPORT_CONCURRENCY) {
-    const chunk = remainingDays.slice(index, index + SALES_REPORT_CONCURRENCY);
-    const results = await Promise.all(chunk.map((date) => fetchSalesReportForDate({ date, matchContext, token, vendorNumber })));
-    for (const result of results) {
-      if (result instanceof Error) errors.push(result);
-      else if (result) reports.push(result);
-    }
-  }
+  if (!reports.length && errors.length === days.length) throw errors[0];
 
   const rows = reports.flatMap((report) => report.rows);
+  const exchangeRates = await fetchExchangeRates().catch(() => null);
   const countries = new Set(rows.map((row) => row.country).filter(Boolean)).size;
   const reportDates = reports.filter((report) => report.rows.length).map((report) => report.date).sort();
-  const currency = normalizeCurrency(rows.find((row) => row.currency)?.currency);
-  const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
-  const revenueRows = rows.filter((row) => row.revenue !== 0).length;
+  // Storefront proceeds arrive in their settlement currency. Never add raw
+  // amounts from different currencies (for example, PHP and EUR).
+  const proceedsRows = exchangeRates ? convertSalesRowsToUsd(rows, exchangeRates) : selectPrimaryCurrencySalesRows(rows);
+  const currency = normalizeCurrency(proceedsRows.find((row) => row.currency)?.currency);
+  const revenue = proceedsRows.reduce((sum, row) => sum + row.revenue, 0);
+  const revenueRows = proceedsRows.filter((row) => row.revenue !== 0).length;
   const units = rows.reduce((sum, row) => sum + row.units, 0);
   const downloads = rows.filter((row) => row.kind === "download").reduce((sum, row) => sum + row.units, 0);
   const subscriptions = rows.filter((row) => row.kind === "subscription").reduce((sum, row) => sum + row.units, 0);
   const inAppPurchases = rows.filter((row) => row.kind === "in_app_purchase").reduce((sum, row) => sum + row.units, 0);
-  const countryBreakdown = buildCountryBreakdown(rows);
+  const countryBreakdown = buildCountryBreakdown(rows, currency, exchangeRates);
   const timeSeries: MetricPoint[] = reports.filter((report) => report.rows.length).map((report) => ({
     date: report.date,
     downloads: report.rows.filter((row) => row.kind === "download").reduce((sum, row) => sum + row.units, 0),
     inAppPurchases: report.rows.filter((row) => row.kind === "in_app_purchase").reduce((sum, row) => sum + row.units, 0),
-    revenue: report.rows.reduce((sum, row) => sum + row.revenue, 0),
+    revenue: report.rows.reduce((sum, row) => sum + revenueInDisplayCurrency(row.revenue, row.currency, currency, exchangeRates), 0),
     subscriptions: report.rows.filter((row) => row.kind === "subscription").reduce((sum, row) => sum + row.units, 0),
     units: report.rows.reduce((sum, row) => sum + row.units, 0),
   })).sort((a, b) => a.date.localeCompare(b.date));
@@ -470,6 +643,11 @@ async function fetchSalesReports({ dateRange, matchContext, token, vendorNumber 
 }
 
 async function fetchSalesReportForDate({ date, matchContext, token, vendorNumber }: { date: string; matchContext: MatchContext; token: string; vendorNumber: string }) {
+  const cacheKey = [vendorNumber, matchContext.appStoreId, matchContext.appSku, date].join(":");
+  const cached = salesReportCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) salesReportCache.delete(cacheKey);
+
   try {
     const params = new URLSearchParams({
       "filter[frequency]": "DAILY",
@@ -481,23 +659,54 @@ async function fetchSalesReportForDate({ date, matchContext, token, vendorNumber
     const response = await fetchWithTimeout(`${APPLE_API}/salesReports?${params.toString()}`, {
       headers: { authorization: `Bearer ${token}` },
     }, `Apple sales report ${date}`, APPLE_FETCH_TIMEOUT_MS);
-    if (response.status === 404 || response.status === 409) return null;
+    if (response.status === 404 || response.status === 409) {
+      setSalesReportCache(cacheKey, null, MISSING_SALES_REPORT_CACHE_TTL_MS);
+      return null;
+    }
     if (!response.ok) throw new Error(await appleError(response, "Apple sales report failed."));
     const bytes = Buffer.from(await response.arrayBuffer());
     const text = unzipSalesReport(bytes);
-    return { date, ...parseSalesReport(text, matchContext) };
+    const report = { date, ...parseSalesReport(text, matchContext) };
+    setSalesReportCache(cacheKey, report, SALES_REPORT_CACHE_TTL_MS);
+    return report;
   } catch (error) {
     return normalizeAppleNetworkError(error);
   }
 }
 
-async function fetchFinanceReports({ matchContext, token, vendorNumber }: { matchContext: MatchContext; token: string; vendorNumber: string }) {
+function setSalesReportCache(key: string, value: ParsedSalesReport | null, ttlMs: number) {
+  if (salesReportCache.size >= MAX_SALES_REPORT_CACHE_ENTRIES) {
+    const oldestKey = salesReportCache.keys().next().value;
+    if (oldestKey) salesReportCache.delete(oldestKey);
+  }
+  salesReportCache.set(key, { expiresAt: Date.now() + ttlMs, value });
+}
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, mapper: (item: T) => Promise<R>, budgetMs?: number) {
+  const results = new Array<R | undefined>(items.length);
+  const deadline = budgetMs ? Date.now() + budgetMs : Number.POSITIVE_INFINITY;
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length && Date.now() < deadline) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results.filter((result): result is R => result !== undefined);
+}
+
+async function fetchFinanceReports({ period, matchContext, token, vendorNumber }: { period: DatePeriod; matchContext: MatchContext; token: string; vendorNumber: string }) {
   const results = [];
   const errors: Error[] = [];
+  const deadline = Date.now() + FINANCE_REPORT_BUDGET_MS;
 
-  for (const month of recentFinanceMonths()) {
+  for (const month of financeMonthsForPeriod(period)) {
+    if (Date.now() >= deadline) break;
     let bestReport: { month: string; rows: ParsedFinanceRow[] } | null = null;
     for (const candidate of FINANCE_REPORT_CANDIDATES) {
+      if (Date.now() >= deadline) break;
       const report = await fetchFinanceReportForMonth({ matchContext, month, regionCode: candidate.regionCode, reportType: candidate.reportType, token, vendorNumber }).catch((error) => normalizeAppleNetworkError(error));
       if (report instanceof Error) {
         errors.push(report);
@@ -512,8 +721,9 @@ async function fetchFinanceReports({ matchContext, token, vendorNumber }: { matc
 
   const reports = results.filter((result): result is { month: string; rows: ParsedFinanceRow[] } => Boolean(result));
   if (!reports.length && errors.length) throw errors[0];
-  const rows = reports.flatMap((report) => report.rows);
-  const selectedRows = selectPrimaryCurrencyRows(rows);
+  const rows = reports.flatMap((report) => report.rows).filter((row) => row.date >= period.startDate && row.date <= period.endDate);
+  const exchangeRates = await fetchExchangeRates().catch(() => null);
+  const selectedRows = exchangeRates ? convertFinanceRowsToUsd(rows, exchangeRates) : selectPrimaryCurrencyRows(rows);
   const reportDates = selectedRows.map((row) => row.date).sort();
   const revenue = selectedRows.reduce((sum, row) => sum + row.revenue, 0);
   const revenueRows = selectedRows.filter((row) => row.revenue !== 0).length;
@@ -566,9 +776,10 @@ async function fetchFinanceReportForMonth({ matchContext, month, regionCode, rep
 
 function mergeReports(salesReport: Awaited<ReturnType<typeof fetchSalesReports>>, financeReport: Awaited<ReturnType<typeof fetchFinanceReports>> | null, errors: { financeError?: string; salesError?: string } = {}) {
   const hasFinanceRevenue = Boolean(financeReport?.revenueRows);
-  const revenue = hasFinanceRevenue ? financeReport.revenue : salesReport.revenue;
-  const currency = hasFinanceRevenue ? financeReport.currency : salesReport.currency;
-  const revenueRows = hasFinanceRevenue ? financeReport.revenueRows : salesReport.revenueRows;
+  const hasSalesRevenue = Boolean(salesReport.revenueRows);
+  const revenue = hasSalesRevenue ? salesReport.revenue : (financeReport?.revenue ?? 0);
+  const currency = hasSalesRevenue ? salesReport.currency : (financeReport?.currency ?? salesReport.currency);
+  const revenueRows = hasSalesRevenue ? salesReport.revenueRows : (financeReport?.revenueRows ?? 0);
   const reportStartDate = [salesReport.reportStartDate, financeReport?.financeReportStartDate].filter(Boolean).sort()[0] ?? null;
   const reportEndDate = [salesReport.reportEndDate, financeReport?.financeReportEndDate].filter(Boolean).sort().at(-1) ?? null;
 
@@ -582,10 +793,10 @@ function mergeReports(salesReport: Awaited<ReturnType<typeof fetchSalesReports>>
     reportStartDate,
     revenue,
     revenueRows,
-    revenueSource: hasFinanceRevenue ? "Financial" : salesReport.revenueRows ? "Sales" : "None",
+    revenueSource: hasSalesRevenue ? "Sales" : hasFinanceRevenue ? "Financial" : "None",
     status: salesReport.rows || financeReport?.financeRows ? "synced" : "no_report",
     message: syncMessage(Boolean(salesReport.rows), Boolean(financeReport?.financeRows), Boolean(hasFinanceRevenue), errors),
-    timeSeries: mergeTimeSeries(salesReport.timeSeries, hasFinanceRevenue ? financeReport.timeSeries : []),
+    timeSeries: hasSalesRevenue ? salesReport.timeSeries : mergeTimeSeries(salesReport.timeSeries, hasFinanceRevenue ? financeReport!.timeSeries : []),
   };
 }
 
@@ -599,20 +810,42 @@ function syncMessage(hasSalesRows: boolean, hasFinanceRows: boolean, hasFinanceR
   return "No matching Apple report rows";
 }
 
-function buildCountryBreakdown(rows: ParsedSalesRow[]) {
+function buildCountryBreakdown(rows: ParsedSalesRow[], proceedsCurrency: string, exchangeRates: ExchangeRates | null = null) {
   const byCountry = new Map<string, CountryBreakdown>();
   for (const row of rows) {
     const country = row.country.trim().toUpperCase();
     if (!country || country.length !== 2) continue;
-    const current = byCountry.get(country) ?? { country, downloads: 0, revenue: 0, units: 0 };
+    const current = byCountry.get(country) ?? { country, downloads: 0, proceedsUnits: 0, revenue: 0, units: 0 };
     byCountry.set(country, {
       country,
       downloads: current.downloads + (row.kind === "download" ? row.units : 0),
-      revenue: current.revenue + row.revenue,
+      proceedsUnits: current.proceedsUnits + (row.revenue > 0 && row.units > 0 ? row.units : 0),
+      revenue: current.revenue + revenueInDisplayCurrency(row.revenue, row.currency, proceedsCurrency, exchangeRates),
       units: current.units + row.units,
     });
   }
   return Array.from(byCountry.values()).sort((a, b) => Math.abs(b.revenue) - Math.abs(a.revenue) || b.downloads - a.downloads);
+}
+
+function revenueInDisplayCurrency(amount: number, currency: string, displayCurrency: string, rates: ExchangeRates | null) {
+  if (rates && displayCurrency === "USD") return convertAmountToUsd(amount, currency, rates) ?? 0;
+  return normalizeCurrency(currency) === displayCurrency ? amount : 0;
+}
+
+function selectPrimaryCurrencySalesRows(rows: ParsedSalesRow[]) {
+  if (!rows.length) return rows;
+  const byCurrency = new Map<string, ParsedSalesRow[]>();
+  for (const row of rows) {
+    const currency = normalizeCurrency(row.currency);
+    byCurrency.set(currency, [...(byCurrency.get(currency) ?? []), { ...row, currency }]);
+  }
+  const preferred = byCurrency.get("USD");
+  if (preferred?.some((row) => row.revenue !== 0)) return preferred;
+  return Array.from(byCurrency.values()).sort((a, b) => {
+    const aRevenue = a.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
+    const bRevenue = b.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
+    return bRevenue - aRevenue;
+  })[0] ?? [];
 }
 
 function mergeTimeSeries(salesSeries: MetricPoint[], financeSeries: MetricPoint[]) {
@@ -646,16 +879,68 @@ function normalizeAppleNetworkError(error: unknown, label = "Apple request", tim
   return error instanceof Error ? error : new Error(message);
 }
 
-function rangeDays(dateRange: string) {
-  const count = dateRange === "7d" ? 7 : dateRange === "90d" ? 90 : 30;
-  const dates = [];
-  const cursor = new Date();
-  cursor.setUTCDate(cursor.getUTCDate() - 1);
-  for (let index = 0; index < count; index += 1) {
-    dates.push(cursor.toISOString().slice(0, 10));
+type DatePeriod = {
+  key: string;
+  startDate: string;
+  endDate: string;
+  days: string[];
+};
+
+function resolveDateRange(dateRange: string): DatePeriod {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const yesterday = new Date();
+  yesterday.setUTCHours(0, 0, 0, 0);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+
+  const presets: Record<string, { count: number; end: Date }> = {
+    today: { count: 1, end: yesterday },
+    yesterday: { count: 1, end: yesterday },
+    "7d": { count: 7, end: yesterday },
+    "30d": { count: 30, end: yesterday },
+    "90d": { count: 90, end: yesterday },
+    "180d": { count: 180, end: yesterday },
+    "365d": { count: 365, end: yesterday },
+    all: { count: MAX_CUSTOM_RANGE_DAYS, end: yesterday },
+  };
+  const preset = presets[dateRange] ?? presets["30d"];
+  let count = preset.count;
+  let startDate = "";
+  let endDate = preset.end.toISOString().slice(0, 10);
+  let key = presets[dateRange] ? dateRange : "30d";
+  const custom = dateRange.match(/^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
+
+  if (custom) {
+    startDate = custom[1];
+    endDate = custom[2];
+    const start = parseIsoDate(startDate);
+    const end = parseIsoDate(endDate);
+    if (start > end) throw new Error("Custom period start date must be before its end date.");
+    if (end > yesterday) throw new Error("Apple reports are available through yesterday.");
+    count = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    if (count > MAX_CUSTOM_RANGE_DAYS) throw new Error(`Custom periods can cover up to ${MAX_CUSTOM_RANGE_DAYS} days.`);
+    key = `custom:${startDate}:${endDate}`;
+  } else {
+    const start = new Date(preset.end);
+    start.setUTCDate(start.getUTCDate() - count + 1);
+    startDate = start.toISOString().slice(0, 10);
+  }
+
+  const days = [];
+  const cursor = parseIsoDate(endDate);
+  const start = parseIsoDate(startDate);
+  while (cursor >= start) {
+    days.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
-  return dates;
+  return { key, startDate, endDate, days };
+}
+
+function parseIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Invalid custom period date.");
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw new Error("Invalid custom period date.");
+  return date;
 }
 
 function unzipSalesReport(bytes: Buffer) {
@@ -675,18 +960,51 @@ function parseSalesReport(text: string, matchContext: MatchContext) {
     rows: matched.map((row) => {
       const productType = String(row["Product Type Identifier"] ?? "").toUpperCase();
       const units = toNumber(row.Units);
-      const unitProceeds = firstPresentNumber(
+      const extendedProceeds = optionalNumber(row["Extended Partner Share"]);
+      const unitProceeds = firstOptionalNumber(
         row["Developer Proceeds"],
         row.Proceeds,
         row["Partner Share"],
-        row["Extended Partner Share"],
       );
-      const customerPrice = firstPresentNumber(row["Customer Price"], row["Customer Price in USD"], row["Customer Price USD"]);
+      const extendedCustomerPrice = firstOptionalNumber(
+        row["Extended Customer Price"],
+        row["Extended Price"],
+        row["Customer Price Extended"],
+        row["Total Customer Price"],
+      );
+      const unitCustomerPrice = firstOptionalNumber(
+        row["Customer Price"],
+        row["Customer Price (USD)"],
+        row["Customer Price in Customer Currency"],
+        row["Customer Price (Local Currency)"],
+      );
+      const extendedTax = firstOptionalNumber(
+        row["Extended Tax"],
+        row["Tax Amount"],
+        row["Total Tax"],
+        row["VAT Amount"],
+      );
+      const unitTax = firstOptionalNumber(row.Tax, row.VAT, row["Tax per Unit"]);
+      const developerProceeds = extendedProceeds ?? ((unitProceeds ?? 0) * units);
+      const customerRevenue = extendedCustomerPrice ?? ((unitCustomerPrice ?? 0) * units);
+      const tax = extendedTax ?? ((unitTax ?? 0) * units);
+      const hasCustomerPrice = unitCustomerPrice !== null || extendedCustomerPrice !== null;
+      const grossBeforeAppleCommissionAndVat = hasCustomerPrice
+        ? customerRevenue - tax
+        : developerProceeds;
+      const currency = hasCustomerPrice
+        ? String(row["Customer Currency"] ?? row["Currency of Proceeds"] ?? "")
+        : String(row["Currency of Proceeds"] ?? row["Customer Currency"] ?? "");
       return {
         country: String(row["Country Code"] ?? row["Provider Country"] ?? ""),
-        currency: normalizeCurrency(String(row["Currency of Proceeds"] ?? row["Customer Currency"] ?? "")),
+        currency: normalizeCurrency(currency),
+        developerProceeds,
         kind: classifyProductType(productType),
-        revenue: unitProceeds ? unitProceeds * units : customerPrice * units,
+        // Gross revenue for product analytics: customer price less explicit VAT/tax
+        // when Apple exposes it, before Apple's commission. If Sales only exposes
+        // proceeds fields, keep the best available value instead of inventing one.
+        revenue: grossBeforeAppleCommissionAndVat,
+        tax,
         units,
       };
     }),
@@ -724,16 +1042,17 @@ function parseTabularReport(text: string) {
 }
 
 function matchesApp(row: Record<string, string>, matchContext: MatchContext) {
-  const identifiers = ["Apple Identifier", "App Apple Identifier", "Apple ID", "Adam ID", "Parent Identifier", "Parent Apple Identifier", "App Adam ID"];
-  const skus = ["SKU", "Vendor Identifier", "ISRC / ISBN", "Vendor ID", "Parent SKU", "Product SKU"];
+  const identifiers = ["Apple Identifier", "App Apple Identifier", "Apple ID", "Adam ID", "App Adam ID"];
+  const skus = ["SKU", "Vendor Identifier", "ISRC / ISBN", "Vendor ID", "Parent SKU", "Product SKU", "Parent Identifier", "Parent Apple Identifier"];
   const bundleIds = ["Bundle ID", "Bundle Identifier", "App Bundle ID"];
   const names = ["Title", "App Name", "Product Title", "Parent Title"];
   const appStoreId = normalizeMatchValue(matchContext.appStoreId);
   const appSku = normalizeMatchValue(matchContext.appSku);
   const bundleId = normalizeMatchValue(matchContext.bundleId);
   const appName = normalizeMatchValue(matchContext.appName);
+  const skuTargets = [appSku, bundleId, appStoreId].filter(Boolean);
   return Boolean(appStoreId && identifiers.some((key) => normalizeMatchValue(row[key]) === appStoreId))
-    || Boolean(appSku && skus.some((key) => normalizeMatchValue(row[key]) === appSku))
+    || Boolean(skuTargets.length && skus.some((key) => skuTargets.includes(normalizeMatchValue(row[key]))))
     || Boolean(bundleId && bundleIds.some((key) => normalizeMatchValue(row[key]) === bundleId))
     || Boolean(appName && names.some((key) => normalizeMatchValue(row[key]) === appName));
 }
@@ -754,9 +1073,13 @@ function normalizeReportDate(value: string, fallbackMonth: string) {
 }
 
 function classifyProductType(productType: string) {
-  if (productType.startsWith("IA9") || productType.includes("SUB")) return "subscription";
-  if (productType.startsWith("IA")) return "in_app_purchase";
-  return "download";
+  const normalized = productType.trim().toUpperCase();
+  const appUnits = new Set(["1", "1-B", "1E", "1EP", "1EU", "1F", "1T", "F1", "F1-B"]);
+  const subscriptions = new Set(["1AY", "1AY-M", "IA9", "IA9-M", "IAY", "IAY-M"]);
+  if (subscriptions.has(normalized) || normalized.includes("SUB")) return "subscription";
+  if (normalized.startsWith("IA") || normalized === "FI1") return "in_app_purchase";
+  if (appUnits.has(normalized)) return "download";
+  return "other";
 }
 
 function toNumber(value: unknown) {
@@ -764,12 +1087,12 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function firstPresentNumber(...values: unknown[]) {
+function firstOptionalNumber(...values: unknown[]) {
   for (const value of values) {
     const parsed = optionalNumber(value);
     if (parsed !== null) return parsed;
   }
-  return 0;
+  return null;
 }
 
 function optionalNumber(value: unknown) {
@@ -799,12 +1122,16 @@ function parseAppleNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed * sign : Number.NaN;
 }
 
-function recentFinanceMonths() {
+function financeMonthsForPeriod(period: DatePeriod) {
   const months = [];
-  const cursor = new Date();
-  cursor.setUTCDate(1);
-  cursor.setUTCMonth(cursor.getUTCMonth() - 1);
-  for (let index = 0; index < FINANCE_REPORT_MONTHS; index += 1) {
+  const first = parseIsoDate(`${period.startDate.slice(0, 7)}-01`);
+  const lastAvailableMonth = new Date();
+  lastAvailableMonth.setUTCHours(0, 0, 0, 0);
+  lastAvailableMonth.setUTCDate(1);
+  lastAvailableMonth.setUTCMonth(lastAvailableMonth.getUTCMonth() - 1);
+  const requestedLast = parseIsoDate(`${period.endDate.slice(0, 7)}-01`);
+  const cursor = requestedLast < lastAvailableMonth ? requestedLast : lastAvailableMonth;
+  while (cursor >= first) {
     months.push(cursor.toISOString().slice(0, 7));
     cursor.setUTCMonth(cursor.getUTCMonth() - 1);
   }
@@ -818,7 +1145,7 @@ function selectPrimaryCurrencyRows(rows: ParsedFinanceRow[]) {
     const currency = normalizeCurrency(row.currency);
     byCurrency.set(currency, [...(byCurrency.get(currency) ?? []), { ...row, currency }]);
   }
-  const preferred = byCurrency.get("EUR");
+  const preferred = byCurrency.get("USD");
   if (preferred?.some((row) => row.revenue !== 0)) return preferred;
   return Array.from(byCurrency.values()).sort((a, b) => {
     const aRevenue = a.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
@@ -827,9 +1154,45 @@ function selectPrimaryCurrencyRows(rows: ParsedFinanceRow[]) {
   })[0] ?? [];
 }
 
+async function fetchExchangeRates(): Promise<ExchangeRates> {
+  if (exchangeRateCache && exchangeRateCache.expiresAt > Date.now()) return exchangeRateCache.rates;
+  const response = await fetchWithTimeout(ECB_DAILY_RATES_URL, {}, "ECB exchange rates", 10_000);
+  if (!response.ok) throw new Error(`ECB exchange rates unavailable (${response.status}).`);
+  const xml = await response.text();
+  const rates: ExchangeRates = new Map([["EUR", 1]]);
+  for (const match of xml.matchAll(/currency=['"]([A-Z]{3})['"]\s+rate=['"]([0-9.]+)['"]/g)) {
+    const rate = Number.parseFloat(match[2]);
+    if (Number.isFinite(rate) && rate > 0) rates.set(match[1], rate);
+  }
+  if (!rates.has("USD")) throw new Error("ECB USD rate unavailable.");
+  exchangeRateCache = { expiresAt: Date.now() + 6 * 60 * 60_000, rates };
+  return rates;
+}
+
+function convertAmountToUsd(amount: number, currency: string, rates: ExchangeRates) {
+  const sourceRate = rates.get(normalizeCurrency(currency));
+  const usdRate = rates.get("USD");
+  if (!sourceRate || !usdRate) return null;
+  return (amount / sourceRate) * usdRate;
+}
+
+function convertSalesRowsToUsd(rows: ParsedSalesRow[], rates: ExchangeRates) {
+  return rows.flatMap((row) => {
+    const revenue = convertAmountToUsd(row.revenue, row.currency, rates);
+    return revenue === null ? [] : [{ ...row, currency: "USD", revenue }];
+  });
+}
+
+function convertFinanceRowsToUsd(rows: ParsedFinanceRow[], rates: ExchangeRates) {
+  return rows.flatMap((row) => {
+    const revenue = convertAmountToUsd(row.revenue, row.currency, rates);
+    return revenue === null ? [] : [{ ...row, currency: "USD", revenue }];
+  });
+}
+
 function normalizeCurrency(currency: string | undefined) {
   const normalized = currency?.trim().toUpperCase();
-  return normalized && /^[A-Z]{3}$/.test(normalized) ? normalized : "EUR";
+  return normalized && /^[A-Z]{3}$/.test(normalized) ? normalized : "USD";
 }
 
 async function appleError(response: Response, fallback: string) {
