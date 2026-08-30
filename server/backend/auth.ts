@@ -1,12 +1,19 @@
 import { cookies } from "next/headers";
 import { and, eq, gt } from "drizzle-orm";
+import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { getDb } from "@/db";
 import { sessions, users, workspaceMemberships } from "@/db/schema";
 import { now } from "@/server/backend/http";
 import { ensureWorkspace } from "@/server/backend/workspaces";
 
 export const DEFAULT_WORKSPACE_ID = "drift-studio";
-export const LOCAL_USER = {
+export type SessionUser = {
+  email: string;
+  id: string;
+  name: string;
+};
+
+export const LOCAL_USER: SessionUser = {
   email: "contact@driftstudio.app",
   id: "local-user-josselin",
   name: "Josselin Biot",
@@ -23,21 +30,42 @@ function expiresFrom(date: Date) {
 
 export type LocalSession = {
   id: string;
-  user: typeof LOCAL_USER;
+  user: SessionUser;
   workspaceId: string;
 };
+
+async function resolveSessionUser(): Promise<SessionUser> {
+  const chatGPTUser = await getChatGPTUser().catch(() => null);
+  if (!chatGPTUser?.email) return LOCAL_USER;
+
+  const email = chatGPTUser.email.trim().toLowerCase();
+  return {
+    email,
+    id: userIdFromEmail(email),
+    name: chatGPTUser.fullName?.trim() || chatGPTUser.displayName?.trim() || email,
+  };
+}
+
+function userIdFromEmail(email: string) {
+  const slug = email
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `user-${slug || "authenticated"}`;
+}
 
 export async function getOrCreateLocalSession(): Promise<LocalSession> {
   const db = await getDb();
   const timestamp = now();
+  const sessionUser = await resolveSessionUser();
   await ensureWorkspace(db, DEFAULT_WORKSPACE_ID);
 
-  const [existingUser] = await db.select().from(users).where(eq(users.id, LOCAL_USER.id)).limit(1);
+  const [existingUser] = await db.select().from(users).where(eq(users.id, sessionUser.id)).limit(1);
   if (existingUser) {
-    await db.update(users).set({ email: LOCAL_USER.email, lastSeenAt: timestamp, name: LOCAL_USER.name, updatedAt: timestamp }).where(eq(users.id, LOCAL_USER.id));
+    await db.update(users).set({ email: sessionUser.email, lastSeenAt: timestamp, name: sessionUser.name, updatedAt: timestamp }).where(eq(users.id, sessionUser.id));
   } else {
     await db.insert(users).values({
-      ...LOCAL_USER,
+      ...sessionUser,
       avatarUrl: null,
       createdAt: timestamp,
       lastSeenAt: timestamp,
@@ -48,7 +76,7 @@ export async function getOrCreateLocalSession(): Promise<LocalSession> {
   const [membership] = await db
     .select()
     .from(workspaceMemberships)
-    .where(and(eq(workspaceMemberships.workspaceId, DEFAULT_WORKSPACE_ID), eq(workspaceMemberships.userId, LOCAL_USER.id)))
+    .where(and(eq(workspaceMemberships.workspaceId, DEFAULT_WORKSPACE_ID), eq(workspaceMemberships.userId, sessionUser.id)))
     .limit(1);
   if (!membership) {
     await db.insert(workspaceMemberships).values({
@@ -56,7 +84,7 @@ export async function getOrCreateLocalSession(): Promise<LocalSession> {
       createdAt: timestamp,
       role: "owner",
       updatedAt: timestamp,
-      userId: LOCAL_USER.id,
+      userId: sessionUser.id,
       workspaceId: DEFAULT_WORKSPACE_ID,
     });
   }
@@ -67,7 +95,7 @@ export async function getOrCreateLocalSession(): Promise<LocalSession> {
     ? await db
       .select()
       .from(sessions)
-      .where(and(eq(sessions.id, cookieSessionId), gt(sessions.expiresAt, timestamp)))
+      .where(and(eq(sessions.id, cookieSessionId), eq(sessions.userId, sessionUser.id), gt(sessions.expiresAt, timestamp)))
       .limit(1)
     : [];
 
@@ -82,7 +110,7 @@ export async function getOrCreateLocalSession(): Promise<LocalSession> {
       expiresAt,
       lastSeenAt: timestamp,
       updatedAt: timestamp,
-      userId: LOCAL_USER.id,
+      userId: sessionUser.id,
       workspaceId: DEFAULT_WORKSPACE_ID,
     });
   }
@@ -92,10 +120,10 @@ export async function getOrCreateLocalSession(): Promise<LocalSession> {
     maxAge: 60 * 60 * 24 * SESSION_DAYS,
     path: "/",
     sameSite: "lax",
-    secure: false,
+    secure: process.env.NODE_ENV === "production",
   });
 
-  return { id: sessionId, user: LOCAL_USER, workspaceId: DEFAULT_WORKSPACE_ID };
+  return { id: sessionId, user: sessionUser, workspaceId: DEFAULT_WORKSPACE_ID };
 }
 
 export function requestWorkspaceId(request: Request, fallback = DEFAULT_WORKSPACE_ID) {
