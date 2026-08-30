@@ -141,13 +141,13 @@ const SERVER_CREDENTIAL_PRESETS = {
   cocorise: {
     issuerId: "c6d73ae8-2d47-4964-92ed-771ec137f6d0",
     keyId: "BUJ22BWQ5F",
-    privateKeyPath: "/Users/jos/Documents/Perso/Admin/Dev Keys/AuthKey_BUJ22BWQ5F.p8",
+    privateKeyPath: ".local-keys/AuthKey_BUJ22BWQ5F.p8",
     vendorNumber: "93962715",
   },
   cortifree: {
     issuerId: "c6d73ae8-2d47-4964-92ed-771ec137f6d0",
     keyId: "BUJ22BWQ5F",
-    privateKeyPath: "/Users/jos/Documents/Perso/Admin/Dev Keys/AuthKey_BUJ22BWQ5F.p8",
+    privateKeyPath: ".local-keys/AuthKey_BUJ22BWQ5F.p8",
     vendorNumber: "93962715",
   },
 } satisfies Record<NonNullable<SyncApp["credentialPreset"]>, { issuerId: string; keyId: string; privateKeyPath: string; vendorNumber: string }>;
@@ -205,9 +205,9 @@ export async function POST(request: Request) {
 
     const keyId = app.keyId!;
     const issuerId = app.issuerId!;
-    const privateKeyPath = app.privateKeyPath!;
+    const privateKeyPath = normalizeLocalPath(app.privateKeyPath!);
     const vendorNumber = app.vendorNumber!;
-    const privateKey = await readFile(privateKeyPath, "utf8");
+    const privateKey = await readPrivateKey(privateKeyPath);
     const token = createAppStoreConnectToken({ issuerId, keyId, privateKey });
     const appInfo = await fetchAppleApp(app.appStoreId, token).catch(() => ({ data: { attributes: {} } } satisfies AppleAppResponse));
     const attrs = appInfo.data?.attributes ?? {};
@@ -361,11 +361,27 @@ function withServerCredentialPreset(app: SyncApp): SyncApp {
   const preset = app.credentialPreset ? SERVER_CREDENTIAL_PRESETS[app.credentialPreset] : null;
   return {
     ...app,
-    issuerId: app.issuerId || preset?.issuerId || "",
-    keyId: app.keyId || preset?.keyId || "",
-    privateKeyPath: app.privateKeyPath || preset?.privateKeyPath || "",
-    vendorNumber: app.vendorNumber || preset?.vendorNumber || "",
+    issuerId: preset?.issuerId || app.issuerId || "",
+    keyId: preset?.keyId || app.keyId || "",
+    privateKeyPath: preset?.privateKeyPath || app.privateKeyPath || "",
+    vendorNumber: preset?.vendorNumber || app.vendorNumber || "",
   };
+}
+
+function normalizeLocalPath(path: string) {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+async function readPrivateKey(privateKeyPath: string) {
+  const envKey = process.env.APP_STORE_CONNECT_PRIVATE_KEY;
+  if (envKey?.trim()) return envKey.replace(/\\n/g, "\n");
+  const envKeyB64 = process.env.APP_STORE_CONNECT_PRIVATE_KEY_B64;
+  if (envKeyB64?.trim()) return Buffer.from(envKeyB64, "base64").toString("utf8");
+  return readFile(privateKeyPath, "utf8");
 }
 
 function json(payload: unknown, status = 200) {
@@ -657,7 +673,7 @@ async function fetchSalesReportForDate({ date, matchContext, token, vendorNumber
       "filter[vendorNumber]": vendorNumber,
     });
     const response = await fetchWithTimeout(`${APPLE_API}/salesReports?${params.toString()}`, {
-      headers: { authorization: `Bearer ${token}` },
+      headers: { accept: "application/a-gzip", authorization: `Bearer ${token}` },
     }, `Apple sales report ${date}`, APPLE_FETCH_TIMEOUT_MS);
     if (response.status === 404 || response.status === 409) {
       setSalesReportCache(cacheKey, null, MISSING_SALES_REPORT_CACHE_TTL_MS);
@@ -764,7 +780,7 @@ async function fetchFinanceReportForMonth({ matchContext, month, regionCode, rep
     "filter[vendorNumber]": vendorNumber,
   });
   const response = await fetchWithTimeout(`${APPLE_API}/financeReports?${params.toString()}`, {
-    headers: { authorization: `Bearer ${token}` },
+    headers: { accept: "application/a-gzip", authorization: `Bearer ${token}` },
   }, `Apple ${reportType} report ${month}/${regionCode}`, APPLE_FETCH_TIMEOUT_MS);
 
   if (response.status === 404 || response.status === 409) return null;
