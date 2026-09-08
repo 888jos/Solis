@@ -1,3 +1,10 @@
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { socialAccounts } from "@/db/schema";
+import { getOrCreateLocalSession } from "@/server/backend/auth";
+import { now, normalizeHandle } from "@/server/backend/http";
+import { fetchSocialProfile, type SocialProfileMetrics } from "@/server/backend/social-providers";
+
 type SocialProfilePayload = {
   followers?: number;
   views?: number;
@@ -198,7 +205,7 @@ async function fetchTikTokPostApiVideos(handle: string, secUid: string) {
   }
 }
 
-async function fetchTikTok(handle: string): Promise<SocialProfilePayload> {
+async function fetchTikTokPublic(handle: string): Promise<SocialProfilePayload> {
   const timeout = withTimeout(8_000);
   try {
     const response = await fetch(`https://www.tiktok.com/@${handle}`, {
@@ -268,14 +275,21 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const platform = url.searchParams.get("platform") ?? "";
   const handle = cleanHandle(url.searchParams.get("handle") ?? "");
+  const accountId = url.searchParams.get("accountId") ?? "";
 
   if (!handle) return Response.json({ error: "Missing handle" }, { status: 400 });
-  if (platform.toLowerCase() !== "tiktok") {
-    return Response.json({ status: "No public metrics", videoMetricsReady: false, source: "Public no-auth lookup unavailable for this platform" });
-  }
 
   try {
-    return Response.json(await fetchTikTok(handle));
+    const fallback = platform.toLowerCase() === "tiktok"
+      ? () => fetchTikTokPublic(handle)
+      : async (): Promise<SocialProfilePayload> => ({
+        source: "Apify token required",
+        status: "No public metrics",
+        videoMetricsReady: false,
+      });
+    const profile = await fetchSocialProfile(platform, handle, fallback);
+    if (accountId) await persistSocialProfile(accountId, platform, handle, profile);
+    return Response.json(profile);
   } catch (error) {
     return Response.json({
       error: error instanceof Error ? error.message : "Social lookup failed",
@@ -284,4 +298,31 @@ export async function GET(request: Request) {
       source: "TikTok public profile",
     });
   }
+}
+
+async function persistSocialProfile(accountId: string, platform: string, handle: string, profile: SocialProfileMetrics) {
+  const session = await getOrCreateLocalSession();
+  const db = await getDb();
+  const timestamp = now();
+  await db.update(socialAccounts).set({
+    avgViews: Math.round(profile.avgViews ?? 0),
+    comments: Math.round(profile.comments ?? 0),
+    engagementRate: profile.engagementRate ?? 0,
+    favorites: Math.round(profile.favorites ?? 0),
+    followers: Math.round(profile.followers ?? 0),
+    lastError: profile.videoMetricsReady ? null : "No public video metrics available from configured providers.",
+    lastSyncedAt: timestamp,
+    likes: Math.round(profile.likes ?? 0),
+    posts: Math.round(profile.posts ?? 0),
+    shares: Math.round(profile.shares ?? 0),
+    source: profile.source,
+    status: profile.videoMetricsReady ? "ready" : "no_public_metrics",
+    updatedAt: timestamp,
+    views: Math.round(profile.views ?? 0),
+  }).where(and(
+    eq(socialAccounts.id, accountId),
+    eq(socialAccounts.workspaceId, session.workspaceId),
+    eq(socialAccounts.platform, platform.trim().toLowerCase()),
+    eq(socialAccounts.handle, normalizeHandle(handle)),
+  ));
 }

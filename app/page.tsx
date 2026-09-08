@@ -4350,7 +4350,7 @@ function socialMetricText(value: number, loading: boolean, suffix = "") {
   return value ? `${formatNumber(Math.round(value))}${suffix}` : "—";
 }
 
-const SOCIAL_LOOKUP_TIMEOUT_MS = 15_000;
+const SOCIAL_LOOKUP_TIMEOUT_MS = 120_000;
 
 function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
@@ -4373,7 +4373,7 @@ function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: {
       setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "Provider pending" } : row));
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), SOCIAL_LOOKUP_TIMEOUT_MS);
-      fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}`, { signal: controller.signal })
+      fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`, { signal: controller.signal })
         .then((response) => response.json())
         .then((profile: Partial<SocialAccount> & { status?: SocialAccount["status"]; videoMetricsReady?: boolean }) => {
           const nextStatus = profile.videoMetricsReady ? "Ready for public tracking" : "No public metrics";
