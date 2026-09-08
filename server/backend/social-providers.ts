@@ -168,8 +168,11 @@ async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics
   const actor = await runtimeEnv("APIFY_TIKTOK_ACTOR") || "clockworks/tiktok-scraper";
   const bareHandle = cleanBareHandle(handle);
   const items = await callApifyActor(actor, {
-    profiles: [`https://www.tiktok.com/@${bareHandle}`],
+    profiles: [bareHandle],
+    profileScrapeSections: ["videos"],
+    profileSorting: "latest",
     resultsPerPage: 30,
+    excludePinnedPosts: false,
     shouldDownloadCovers: false,
     shouldDownloadSlideshowImages: false,
     shouldDownloadSubtitles: false,
