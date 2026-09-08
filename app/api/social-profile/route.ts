@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { socialAccounts } from "@/db/schema";
+import { creatorVideos, creators, socialAccounts } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { now, normalizeHandle } from "@/server/backend/http";
 import { fetchSocialProfile, type SocialProfileMetrics } from "@/server/backend/social-providers";
@@ -18,6 +18,7 @@ type SocialProfilePayload = {
   status: "No public metrics" | "Ready for public tracking";
   videoMetricsReady: boolean;
   source: string;
+  videos?: SocialProfileMetrics["videos"];
 };
 
 function cleanHandle(value: string) {
@@ -79,6 +80,10 @@ function extractSecUid(html: string) {
 }
 
 type TikwmVideo = {
+  video_id?: number | string;
+  aweme_id?: number | string;
+  title?: string;
+  play?: string;
   play_count?: number | string;
   digg_count?: number | string;
   comment_count?: number | string;
@@ -123,6 +128,22 @@ function numberFromUnknown(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") return parseMetricValue(value);
   return 0;
+}
+
+function stableKey(parts: string[]) {
+  const input = parts.join(":").toLowerCase();
+  let hash = 5381;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(index);
+  }
+  return Math.abs(hash >>> 0).toString(36);
+}
+
+function compactVideoUrl(platform: string, handle: string, videoId: string) {
+  const normalizedPlatform = platform.trim().toLowerCase();
+  if (normalizedPlatform === "tiktok") return `https://www.tiktok.com/@${handle}/video/${videoId}`;
+  if (normalizedPlatform === "instagram") return `https://www.instagram.com/p/${videoId}/`;
+  return "";
 }
 
 async function fetchTikwmVideos(handle: string) {
@@ -265,6 +286,19 @@ async function fetchTikTokPublic(handle: string): Promise<SocialProfilePayload> 
       status: videoMetricsReady ? "Ready for public tracking" : "No public metrics",
       videoMetricsReady,
       source,
+      videos: publicVideos.map((video, index) => {
+        const id = String(video.video_id ?? video.aweme_id ?? `${handle}-${index}`);
+        return {
+          id,
+          comments: numberFromUnknown(video.comment_count) || undefined,
+          favorites: numberFromUnknown(video.collect_count) || undefined,
+          likes: numberFromUnknown(video.digg_count) || undefined,
+          shares: numberFromUnknown(video.share_count) || undefined,
+          title: typeof video.title === "string" ? video.title : undefined,
+          url: typeof video.play === "string" ? video.play : compactVideoUrl("tiktok", handle, id),
+          views: numberFromUnknown(video.play_count) || undefined,
+        };
+      }).filter((video) => video.views || video.likes || video.comments || video.shares || video.favorites),
     };
   } finally {
     timeout.done();
@@ -304,6 +338,8 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
   const session = await getOrCreateLocalSession();
   const db = await getDb();
   const timestamp = now();
+  const normalizedPlatform = platform.trim().toLowerCase();
+  const normalizedHandle = normalizeHandle(handle);
   await db.update(socialAccounts).set({
     avgViews: Math.round(profile.avgViews ?? 0),
     comments: Math.round(profile.comments ?? 0),
@@ -322,7 +358,74 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
   }).where(and(
     eq(socialAccounts.id, accountId),
     eq(socialAccounts.workspaceId, session.workspaceId),
-    eq(socialAccounts.platform, platform.trim().toLowerCase()),
-    eq(socialAccounts.handle, normalizeHandle(handle)),
+    eq(socialAccounts.platform, normalizedPlatform),
+    eq(socialAccounts.handle, normalizedHandle),
   ));
+
+  const [socialAccount] = await db.select().from(socialAccounts).where(and(
+    eq(socialAccounts.id, accountId),
+    eq(socialAccounts.workspaceId, session.workspaceId),
+    eq(socialAccounts.platform, normalizedPlatform),
+    eq(socialAccounts.handle, normalizedHandle),
+  )).limit(1);
+  if (!socialAccount) return;
+
+  const [existingCreator] = await db.select().from(creators).where(and(
+    eq(creators.workspaceId, session.workspaceId),
+    eq(creators.platform, normalizedPlatform),
+    eq(creators.handle, normalizedHandle),
+  )).limit(1);
+  const creatorId = existingCreator?.id ?? `creator-${stableKey([session.workspaceId, normalizedPlatform, normalizedHandle])}`;
+  const creatorValues = {
+    workspaceId: session.workspaceId,
+    name: normalizedHandle,
+    handle: normalizedHandle,
+    platform: normalizedPlatform,
+    email: null,
+    status: profile.videoMetricsReady ? "tracked" : "source_limited",
+    updatedAt: timestamp,
+  };
+  if (existingCreator) {
+    await db.update(creators).set(creatorValues).where(eq(creators.id, existingCreator.id));
+  } else {
+    await db.insert(creators).values({
+      id: creatorId,
+      ...creatorValues,
+      createdAt: timestamp,
+    });
+  }
+
+  for (const video of profile.videos ?? []) {
+    const remoteVideoId = String(video.id || video.url || crypto.randomUUID());
+    const videoId = `video-${stableKey([session.workspaceId, accountId, remoteVideoId])}`;
+    const videoValues = {
+      workspaceId: session.workspaceId,
+      creatorId,
+      socialAccountId: accountId,
+      campaignId: null,
+      appId: socialAccount.appId,
+      platform: normalizedPlatform,
+      url: video.url || compactVideoUrl(normalizedPlatform, normalizedHandle, remoteVideoId),
+      title: video.title || null,
+      publishedAt: video.publishedAt || null,
+      cost: 0,
+      views: Math.round(video.views ?? 0),
+      likes: Math.round(video.likes ?? 0),
+      comments: Math.round(video.comments ?? 0),
+      shares: Math.round(video.shares ?? 0),
+      favorites: Math.round(video.favorites ?? 0),
+      attributedInstalls: 0,
+      updatedAt: timestamp,
+    };
+    const [existingVideo] = await db.select().from(creatorVideos).where(eq(creatorVideos.id, videoId)).limit(1);
+    if (existingVideo) {
+      await db.update(creatorVideos).set(videoValues).where(eq(creatorVideos.id, videoId));
+    } else {
+      await db.insert(creatorVideos).values({
+        id: videoId,
+        ...videoValues,
+        createdAt: timestamp,
+      });
+    }
+  }
 }

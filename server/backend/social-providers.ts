@@ -9,15 +9,20 @@ export type SocialProfileMetrics = {
   shares?: number;
   source: string;
   status: "No public metrics" | "Ready for public tracking";
+  videos?: SocialVideo[];
   videoMetricsReady: boolean;
   views?: number;
 };
 
-type SocialVideo = {
+export type SocialVideo = {
   comments?: number;
   favorites?: number;
+  id: string;
   likes?: number;
+  publishedAt?: string;
   shares?: number;
+  title?: string;
+  url?: string;
   views?: number;
 };
 
@@ -65,6 +70,24 @@ function itemUrl(item: ApifyItem) {
   return String(item.url ?? item.webVideoUrl ?? item.videoUrl ?? item.shortCode ?? "");
 }
 
+function videoIdFromItem(item: ApifyItem) {
+  return String(item.id ?? item.videoId ?? item.awemeId ?? item.shortCode ?? itemUrl(item) ?? crypto.randomUUID());
+}
+
+function itemTitle(item: ApifyItem) {
+  return String(item.text ?? item.caption ?? item.title ?? item.description ?? "").trim();
+}
+
+function itemPublishedAt(item: ApifyItem) {
+  const raw = item.createTimeISO ?? item.takenAtTimestamp ?? item.timestamp ?? item.createdAt ?? item.createTime;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return new Date(raw > 10_000_000_000 ? raw : raw * 1000).toISOString();
+  }
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toISOString();
+}
+
 function isVideoItem(item: ApifyItem) {
   const url = itemUrl(item);
   return Boolean(url.includes("/video/") || url.includes("/reel/") || url.includes("/p/") || item.id || item.shortCode);
@@ -76,8 +99,12 @@ function normalizeVideos(items: ApifyItem[]): SocialVideo[] {
     .map((item) => ({
       comments: nestedMetric(item, ["stats", "statsV2", "counts"], ["commentCount", "commentsCount", "comment_count", "comments"]),
       favorites: nestedMetric(item, ["stats", "statsV2", "counts"], ["collectCount", "favoriteCount", "favoritesCount", "saves", "savedCount"]),
+      id: videoIdFromItem(item),
       likes: nestedMetric(item, ["stats", "statsV2", "counts"], ["diggCount", "likeCount", "likesCount", "likes", "heartCount"]),
+      publishedAt: itemPublishedAt(item),
       shares: nestedMetric(item, ["stats", "statsV2", "counts"], ["shareCount", "sharesCount", "share_count", "shares"]),
+      title: itemTitle(item),
+      url: itemUrl(item),
       views: nestedMetric(item, ["stats", "statsV2", "counts"], ["playCount", "viewCount", "viewsCount", "videoViewCount", "plays", "views"]),
     }))
     .filter((video) => video.views || video.likes || video.comments || video.shares || video.favorites);
@@ -106,6 +133,7 @@ function summarizeVideos(videos: SocialVideo[], source: string, profile?: ApifyI
     shares: shares || undefined,
     source,
     status: videoMetricsReady ? "Ready for public tracking" : "No public metrics",
+    videos,
     videoMetricsReady,
     views: views || undefined,
   };

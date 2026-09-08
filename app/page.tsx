@@ -172,6 +172,7 @@ type SocialAccount = {
   shares?: number;
   engagementRate?: number;
   source?: string;
+  lastSyncedAt?: string | number | Date | null;
   status: "No public metrics" | "Provider pending" | "Ready for public tracking";
   createdAt: string;
 };
@@ -207,6 +208,26 @@ type Creative = {
   comments?: number;
   shares?: number;
   favorites?: number;
+  createdAt: string;
+};
+
+type CreatorVideo = {
+  id: string;
+  appId: string;
+  campaignId?: string | null;
+  socialAccountId?: string | null;
+  creatorId?: string | null;
+  platform: string;
+  url?: string | null;
+  title?: string | null;
+  publishedAt?: string | null;
+  cost: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  favorites: number;
+  attributedInstalls: number;
   createdAt: string;
 };
 
@@ -303,6 +324,7 @@ const SOCIAL_STORAGE = "driftos.v2.socials";
 const METRIC_STORAGE = "driftos.v2.appStoreMetrics";
 const CAMPAIGN_STORAGE = "driftos.v2.campaigns";
 const CREATIVE_STORAGE = "driftos.v2.creatives";
+const CREATOR_VIDEO_STORAGE = "driftos.v2.creatorVideos";
 const ASO_KEYWORD_STORAGE = "driftos.v2.asoKeywords";
 const ASO_RESULTS_STORAGE = "driftos.v2.asoResults";
 const PORTFOLIO_SCOPE_STORAGE = "driftos.v2.portfolioScope";
@@ -477,6 +499,38 @@ type BackendCreative = {
   socialAccountId?: string | null;
   status: string;
   url: string | null;
+};
+
+type BackendCreatorVideo = {
+  appId: string | null;
+  attributedInstalls: number;
+  campaignId: string | null;
+  comments: number;
+  cost: number;
+  createdAt: string | number | Date;
+  creatorId: string | null;
+  favorites: number;
+  id: string;
+  likes: number;
+  platform: string;
+  publishedAt: string | null;
+  shares: number;
+  socialAccountId: string | null;
+  title: string | null;
+  url: string | null;
+  views: number;
+};
+
+type SocialProfileVideo = {
+  comments?: number;
+  favorites?: number;
+  id: string;
+  likes?: number;
+  publishedAt?: string;
+  shares?: number;
+  title?: string;
+  url?: string;
+  views?: number;
 };
 
 function liquidClass(className = "") {
@@ -764,6 +818,59 @@ function creativeFromBackend(row: BackendCreative): Creative {
     title: row.name,
     url: row.url || "",
     views: row.impressions,
+  };
+}
+
+function creatorVideoFromBackend(row: BackendCreatorVideo): CreatorVideo {
+  return {
+    id: row.id,
+    appId: row.appId || "",
+    attributedInstalls: row.attributedInstalls ?? 0,
+    campaignId: row.campaignId,
+    comments: row.comments ?? 0,
+    cost: row.cost ?? 0,
+    createdAt: isoFromDb(row.createdAt),
+    creatorId: row.creatorId,
+    favorites: row.favorites ?? 0,
+    likes: row.likes ?? 0,
+    platform: row.platform,
+    publishedAt: row.publishedAt,
+    shares: row.shares ?? 0,
+    socialAccountId: row.socialAccountId,
+    title: row.title,
+    url: row.url,
+    views: row.views ?? 0,
+  };
+}
+
+function stableUiKey(parts: string[]) {
+  const input = parts.join(":").toLowerCase();
+  let hash = 5381;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(index);
+  }
+  return Math.abs(hash >>> 0).toString(36);
+}
+
+function creatorVideoFromSocialProfile(video: SocialProfileVideo, social: SocialAccount): CreatorVideo {
+  return {
+    id: `video-${stableUiKey([DEFAULT_WORKSPACE_ID, social.id, video.id || video.url || ""])}`,
+    appId: social.appId,
+    attributedInstalls: 0,
+    campaignId: null,
+    comments: Math.round(video.comments ?? 0),
+    cost: 0,
+    createdAt: new Date().toISOString(),
+    creatorId: null,
+    favorites: Math.round(video.favorites ?? 0),
+    likes: Math.round(video.likes ?? 0),
+    platform: social.platform,
+    publishedAt: video.publishedAt ?? null,
+    shares: Math.round(video.shares ?? 0),
+    socialAccountId: social.id,
+    title: video.title ?? null,
+    url: video.url ?? null,
+    views: Math.round(video.views ?? 0),
   };
 }
 
@@ -1339,6 +1446,7 @@ export default function Home() {
   const [appStoreMetrics, setAppStoreMetrics] = useState<AppStoreMetric[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [creatives, setCreatives] = useState<Creative[]>([]);
+  const [creatorVideos, setCreatorVideos] = useState<CreatorVideo[]>([]);
   const [syncingAppId, setSyncingAppId] = useState("");
   const attemptedAutoSyncIds = useRef(new Set<string>());
   const autoSyncAttempts = useRef(new Map<string, number>());
@@ -1381,6 +1489,7 @@ export default function Home() {
         let resolvedSocials = storedSocials;
         let resolvedCampaigns = readStored<Campaign[]>(CAMPAIGN_STORAGE, []);
         let resolvedCreatives = readStored<Creative[]>(CREATIVE_STORAGE, []);
+        let resolvedCreatorVideos = readStored<CreatorVideo[]>(CREATOR_VIDEO_STORAGE, []);
 
         try {
           const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" });
@@ -1394,10 +1503,12 @@ export default function Home() {
             fetch(`/api/campaigns?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" }),
             fetch(`/api/creatives?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" }),
           ]);
+          const videosResponse = await fetch(`/api/creator-videos?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" });
           const appsPayload = await appsResponse.json() as { ok?: boolean; data?: { apps?: BackendApp[] } };
           const socialsPayload = await socialsResponse.json() as { ok?: boolean; data?: { socialAccounts?: SocialAccount[] } };
           const campaignsPayload = await campaignsResponse.json() as { ok?: boolean; data?: { campaigns?: BackendCampaign[] } };
           const creativesPayload = await creativesResponse.json() as { ok?: boolean; data?: { creatives?: BackendCreative[] } };
+          const videosPayload = await videosResponse.json() as { ok?: boolean; data?: { videos?: BackendCreatorVideo[] } };
           const backendApps = appsPayload.data?.apps?.map(appFromBackend) ?? [];
           const backendSocials = socialsPayload.data?.socialAccounts?.map((social) => ({
             ...social,
@@ -1408,6 +1519,7 @@ export default function Home() {
           if (socialsPayload.ok) resolvedSocials = backendSocials;
           if (campaignsPayload.ok) resolvedCampaigns = (campaignsPayload.data?.campaigns ?? []).filter((campaign) => campaign.status !== "deleted").map(campaignFromBackend);
           if (creativesPayload.ok) resolvedCreatives = (creativesPayload.data?.creatives ?? []).filter((creative) => creative.status !== "deleted").map(creativeFromBackend);
+          if (videosPayload.ok) resolvedCreatorVideos = (videosPayload.data?.videos ?? []).map(creatorVideoFromBackend);
         } catch {
           resolvedApps = storedApps;
           resolvedSocials = storedSocials;
@@ -1415,11 +1527,13 @@ export default function Home() {
 
         const storedCampaigns = resolvedCampaigns.filter((campaign) => resolvedApps.some((app) => app.id === campaign.appId));
         const storedCreatives = resolvedCreatives.filter((creative) => resolvedApps.some((app) => app.id === creative.appId));
+        const storedCreatorVideos = resolvedCreatorVideos.filter((video) => resolvedApps.some((app) => app.id === video.appId));
         setApps(resolvedApps);
         setSocials(resolvedSocials);
         setAppStoreMetrics(storedMetrics.filter((metric) => resolvedApps.some((app) => app.id === metric.appId)));
         setCampaigns(storedCampaigns);
         setCreatives(storedCreatives);
+        setCreatorVideos(storedCreatorVideos);
         const storedPortfolioScope = readStored<string>(PORTFOLIO_SCOPE_STORAGE, "");
         const restoredPortfolioScope = (resolvedApps.length > 1 && storedPortfolioScope === "overall") || resolvedApps.some((app) => app.id === storedPortfolioScope)
           ? storedPortfolioScope
@@ -1481,6 +1595,10 @@ export default function Home() {
   useEffect(() => {
     if (loaded) window.localStorage.setItem(CREATIVE_STORAGE, JSON.stringify(creatives));
   }, [creatives, loaded]);
+
+  useEffect(() => {
+    if (loaded) window.localStorage.setItem(CREATOR_VIDEO_STORAGE, JSON.stringify(creatorVideos));
+  }, [creatorVideos, loaded]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1925,10 +2043,10 @@ export default function Home() {
     if (activePage === "monetization") return <MonetizationPage apps={scopedApps} metrics={currentMetrics} isSyncing={Boolean(syncingAppId)} setActivePage={openPage} />;
     if (activePage === "acquisition") return <AnalyticsPage kind="acquisition" apps={scopedApps} metrics={currentMetrics} previousMetrics={previousMetrics} previousPeriodAvailable={Boolean(previousDateRange)} syncingAppId={syncingAppId} syncError={syncError} setActivePage={openPage} />;
     if (activePage === "aso") return <AsoPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
-    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
-    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} setSocials={setSocials} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
+    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "quality") return <QualityPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -3236,7 +3354,7 @@ function campaignMetricForApp(metrics: AppStoreMetric[], appId: string) {
   }), { currency: "USD", downloads: 0, revenue: 0, subscriptions: 0 });
 }
 
-function CampaignsPage({ apps, metrics, socials, campaigns, setCampaigns, setActivePage }: { apps: StudioApp[]; metrics: AppStoreMetric[]; socials: SocialAccount[]; campaigns: Campaign[]; setCampaigns: React.Dispatch<React.SetStateAction<Campaign[]>>; setActivePage: (page: PageKey) => void }) {
+function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns, setActivePage }: { apps: StudioApp[]; metrics: AppStoreMetric[]; socials: SocialAccount[]; videos: CreatorVideo[]; campaigns: Campaign[]; setCampaigns: React.Dispatch<React.SetStateAction<Campaign[]>>; setActivePage: (page: PageKey) => void }) {
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns[0]?.id ?? "");
   const [draft, setDraft] = useState({
     appId: apps[0]?.id ?? "",
@@ -3253,6 +3371,7 @@ function CampaignsPage({ apps, metrics, socials, campaigns, setCampaigns, setAct
   const totalSpend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
   const totalRevenue = campaigns.reduce((sum, campaign) => sum + campaignMetricForApp(metrics, campaign.appId).revenue, 0);
   const totalDownloads = campaigns.reduce((sum, campaign) => sum + campaignMetricForApp(metrics, campaign.appId).downloads, 0);
+  const totalCreatorViews = videos.reduce((sum, video) => sum + video.views, 0);
   const totalProfit = totalRevenue - totalSpend;
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0];
 
@@ -3332,6 +3451,11 @@ function CampaignsPage({ apps, metrics, socials, campaigns, setCampaigns, setAct
           <h2>CPI</h2>
           <strong>{totalSpend && totalDownloads ? formatUnitCurrency(totalSpend / totalDownloads, currency) : "—"}</strong>
         </LiquidGlass>
+        <LiquidGlass className="panel moduleCard">
+          <span className="cardAccentRail" aria-hidden="true" />
+          <h2>Hybrid CPM</h2>
+          <strong>{totalSpend && totalCreatorViews ? formatUnitCurrency((totalSpend / totalCreatorViews) * 1000, currency) : "—"}</strong>
+        </LiquidGlass>
       </section>
 
       <LiquidGlass as="form" className="panel dataPanel campaignFormPanel" onSubmit={addCampaign}>
@@ -3355,14 +3479,17 @@ function CampaignsPage({ apps, metrics, socials, campaigns, setCampaigns, setAct
           <div className="panelHeader"><div><p className="caption">Sheet</p><h2>Campaign tracking</h2></div><span className="pill">{campaigns.length} rows</span></div>
           {campaigns.length ? (
             <div className="table campaignTable">
-              <div className="tableRow tableHead campaignHead"><span>Campaign</span><span>App</span><span>Channel</span><span>Status</span><span>Goal</span><span>Spend</span><span>Revenue</span><span>Profit</span><span>ROAS</span><span>Downloads</span><span>CPI</span><span>Creators</span><span>Dates</span><span>Manage</span></div>
+              <div className="tableRow tableHead campaignHead"><span>Campaign</span><span>App</span><span>Channel</span><span>Status</span><span>Goal</span><span>Spend</span><span>Revenue</span><span>Profit</span><span>ROAS</span><span>Downloads</span><span>CPI</span><span>Creator views</span><span>Hybrid CPM</span><span>Creators</span><span>Dates</span><span>Manage</span></div>
               {campaigns.map((campaign) => {
                 const app = apps.find((row) => row.id === campaign.appId);
                 const metric = campaignMetricForApp(metrics, campaign.appId);
                 const linkedCreators = socials.filter((social) => social.appId === campaign.appId);
+                const campaignVideos = videos.filter((video) => video.campaignId === campaign.id || (!video.campaignId && video.appId === campaign.appId));
+                const creatorViews = campaignVideos.reduce((sum, video) => sum + video.views, 0);
                 const profit = metric.revenue - campaign.spend;
                 const roas = campaign.spend && metric.revenue ? metric.revenue / campaign.spend : 0;
                 const cpi = campaign.spend && metric.downloads ? campaign.spend / metric.downloads : 0;
+                const hybridCpm = campaign.spend && creatorViews ? (campaign.spend / creatorViews) * 1000 : 0;
                 return (
                   <div className={selectedCampaign?.id === campaign.id ? "tableRow campaignRow isSelected" : "tableRow campaignRow"} role="button" tabIndex={0} onClick={() => setSelectedCampaignId(campaign.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedCampaignId(campaign.id); }} key={campaign.id}>
                     <span><strong>{campaign.name}</strong><small>{campaign.notes || campaign.goal}</small></span>
@@ -3376,6 +3503,8 @@ function CampaignsPage({ apps, metrics, socials, campaigns, setCampaigns, setAct
                     <span>{roas ? `${roas.toFixed(1)}x` : "—"}</span>
                     <span>{metric.downloads ? formatNumber(metric.downloads) : "—"}</span>
                     <span>{cpi ? formatUnitCurrency(cpi, metric.currency) : "—"}</span>
+                    <span>{creatorViews ? formatNumber(creatorViews) : "—"}</span>
+                    <span>{hybridCpm ? formatUnitCurrency(hybridCpm, metric.currency) : "—"}</span>
                     <span>{linkedCreators.length ? formatNumber(linkedCreators.length) : "—"}</span>
                     <span><small>{campaign.startDate} → {campaign.endDate}</small></span>
                     <span><button className="ghostButton dangerButton" type="button" onClick={(event) => { event.stopPropagation(); void fetch(`/api/campaigns/${encodeURIComponent(campaign.id)}`, { method: "DELETE" }).catch(() => null); setCampaigns((rows) => rows.filter((row) => row.id !== campaign.id)); }}>Delete</button></span>
@@ -3386,18 +3515,20 @@ function CampaignsPage({ apps, metrics, socials, campaigns, setCampaigns, setAct
           ) : <EmptyPanel title="No campaigns yet" text="Create one campaign to start tracking spend, revenue, profit and creator coverage." />}
         </LiquidGlass>
 
-        <CampaignDetail campaign={selectedCampaign} apps={apps} metrics={metrics} socials={socials} setActivePage={setActivePage} />
+        <CampaignDetail campaign={selectedCampaign} apps={apps} metrics={metrics} socials={socials} videos={videos} setActivePage={setActivePage} />
       </section>
     </section>
   );
 }
 
-function CampaignDetail({ campaign, apps, metrics, socials, setActivePage }: { campaign?: Campaign; apps: StudioApp[]; metrics: AppStoreMetric[]; socials: SocialAccount[]; setActivePage: (page: PageKey) => void }) {
+function CampaignDetail({ campaign, apps, metrics, socials, videos, setActivePage }: { campaign?: Campaign; apps: StudioApp[]; metrics: AppStoreMetric[]; socials: SocialAccount[]; videos: CreatorVideo[]; setActivePage: (page: PageKey) => void }) {
   if (!campaign) return <LiquidGlass className="panel dataPanel campaignDetail"><h2>Select a campaign</h2></LiquidGlass>;
   const app = apps.find((row) => row.id === campaign.appId);
   const metric = campaignMetricForApp(metrics, campaign.appId);
   const creators = socials.filter((social) => social.appId === campaign.appId);
-  const views = creators.reduce((sum, social) => sum + socialMetricValue(social, "views"), 0);
+  const campaignVideos = videos.filter((video) => video.campaignId === campaign.id || (!video.campaignId && video.appId === campaign.appId));
+  const views = campaignVideos.reduce((sum, video) => sum + video.views, 0) || creators.reduce((sum, social) => sum + socialMetricValue(social, "views"), 0);
+  const hybridCpm = campaign.spend && views ? (campaign.spend / views) * 1000 : 0;
   const profit = metric.revenue - campaign.spend;
   return (
     <LiquidGlass className="panel dataPanel campaignDetail">
@@ -3409,6 +3540,7 @@ function CampaignDetail({ campaign, apps, metrics, socials, setActivePage }: { c
         <span><strong>{formatCurrency(profit, metric.currency)}</strong><small>Profit</small></span>
         <span><strong>{metric.downloads ? formatNumber(metric.downloads) : "—"}</strong><small>Downloads</small></span>
         <span><strong>{views ? formatNumber(views) : "—"}</strong><small>Creator views</small></span>
+        <span><strong>{hybridCpm ? formatUnitCurrency(hybridCpm, metric.currency) : "—"}</strong><small>Hybrid CPM</small></span>
       </div>
       <div className="campaignActions">
         <button className="ghostButton" type="button" onClick={() => setActivePage("creators")}>Creators</button>
@@ -3429,7 +3561,28 @@ function creativeMetricTotal(creatives: Creative[], key: "comments" | "favorites
   return creatives.reduce((sum, creative) => sum + (creative[key] ?? 0), 0);
 }
 
-function CreativePage({ apps, socials, creatives, setCreatives, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; creatives: Creative[]; setCreatives: React.Dispatch<React.SetStateAction<Creative[]>>; isFiltered?: boolean }) {
+function creativeFromVideo(video: CreatorVideo, socials: SocialAccount[]): Creative {
+  const social = socials.find((row) => row.id === video.socialAccountId);
+  return {
+    id: `tracked-${video.id}`,
+    angle: "UGC",
+    appId: video.appId,
+    comments: video.comments,
+    createdAt: video.createdAt,
+    favorites: video.favorites,
+    format: video.platform.toLowerCase() === "instagram" ? "UGC" : "Talking head",
+    hook: video.title || "",
+    likes: video.likes,
+    shares: video.shares,
+    socialId: video.socialAccountId || "",
+    status: video.views > 0 ? "Posted" : "Idea",
+    title: video.title || `${social?.handle ?? video.platform} video`,
+    url: video.url || "",
+    views: video.views,
+  };
+}
+
+function CreativePage({ apps, socials, videos, creatives, setCreatives, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; creatives: Creative[]; setCreatives: React.Dispatch<React.SetStateAction<Creative[]>>; isFiltered?: boolean }) {
   const [selectedCreativeId, setSelectedCreativeId] = useState(creatives[0]?.id ?? "");
   const [draft, setDraft] = useState({
     angle: "Demo" as Creative["angle"],
@@ -3446,10 +3599,13 @@ function CreativePage({ apps, socials, creatives, setCreatives, isFiltered = fal
     url: "",
     views: "",
   });
-  const totalViews = creativeMetricTotal(creatives, "views");
-  const avgEngagement = creatives.length ? creatives.reduce((sum, creative) => sum + creativeEngagement(creative), 0) / creatives.length : 0;
-  const winners = creatives.filter((creative) => creative.status === "Winner").length;
-  const selectedCreative = creatives.find((creative) => creative.id === selectedCreativeId) ?? creatives[0];
+  const trackedCreatives = videos.map((video) => creativeFromVideo(video, socials));
+  const manualUrls = new Set(creatives.map((creative) => creative.url).filter(Boolean));
+  const allCreatives = [...creatives, ...trackedCreatives.filter((creative) => !manualUrls.has(creative.url))];
+  const totalViews = creativeMetricTotal(allCreatives, "views");
+  const avgEngagement = allCreatives.length ? allCreatives.reduce((sum, creative) => sum + creativeEngagement(creative), 0) / allCreatives.length : 0;
+  const winners = allCreatives.filter((creative) => creative.status === "Winner").length;
+  const selectedCreative = allCreatives.find((creative) => creative.id === selectedCreativeId) ?? allCreatives[0];
 
   function parseOptionalMetric(value: string) {
     const parsed = Number(value.replace(",", "."));
@@ -3518,14 +3674,14 @@ function CreativePage({ apps, socials, creatives, setCreatives, isFiltered = fal
   return (
     <section className="creativesPage">
       <section className="moduleMatrix creativeStats">
-        <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Creatives</h2><strong>{formatNumber(creatives.length)}</strong></LiquidGlass>
+        <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Creatives</h2><strong>{formatNumber(allCreatives.length)}</strong></LiquidGlass>
         <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Views</h2><strong>{totalViews ? formatNumber(totalViews) : "—"}</strong></LiquidGlass>
         <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Engagement</h2><strong>{avgEngagement ? `${avgEngagement.toFixed(1)}%` : "—"}</strong></LiquidGlass>
         <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Winners</h2><strong>{formatNumber(winners)}</strong></LiquidGlass>
       </section>
 
       <LiquidGlass as="form" className="panel dataPanel creativeFormPanel" onSubmit={addCreative}>
-        <div className="panelHeader"><div><p className="caption">Create</p><h2>Add creative</h2></div><span className="pill">{creatives.length} creatives</span></div>
+        <div className="panelHeader"><div><p className="caption">Create</p><h2>Add creative</h2></div><span className="pill">{allCreatives.length} creatives</span></div>
         <div className="creativeFormGrid">
           <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Creative title" />
           <select value={draft.appId} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
@@ -3546,18 +3702,19 @@ function CreativePage({ apps, socials, creatives, setCreatives, isFiltered = fal
 
       <section className="creativeWorkArea">
         <LiquidGlass className="panel dataPanel creativeSheetPanel">
-          <div className="panelHeader"><div><p className="caption">Library</p><h2>Creative tracking</h2></div><span className="pill">{creatives.length} rows</span></div>
-          {creatives.length ? (
+          <div className="panelHeader"><div><p className="caption">Library</p><h2>Creative tracking</h2></div><span className="pill">{allCreatives.length} rows</span></div>
+          {allCreatives.length ? (
             <div className="table creativeTable">
               <div className="tableRow tableHead creativeHead"><span>Creative</span><span>App</span><span>Creator</span><span>Status</span><span>Angle</span><span>Format</span><span>Views</span><span>Likes</span><span>Comments</span><span>Shares</span><span>Favorites</span><span>Eng.</span><span>Hook</span><span>URL</span><span>Manage</span></div>
-              {creatives.map((creative) => {
+              {allCreatives.map((creative) => {
                 const app = apps.find((row) => row.id === creative.appId);
                 const social = socials.find((row) => row.id === creative.socialId);
                 const loading = Boolean(social && isSocialLoading(social) && creative.views === undefined);
                 const isSelected = selectedCreative?.id === creative.id;
+                const isTracked = creative.id.startsWith("tracked-");
                 return (
                   <div className={isSelected ? "tableRow creativeRow isSelected" : "tableRow creativeRow"} role="button" tabIndex={0} onClick={() => setSelectedCreativeId(creative.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedCreativeId(creative.id); }} key={creative.id}>
-                    <span><strong>{creative.title}</strong><small>{creative.url ? "Linked" : "Manual"}</small></span>
+                    <span><strong>{creative.title}</strong><small>{isTracked ? "Tracked video" : creative.url ? "Linked" : "Manual"}</small></span>
                     <span>{app ? appDisplayName(app.name) : "Unmapped"}</span>
                     <span>{social?.handle ?? "—"}</span>
                     <span><b className={creative.status === "Winner" || creative.status === "Posted" ? "statusOk" : "statusDraft"}>{creative.status}</b></span>
@@ -3571,7 +3728,7 @@ function CreativePage({ apps, socials, creatives, setCreatives, isFiltered = fal
                     <span className="socialMetricNumber"><SocialMetricCell value={creativeEngagement(creative)} loading={loading} suffix="%" /></span>
                     <span><small>{creative.hook || "—"}</small></span>
                     <span>{creative.url ? <a href={creative.url} target="_blank" rel="noreferrer">Open</a> : "—"}</span>
-                    <span><button className="ghostButton dangerButton" type="button" onClick={(event) => { event.stopPropagation(); void fetch(`/api/creatives/${encodeURIComponent(creative.id)}`, { method: "DELETE" }).catch(() => null); setCreatives((rows) => rows.filter((row) => row.id !== creative.id)); }}>Delete</button></span>
+                    <span>{isTracked ? <b className="statusOk">Auto</b> : <button className="ghostButton dangerButton" type="button" onClick={(event) => { event.stopPropagation(); void fetch(`/api/creatives/${encodeURIComponent(creative.id)}`, { method: "DELETE" }).catch(() => null); setCreatives((rows) => rows.filter((row) => row.id !== creative.id)); }}>Delete</button>}</span>
                   </div>
                 );
               })}
@@ -4352,12 +4509,13 @@ function socialMetricText(value: number, loading: boolean, suffix = "") {
 
 const SOCIAL_LOOKUP_TIMEOUT_MS = 120_000;
 
-function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
+function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
   const inFlightLookups = useRef(new Set<string>());
   const lookupTargets = useMemo(() => socials.filter(needsSocialLookup).map((social) => ({
+    appId: social.appId,
     handle: social.handle,
     id: social.id,
     platform: social.platform,
@@ -4365,7 +4523,7 @@ function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: {
   const lookupSignature = JSON.stringify(lookupTargets);
 
   useEffect(() => {
-    const targets = JSON.parse(lookupSignature) as Array<{ handle: string; id: string; platform: string }>;
+    const targets = JSON.parse(lookupSignature) as Array<{ appId: string; handle: string; id: string; platform: SocialAccount["platform"] }>;
     for (const social of targets) {
       if (inFlightLookups.current.has(social.id)) continue;
       inFlightLookups.current.add(social.id);
@@ -4375,8 +4533,9 @@ function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: {
       const timer = window.setTimeout(() => controller.abort(), SOCIAL_LOOKUP_TIMEOUT_MS);
       fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`, { signal: controller.signal })
         .then((response) => response.json())
-        .then((profile: Partial<SocialAccount> & { status?: SocialAccount["status"]; videoMetricsReady?: boolean }) => {
+        .then((profile: Partial<SocialAccount> & { status?: SocialAccount["status"]; videoMetricsReady?: boolean; videos?: SocialProfileVideo[] }) => {
           const nextStatus = profile.videoMetricsReady ? "Ready for public tracking" : "No public metrics";
+          const socialSnapshot: SocialAccount = { appId: social.appId, createdAt: new Date().toISOString(), handle: social.handle, id: social.id, platform: social.platform, status: nextStatus };
           setSocials((current) => current.map((row) => row.id === social.id ? {
             ...row,
             followers: Number.isFinite(profile.followers) ? profile.followers : row.followers,
@@ -4391,6 +4550,14 @@ function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: {
             source: typeof profile.source === "string" ? profile.source : row.source,
             status: nextStatus,
           } : row));
+          if (profile.videos?.length) {
+            const nextVideos = profile.videos.map((video) => creatorVideoFromSocialProfile(video, socialSnapshot));
+            setCreatorVideos((current) => {
+              const ids = new Set(nextVideos.map((video) => video.id));
+              const keys = new Set(nextVideos.map((video) => `${video.socialAccountId}:${video.url || video.id}`));
+              return [...nextVideos, ...current.filter((video) => !ids.has(video.id) && !keys.has(`${video.socialAccountId}:${video.url || video.id}`))];
+            });
+          }
         })
         .catch(() => {
           setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "No public metrics" } : row));
@@ -4405,7 +4572,7 @@ function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: {
           });
         });
     }
-  }, [lookupSignature, setSocials]);
+  }, [lookupSignature, setCreatorVideos, setSocials]);
 
   const totals = socialTotals(socials);
   const selectedHandle = socials.find((social) => social.id === selectedHandleId) ?? socials[0];
@@ -4452,7 +4619,7 @@ function SocialTrackingPage({ apps, socials, setSocials, isFiltered = false }: {
       )}
       <section className="socialGrid">
         <SocialTable apps={apps} socials={socials} setSocials={setSocials} isFiltered={isFiltered} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} />
-        <SocialHandleCard apps={apps} social={selectedHandle} />
+        <SocialHandleCard apps={apps} social={selectedHandle} videos={videos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
       </section>
     </section>
   );
@@ -4525,23 +4692,34 @@ function SocialTable({ apps, socials, setSocials, isFiltered = false, onSelect, 
   );
 }
 
-function SocialHandleCard({ apps, social }: { apps: StudioApp[]; social?: SocialAccount }) {
+function videoTotals(videos: CreatorVideo[]) {
+  const views = videos.reduce((sum, video) => sum + video.views, 0);
+  const likes = videos.reduce((sum, video) => sum + video.likes, 0);
+  const comments = videos.reduce((sum, video) => sum + video.comments, 0);
+  const shares = videos.reduce((sum, video) => sum + video.shares, 0);
+  const favorites = videos.reduce((sum, video) => sum + video.favorites, 0);
+  const engagement = views ? (likes / views) * 100 : 0;
+  return { avgViews: videos.length && views ? views / videos.length : 0, comments, engagement, favorites, likes, shares, videos: videos.length, views };
+}
+
+function SocialHandleCard({ apps, social, videos }: { apps: StudioApp[]; social?: SocialAccount; videos: CreatorVideo[] }) {
   if (!social) return <LiquidGlass className="panel dataPanel socialHandleDetail"><h2>Select a handle</h2></LiquidGlass>;
   const app = apps.find((row) => row.id === social.appId);
-  const videos = socialMetricValue(social, "videos");
-  const views = socialMetricValue(social, "views");
-  const likes = socialMetricValue(social, "likes");
-  const comments = socialMetricValue(social, "comments");
-  const shares = socialMetricValue(social, "shares");
-  const favorites = socialMetricValue(social, "favorites");
-  const engagement = socialMetricValue(social, "engagement");
+  const totals = videos.length ? videoTotals(videos) : null;
+  const videoCount = totals?.videos ?? socialMetricValue(social, "videos");
+  const views = totals?.views ?? socialMetricValue(social, "views");
+  const likes = totals?.likes ?? socialMetricValue(social, "likes");
+  const comments = totals?.comments ?? socialMetricValue(social, "comments");
+  const shares = totals?.shares ?? socialMetricValue(social, "shares");
+  const favorites = totals?.favorites ?? socialMetricValue(social, "favorites");
+  const engagement = totals?.engagement ?? socialMetricValue(social, "engagement");
   const loading = isSocialLoading(social);
   return (
     <LiquidGlass className="panel dataPanel socialHandleDetail">
       <div className="panelHeader"><div><p className="caption">{social.platform}</p><h2>{social.handle}</h2></div><span className="pill">{app ? appDisplayName(app.name) : "Unmapped"}</span></div>
       <div className="socialDetailStats">
         <span><strong><SocialMetricCell value={social.followers ?? 0} loading={loading} /></strong><small>Followers</small></span>
-        <span><strong><SocialMetricCell value={videos} loading={loading} /></strong><small>Videos</small></span>
+        <span><strong><SocialMetricCell value={videoCount} loading={loading} /></strong><small>Videos</small></span>
         <span><strong><SocialMetricCell value={views} loading={loading} /></strong><small>Views</small></span>
         <span><strong><SocialMetricCell value={likes} loading={loading} /></strong><small>Likes</small></span>
         <span><strong><SocialMetricCell value={comments} loading={loading} /></strong><small>Comments</small></span>
@@ -4549,6 +4727,16 @@ function SocialHandleCard({ apps, social }: { apps: StudioApp[]; social?: Social
         <span><strong><SocialMetricCell value={favorites} loading={loading} /></strong><small>Favorites</small></span>
         <span><strong><SocialMetricCell value={engagement} loading={loading} suffix="%" /></strong><small>Engagement</small></span>
       </div>
+      {videos.length ? (
+        <div className="creatorVideoMiniList">
+          {videos.slice(0, 5).map((video) => (
+            <a href={video.url || "#"} target="_blank" rel="noreferrer" key={`handle-video-${video.id}`}>
+              <strong>{video.title || "Tracked video"}</strong>
+              <span>{formatNumber(video.views)} views · {formatNumber(video.likes)} likes</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
     </LiquidGlass>
   );
 }
@@ -4559,8 +4747,10 @@ function creatorStatus(social: SocialAccount) {
   return "Source limited";
 }
 
-function Creators({ apps, socials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; isFiltered?: boolean }) {
-  const totals = socialTotals(socials);
+function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; isFiltered?: boolean }) {
+  const videoBackedTotals = videoTotals(videos);
+  const socialBackedTotals = socialTotals(socials);
+  const totals = videos.length ? videoBackedTotals : socialBackedTotals;
 
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No creator matches this search" : "No creators yet"} text={isFiltered ? "Clear the search or try another creator handle." : "Add public handles in Social Tracking to build the creator CRM."} />;
 
@@ -4610,8 +4800,10 @@ function Creators({ apps, socials, isFiltered = false }: { apps: StudioApp[]; so
           </div>
           {socials.map((social) => {
             const app = apps.find((row) => row.id === social.appId);
+            const socialVideos = videos.filter((video) => video.socialAccountId === social.id);
+            const socialVideoTotals = videoTotals(socialVideos);
             const loading = isSocialLoading(social);
-            const views = socialMetricValue(social, "views");
+            const views = socialVideos.length ? socialVideoTotals.views : socialMetricValue(social, "views");
             const createdAt = new Date(social.createdAt);
             const dateLabel = Number.isNaN(createdAt.getTime()) ? "—" : createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
             return (
@@ -4621,17 +4813,17 @@ function Creators({ apps, socials, isFiltered = false }: { apps: StudioApp[]; so
                 <span>{social.platform}</span>
                 <span><b className={social.status === "Ready for public tracking" ? "statusOk" : "statusDraft"}>{creatorStatus(social)}</b></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={social.followers ?? 0} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "videos")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length || socialMetricValue(social, "videos")} loading={loading} /></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={views} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "avgViews")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "likes")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "comments")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "shares")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "favorites")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialMetricValue(social, "engagement")} loading={loading} suffix="%" /></span>
-                <span className="creatorSheetEmpty">—</span>
-                <span className="creatorSheetEmpty">{views ? "Add cost" : "—"}</span>
-                <span>{dateLabel}</span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.avgViews : socialMetricValue(social, "avgViews")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.likes : socialMetricValue(social, "likes")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.comments : socialMetricValue(social, "comments")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.shares : socialMetricValue(social, "shares")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.favorites : socialMetricValue(social, "favorites")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.engagement : socialMetricValue(social, "engagement")} loading={loading} suffix="%" /></span>
+                <span>{socialVideos.reduce((sum, video) => sum + video.cost, 0) ? formatCurrency(socialVideos.reduce((sum, video) => sum + video.cost, 0), "USD") : "—"}</span>
+                <span>{views && socialVideos.reduce((sum, video) => sum + video.cost, 0) ? formatUnitCurrency((socialVideos.reduce((sum, video) => sum + video.cost, 0) / views) * 1000, "USD") : "—"}</span>
+                <span>{social.lastSyncedAt ? new Date(social.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : dateLabel}</span>
               </div>
             );
           })}

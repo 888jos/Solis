@@ -319,6 +319,7 @@ export const creatorVideos = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull().references(() => workspaces.id),
     creatorId: text("creator_id").references(() => creators.id),
+    socialAccountId: text("social_account_id").references(() => socialAccounts.id),
     campaignId: text("campaign_id").references(() => campaigns.id),
     appId: text("app_id").references(() => apps.id),
     platform: text("platform").notNull(),
@@ -337,6 +338,7 @@ export const creatorVideos = sqliteTable(
   (table) => [
     index("creator_videos_campaign_idx").on(table.campaignId),
     index("creator_videos_creator_idx").on(table.creatorId),
+    index("creator_videos_social_account_idx").on(table.socialAccountId),
   ],
 );
 
