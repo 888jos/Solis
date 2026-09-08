@@ -42,13 +42,6 @@ async function ensureDefaultApps() {
   const db = await getDb();
   await ensureWorkspace(db, workspaceId);
   const createdAt = now();
-  const existingApps = await db
-    .select({ id: apps.id })
-    .from(apps)
-    .where(eq(apps.workspaceId, workspaceId))
-    .limit(1);
-
-  if (existingApps.length) return;
 
   for (const app of defaultApps) {
     const [existing] = await db
@@ -58,7 +51,17 @@ async function ensureDefaultApps() {
       .limit(1);
 
     const appId = existing?.id ?? app.id;
-    if (!existing) {
+    if (existing) {
+      await db.update(apps).set({
+        bundleId: app.bundleId,
+        displayName: app.displayName,
+        name: app.name,
+        platform: app.platform,
+        sku: app.sku,
+        status: "active",
+        updatedAt: createdAt,
+      }).where(eq(apps.id, existing.id));
+    } else {
       await db.insert(apps).values({
         id: appId,
         workspaceId,

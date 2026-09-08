@@ -1404,8 +1404,8 @@ export default function Home() {
             platform: social.platform.charAt(0).toUpperCase() + social.platform.slice(1).toLowerCase() as SocialAccount["platform"],
             status: social.status === "ready" ? "Ready for public tracking" as const : social.status === "no_public_metrics" ? "No public metrics" as const : "Provider pending" as const,
           })) ?? [];
-          if (backendApps.length) resolvedApps = backendApps;
-          if (backendSocials.length) resolvedSocials = backendSocials;
+          if (appsPayload.ok) resolvedApps = backendApps;
+          if (socialsPayload.ok) resolvedSocials = backendSocials;
           if (campaignsPayload.ok) resolvedCampaigns = (campaignsPayload.data?.campaigns ?? []).filter((campaign) => campaign.status !== "deleted").map(campaignFromBackend);
           if (creativesPayload.ok) resolvedCreatives = (creativesPayload.data?.creatives ?? []).filter((creative) => creative.status !== "deleted").map(creativeFromBackend);
         } catch {

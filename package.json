@@ -41,5 +41,8 @@
     "vite": "8.0.13",
     "wrangler": "4.92.0"
   },
-  "type": "module"
+  "type": "module",
+  "optionalDependencies": {
+    "@rolldown/binding-darwin-arm64": "^1.2.7"
+  }
 }
