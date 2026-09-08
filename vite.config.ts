@@ -7,13 +7,14 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+const isCloudflareDeploy = process.env.DRIFTOS_CLOUDFLARE_DEPLOY === "1";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
-  d1_databases: d1
+  d1_databases: d1 && !isCloudflareDeploy
     ? [
         {
           binding: d1,

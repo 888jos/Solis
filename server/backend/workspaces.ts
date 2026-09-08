@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { workspaces } from "@/db/schema";
 import { now } from "@/server/backend/http";
 
-type DbClient = {
+export type DbClient = {
   insert: (table: typeof workspaces) => {
     values: (row: typeof workspaces.$inferInsert) => Promise<unknown>;
   };

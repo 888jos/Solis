@@ -111,19 +111,19 @@ function summarizeVideos(videos: SocialVideo[], source: string, profile?: ApifyI
   };
 }
 
-async function apifyToken() {
-  if (process.env.APIFY_TOKEN) return process.env.APIFY_TOKEN;
+async function runtimeEnv(name: string) {
+  if (process.env[name]) return process.env[name] ?? "";
   try {
     const cloudflare = await import("cloudflare:workers");
     const env = (cloudflare as { env?: Record<string, string | undefined> }).env;
-    return env?.APIFY_TOKEN || "";
+    return env?.[name] || "";
   } catch {
     return "";
   }
 }
 
 async function callApifyActor(actorId: string, input: Record<string, unknown>, timeoutSeconds = 90): Promise<ApifyItem[]> {
-  const token = await apifyToken();
+  const token = await runtimeEnv("APIFY_TOKEN");
   if (!token) return [];
   const actorPath = actorId.replace("/", "~");
   const response = await fetch(`${APIFY_BASE_URL}/acts/${actorPath}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}&timeout=${timeoutSeconds}`, {
@@ -137,7 +137,7 @@ async function callApifyActor(actorId: string, input: Record<string, unknown>, t
 }
 
 async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics | null> {
-  const actor = process.env.APIFY_TIKTOK_ACTOR || "clockworks/tiktok-scraper";
+  const actor = await runtimeEnv("APIFY_TIKTOK_ACTOR") || "clockworks/tiktok-scraper";
   const bareHandle = cleanBareHandle(handle);
   const items = await callApifyActor(actor, {
     profiles: [`https://www.tiktok.com/@${bareHandle}`],
@@ -152,7 +152,7 @@ async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics
 }
 
 async function fetchInstagramViaApify(handle: string): Promise<SocialProfileMetrics | null> {
-  const actor = process.env.APIFY_INSTAGRAM_ACTOR || "apify/instagram-scraper";
+  const actor = await runtimeEnv("APIFY_INSTAGRAM_ACTOR") || "apify/instagram-scraper";
   const bareHandle = cleanBareHandle(handle);
   const items = await callApifyActor(actor, {
     directUrls: [`https://www.instagram.com/${bareHandle}/`],

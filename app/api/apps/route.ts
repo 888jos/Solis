@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { appStoreCredentials, apps } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
+import { ensureDefaultApps } from "@/server/backend/default-apps";
 import { fail, now, ok, readJson } from "@/server/backend/http";
 import { ensureWorkspace } from "@/server/backend/workspaces";
 
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
     const workspaceId = searchParams.get("workspaceId") || session.workspaceId;
 
     const db = await getDb();
+    await ensureDefaultApps(db, workspaceId);
     const rows = await db
       .select({
         app: apps,
