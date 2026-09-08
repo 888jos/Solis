@@ -9,6 +9,7 @@ export const DEFAULT_WORKSPACE_ID = "drift-studio";
 const defaultApps = [
   {
     appStoreId: "6760921524",
+    artworkUrl: "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/65/aa/98/65aa988f-8862-391f-ba77-becb3876fc96/AppIcon-0-0-1x_U007ephone-0-1-85-220.png/100x100bb.jpg",
     bundleId: "com.wrap.cocorise",
     credentialPreset: "cocorise",
     developerName: "SOLSTYS I.T.",
@@ -23,6 +24,7 @@ const defaultApps = [
   },
   {
     appStoreId: "6758314805",
+    artworkUrl: "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/94/02/a5/9402a51f-a545-05b0-72d8-318ce8d4d816/AppIcon-0-0-1x_U007ephone-0-1-85-220.png/100x100bb.jpg",
     bundleId: "com.solstys.cortifree",
     credentialPreset: "cortifree",
     developerName: "SOLSTYS I.T.",
@@ -52,7 +54,7 @@ export async function ensureDefaultApps(db: DbClient, workspaceId = DEFAULT_WORK
     const appId = existing?.id ?? app.id;
     if (existing) {
       await db.update(apps).set({
-        artworkUrl: existing.artworkUrl,
+        artworkUrl: existing.artworkUrl || app.artworkUrl,
         bundleId: app.bundleId,
         developerName: app.developerName,
         displayName: app.displayName,
@@ -74,7 +76,7 @@ export async function ensureDefaultApps(db: DbClient, workspaceId = DEFAULT_WORK
         appStoreId: app.appStoreId,
         sku: app.sku,
         developerName: app.developerName,
-        artworkUrl: null,
+        artworkUrl: app.artworkUrl,
         primaryCurrency: "USD",
         status: "active",
         deletedAt: null,
