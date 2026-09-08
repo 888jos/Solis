@@ -7713,13 +7713,49 @@ h2 {
   opacity: 0.58;
 }
 
+.creatorVideoMiniList a {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.creatorVideoMiniList img,
+.creatorVideoMiniList i {
+  display: grid;
+  width: 48px;
+  height: 58px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #101012;
+  object-fit: cover;
+}
+
+.creatorVideoMiniList a > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.trackingRuleSummary {
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.trackingRuleSummary small {
+  color: rgba(255, 255, 255, 0.48);
+}
+
 .creatorsCrmPage {
   display: grid;
   gap: 18px;
 }
 
 .creatorCrmStats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .creatorSheetPanel {
@@ -7727,22 +7763,31 @@ h2 {
 }
 
 .creatorSheetTable {
-  overflow-x: auto;
-  padding-bottom: 8px;
+  width: 100%;
+  max-width: calc(100vw - 500px);
+  overflow-x: scroll !important;
+  overscroll-behavior-x: contain;
+  padding: 0 0 14px;
+  scrollbar-gutter: stable;
 }
 
 .creatorSheetHead,
 .creatorSheetRow {
   grid-template-columns:
     minmax(190px, 1.2fr)
+    minmax(190px, 1fr)
     minmax(120px, 0.82fr)
     minmax(96px, 0.62fr)
+    minmax(200px, 1.1fr)
+    minmax(220px, 1.15fr)
     minmax(112px, 0.7fr)
     repeat(9, minmax(96px, 0.68fr))
     minmax(92px, 0.56fr)
     minmax(92px, 0.56fr)
-    minmax(110px, 0.64fr) !important;
-  min-width: 1760px;
+    minmax(110px, 0.64fr)
+    minmax(92px, 0.52fr) !important;
+  width: 2620px;
+  min-width: 2620px;
 }
 
 .creatorSheetRow {
@@ -7932,7 +7977,7 @@ h2 {
 
 .creativeWorkArea {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -7942,8 +7987,12 @@ h2 {
 }
 
 .creativeTable {
-  overflow-x: auto;
-  padding-bottom: 8px;
+  width: 100%;
+  max-width: calc(100vw - 500px);
+  overflow-x: scroll !important;
+  overscroll-behavior-x: contain;
+  padding-bottom: 14px;
+  scrollbar-gutter: stable;
 }
 
 .creativeHead,
@@ -7959,7 +8008,8 @@ h2 {
     minmax(220px, 1fr)
     minmax(82px, 0.45fr)
     minmax(92px, 0.52fr) !important;
-  min-width: 1820px;
+  width: 1960px;
+  min-width: 1960px;
 }
 
 .creativeRow {
@@ -7985,6 +8035,111 @@ h2 {
   color: rgba(255, 255, 255, 0.48);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.creativeIdentity {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.creativeIdentity > img,
+.creativeIdentity > i {
+  display: grid;
+  width: 54px;
+  height: 68px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(215, 173, 92, 0.38);
+  border-radius: 7px;
+  background: #101012;
+  color: var(--card-accent);
+  object-fit: cover;
+}
+
+.creativeIdentity > span {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.creativePreview {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  overflow: hidden;
+  border: 1px solid rgba(215, 173, 92, 0.38);
+  border-radius: 8px;
+  background: #000;
+}
+
+.creativePreview img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+.creatorOnboardingForm {
+  display: grid;
+  gap: 22px;
+}
+
+.creatorFormSection {
+  display: grid;
+  gap: 10px;
+}
+
+.creatorFormSection > strong {
+  color: #fffaf2;
+  font-size: 15px;
+}
+
+.creatorFormSection > small {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.creatorFormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.creatorFormGrid input,
+.creatorFormGrid select {
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: #050506;
+}
+
+.creatorFormGrid input:disabled {
+  opacity: 0.36;
+}
+
+.dealFields {
+  grid-template-columns: 1.1fr 1fr 1fr 0.7fr;
+}
+
+.trackingFields {
+  grid-template-columns: 1fr 1fr 0.8fr;
+}
+
+.creatorEditor {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.creatorEditorBody {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.compactButton {
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 .creativeRow a,
@@ -8051,7 +8206,7 @@ h2 {
   }
 
   .creatorCrmStats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .campaignStats,
@@ -8067,5 +8222,16 @@ h2 {
   .creativeFormGrid input:nth-of-type(2),
   .creativeFormGrid input:nth-of-type(3) {
     grid-column: auto;
+  }
+
+  .creatorSheetTable,
+  .creativeTable {
+    max-width: calc(100vw - 96px);
+  }
+
+  .creatorFormGrid,
+  .dealFields,
+  .trackingFields {
+    grid-template-columns: 1fr;
   }
 }

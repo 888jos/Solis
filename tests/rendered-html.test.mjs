@@ -99,7 +99,9 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.doesNotMatch(page, /Run Apple sync to populate this page/);
   assert.match(page, /normalizeCurrency/);
   assert.match(page, /try\s*\{\s*return new Intl\.NumberFormat/);
-  assert.match(page, /Add a @handle/);
+  assert.match(page, /Add a creator/);
+  assert.match(page, /trackingHashtags/);
+  assert.match(page, /dealType/);
   assert.match(page, /exportWorkspace/);
   assert.match(page, /LandingPage/);
   assert.match(page, /OnboardingPage/);

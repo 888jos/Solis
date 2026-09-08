@@ -2,6 +2,7 @@
 
 import { ChangeEvent, ElementType, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import type { GlobeMethods } from "react-globe.gl";
 import {
   ArrowDownRight,
@@ -175,6 +176,15 @@ type SocialAccount = {
   lastSyncedAt?: string | number | Date | null;
   status: "No public metrics" | "Provider pending" | "Ready for public tracking";
   createdAt: string;
+  creatorName?: string | null;
+  email?: string | null;
+  dealType?: "none" | "cpm" | "fixed" | "hybrid";
+  fixedFee?: number;
+  cpmRate?: number;
+  dealCurrency?: string;
+  trackingHashtags?: string;
+  trackingKeywords?: string;
+  trackingMatch?: "any" | "all";
 };
 
 type SocialMetricKey = "avgViews" | "comments" | "engagement" | "favorites" | "likes" | "shares" | "videos" | "views";
@@ -209,6 +219,7 @@ type Creative = {
   shares?: number;
   favorites?: number;
   createdAt: string;
+  thumbnailUrl?: string;
 };
 
 type CreatorVideo = {
@@ -220,6 +231,7 @@ type CreatorVideo = {
   platform: string;
   url?: string | null;
   title?: string | null;
+  thumbnailUrl?: string | null;
   publishedAt?: string | null;
   cost: number;
   views: number;
@@ -517,6 +529,7 @@ type BackendCreatorVideo = {
   shares: number;
   socialAccountId: string | null;
   title: string | null;
+  thumbnailUrl?: string | null;
   url: string | null;
   views: number;
 };
@@ -529,6 +542,7 @@ type SocialProfileVideo = {
   publishedAt?: string;
   shares?: number;
   title?: string;
+  thumbnailUrl?: string;
   url?: string;
   views?: number;
 };
@@ -838,6 +852,7 @@ function creatorVideoFromBackend(row: BackendCreatorVideo): CreatorVideo {
     shares: row.shares ?? 0,
     socialAccountId: row.socialAccountId,
     title: row.title,
+    thumbnailUrl: row.thumbnailUrl,
     url: row.url,
     views: row.views ?? 0,
   };
@@ -869,6 +884,7 @@ function creatorVideoFromSocialProfile(video: SocialProfileVideo, social: Social
     shares: Math.round(video.shares ?? 0),
     socialAccountId: social.id,
     title: video.title ?? null,
+    thumbnailUrl: video.thumbnailUrl ?? null,
     url: video.url ?? null,
     views: Math.round(video.views ?? 0),
   };
@@ -1465,7 +1481,8 @@ export default function Home() {
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([{ id: "welcome", role: "assistant", text: "Ask about revenue, ASO, marketing, releases or what to fix next." }]);
   const emptyAppForm: AppFormState = { name: "", platform: "iOS", bundleId: "", appStoreId: "", sku: "", keyId: "", issuerId: "", vendorNumber: "", privateKeyName: "", privateKeyPath: "", credentialPreset: "" };
   const [appForm, setAppForm] = useState<AppFormState>(emptyAppForm);
-  const [socialForm, setSocialForm] = useState({ platform: "TikTok" as SocialAccount["platform"], handle: "", appId: "" });
+  const emptySocialForm = { platform: "TikTok" as SocialAccount["platform"], handle: "", appId: "", creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> };
+  const [socialForm, setSocialForm] = useState(emptySocialForm);
   const artworkLookups = useRef(new Set<string>());
 
   const openPage = useCallback((page: PageKey) => {
@@ -1871,7 +1888,7 @@ export default function Home() {
     if (!socialForm.handle.trim() || !selectedAppId) return;
     const handle = normalizeHandle(socialForm.handle);
     if (!handle) return;
-    const draftSocial: SocialAccount = { id: `${socialForm.platform}-${handle}-${Date.now()}`, handle, platform: socialForm.platform, appId: selectedAppId, status: "Provider pending", createdAt: new Date().toISOString() };
+    const draftSocial: SocialAccount = { id: `${socialForm.platform}-${handle}-${Date.now()}`, handle, platform: socialForm.platform, appId: selectedAppId, creatorName: socialForm.creatorName.trim() || handle.replace(/^@/, ""), email: socialForm.email.trim(), dealType: socialForm.dealType, fixedFee: Number(socialForm.fixedFee) || 0, cpmRate: Number(socialForm.cpmRate) || 0, dealCurrency: socialForm.dealCurrency, trackingHashtags: socialForm.trackingHashtags, trackingKeywords: socialForm.trackingKeywords, trackingMatch: socialForm.trackingMatch, status: "Provider pending", createdAt: new Date().toISOString() };
     setSocials((current) => {
       const exists = current.some((row) => row.platform === socialForm.platform && normalizeHandle(row.handle) === handle);
       if (exists) return current;
@@ -1879,7 +1896,7 @@ export default function Home() {
     });
     try {
       const response = await fetch("/api/social-accounts", {
-        body: JSON.stringify({ appId: selectedAppId, handle, platform: socialForm.platform, workspaceId: DEFAULT_WORKSPACE_ID }),
+        body: JSON.stringify({ appId: selectedAppId, handle, platform: socialForm.platform, creatorName: socialForm.creatorName, email: socialForm.email, dealType: socialForm.dealType, fixedFee: Number(socialForm.fixedFee) || 0, cpmRate: Number(socialForm.cpmRate) || 0, dealCurrency: socialForm.dealCurrency, trackingHashtags: socialForm.trackingHashtags, trackingKeywords: socialForm.trackingKeywords, trackingMatch: socialForm.trackingMatch, workspaceId: DEFAULT_WORKSPACE_ID }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
@@ -1895,7 +1912,7 @@ export default function Home() {
     } catch {
       // Keep the local row as a draft if the local backend is temporarily down.
     }
-    setSocialForm({ platform: "TikTok", handle: "", appId: selectedAppId });
+    setSocialForm({ ...emptySocialForm, appId: selectedAppId });
     setSocialFormOpen(false);
     openPage("social");
   }
@@ -2046,7 +2063,7 @@ export default function Home() {
     if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
     if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "quality") return <QualityPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -2466,8 +2483,31 @@ function AppForm({
   );
 }
 
-function SocialForm({ apps, socialForm, selectedAppId, addSocial, updateSocialForm }: { apps: StudioApp[]; socialForm: { platform: SocialAccount["platform"]; handle: string; appId: string }; selectedAppId: string; addSocial: (event: FormEvent<HTMLFormElement>) => void; updateSocialForm: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void }) {
-  return <LiquidGlass as="form" className="panel formPanel" onSubmit={addSocial}><div className="panelHeader"><div><p className="caption">Social tracking</p><h2>Add a @handle</h2></div><span className="pill">Public</span></div><div className="formGrid"><select name="platform" value={socialForm.platform} onChange={updateSocialForm}><option>TikTok</option><option>Instagram</option><option>YouTube</option></select><input name="handle" placeholder="@creator or brand account" value={socialForm.handle} onChange={updateSocialForm} /><select name="appId" value={selectedAppId} onChange={updateSocialForm}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select></div><button className="primaryButton" type="submit" disabled={!apps.length}>Add handle</button></LiquidGlass>;
+function SocialForm({ apps, socialForm, selectedAppId, addSocial, updateSocialForm }: { apps: StudioApp[]; socialForm: { platform: SocialAccount["platform"]; handle: string; appId: string; creatorName: string; email: string; dealType: NonNullable<SocialAccount["dealType"]>; fixedFee: string; cpmRate: string; dealCurrency: string; trackingHashtags: string; trackingKeywords: string; trackingMatch: NonNullable<SocialAccount["trackingMatch"]> }; selectedAppId: string; addSocial: (event: FormEvent<HTMLFormElement>) => void; updateSocialForm: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void }) {
+  const usesFixed = socialForm.dealType === "fixed" || socialForm.dealType === "hybrid";
+  const usesCpm = socialForm.dealType === "cpm" || socialForm.dealType === "hybrid";
+  return <LiquidGlass as="form" className="panel formPanel creatorOnboardingForm" onSubmit={addSocial}>
+    <div className="panelHeader"><div><p className="caption">Creator profile</p><h2>Add a creator</h2></div><span className="pill">Public data</span></div>
+    <div className="creatorFormSection"><strong>Identity</strong><div className="creatorFormGrid">
+      <input name="creatorName" placeholder="Creator name" value={socialForm.creatorName} onChange={updateSocialForm} />
+      <input name="email" type="email" placeholder="Email (optional)" value={socialForm.email} onChange={updateSocialForm} />
+      <select name="platform" value={socialForm.platform} onChange={updateSocialForm}><option>TikTok</option><option>Instagram</option><option>YouTube</option></select>
+      <input name="handle" placeholder="@handle" value={socialForm.handle} onChange={updateSocialForm} />
+      <select name="appId" value={selectedAppId} onChange={updateSocialForm}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
+    </div></div>
+    <div className="creatorFormSection"><strong>Deal</strong><div className="creatorFormGrid dealFields">
+      <select name="dealType" value={socialForm.dealType} onChange={updateSocialForm}><option value="none">No deal</option><option value="fixed">Fixed</option><option value="cpm">CPM</option><option value="hybrid">Hybrid</option></select>
+      <input name="fixedFee" type="number" min="0" step="0.01" disabled={!usesFixed} placeholder="Fixed fee" value={socialForm.fixedFee} onChange={updateSocialForm} />
+      <input name="cpmRate" type="number" min="0" step="0.01" disabled={!usesCpm} placeholder="CPM rate" value={socialForm.cpmRate} onChange={updateSocialForm} />
+      <select name="dealCurrency" value={socialForm.dealCurrency} onChange={updateSocialForm}><option>USD</option><option>EUR</option><option>GBP</option></select>
+    </div></div>
+    <div className="creatorFormSection"><strong>Video tracking conditions</strong><div className="creatorFormGrid trackingFields">
+      <input name="trackingHashtags" placeholder="#cocorise, #morningroutine" value={socialForm.trackingHashtags} onChange={updateSocialForm} />
+      <input name="trackingKeywords" placeholder="Caption contains (comma separated)" value={socialForm.trackingKeywords} onChange={updateSocialForm} />
+      <select name="trackingMatch" value={socialForm.trackingMatch} onChange={updateSocialForm}><option value="any">Match any condition</option><option value="all">Match all conditions</option></select>
+    </div><small>Leave conditions empty to track every public video from this account.</small></div>
+    <button className="primaryButton" type="submit" disabled={!apps.length || !socialForm.handle.trim()}>Add creator &amp; sync</button>
+  </LiquidGlass>;
 }
 
 function Actions({ apps, socials, metrics, setActivePage }: { apps: StudioApp[]; socials: SocialAccount[]; metrics: AppStoreMetric[]; setActivePage: (page: PageKey) => void }) {
@@ -3577,6 +3617,7 @@ function creativeFromVideo(video: CreatorVideo, socials: SocialAccount[]): Creat
     socialId: video.socialAccountId || "",
     status: video.views > 0 ? "Posted" : "Idea",
     title: video.title || `${social?.handle ?? video.platform} video`,
+    thumbnailUrl: video.thumbnailUrl || undefined,
     url: video.url || "",
     views: video.views,
   };
@@ -3714,7 +3755,7 @@ function CreativePage({ apps, socials, videos, creatives, setCreatives, isFilter
                 const isTracked = creative.id.startsWith("tracked-");
                 return (
                   <div className={isSelected ? "tableRow creativeRow isSelected" : "tableRow creativeRow"} role="button" tabIndex={0} onClick={() => setSelectedCreativeId(creative.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedCreativeId(creative.id); }} key={creative.id}>
-                    <span><strong>{creative.title}</strong><small>{isTracked ? "Tracked video" : creative.url ? "Linked" : "Manual"}</small></span>
+                    <span className="creativeIdentity">{creative.thumbnailUrl ? <Image src={creative.thumbnailUrl} alt="" width={54} height={68} unoptimized /> : <i><Clapperboard size={20} /></i>}<span><strong>{creative.title}</strong><small>{isTracked ? "Tracked video" : creative.url ? "Linked" : "Manual"}</small></span></span>
                     <span>{app ? appDisplayName(app.name) : "Unmapped"}</span>
                     <span>{social?.handle ?? "—"}</span>
                     <span><b className={creative.status === "Winner" || creative.status === "Posted" ? "statusOk" : "statusDraft"}>{creative.status}</b></span>
@@ -3747,6 +3788,7 @@ function CreativeDetail({ apps, creative, socials }: { apps: StudioApp[]; creati
   const social = socials.find((row) => row.id === creative.socialId);
   return (
     <LiquidGlass className="panel dataPanel creativeDetail">
+      {creative.thumbnailUrl ? <a className="creativePreview" href={creative.url || creative.thumbnailUrl} target="_blank" rel="noreferrer"><Image src={creative.thumbnailUrl} alt={`${creative.title} thumbnail`} width={640} height={360} unoptimized /></a> : null}
       <div className="panelHeader"><div><p className="caption">{creative.status}</p><h2>{creative.title}</h2></div><span className="pill">{creative.angle}</span></div>
       <div className="creativeDetailStats">
         <span><strong>{app ? appDisplayName(app.name) : "Unmapped"}</strong><small>App</small></span>
@@ -4727,16 +4769,17 @@ function SocialHandleCard({ apps, social, videos }: { apps: StudioApp[]; social?
         <span><strong><SocialMetricCell value={favorites} loading={loading} /></strong><small>Favorites</small></span>
         <span><strong><SocialMetricCell value={engagement} loading={loading} suffix="%" /></strong><small>Engagement</small></span>
       </div>
-      {videos.length ? (
-        <div className="creatorVideoMiniList">
-          {videos.slice(0, 5).map((video) => (
-            <a href={video.url || "#"} target="_blank" rel="noreferrer" key={`handle-video-${video.id}`}>
-              <strong>{video.title || "Tracked video"}</strong>
-              <span>{formatNumber(video.views)} views · {formatNumber(video.likes)} likes</span>
-            </a>
-          ))}
-        </div>
-      ) : null}
+          {videos.length ? (
+            <div className="creatorVideoMiniList">
+              {videos.slice(0, 5).map((video) => (
+                <a href={video.url || "#"} target="_blank" rel="noreferrer" key={`handle-video-${video.id}`}>
+                  {video.thumbnailUrl ? <Image src={video.thumbnailUrl} alt="" width={48} height={58} unoptimized /> : <i><Clapperboard size={18} /></i>}
+                  <span><strong>{video.title || "Tracked video"}</strong><small>{formatNumber(video.views)} views · {formatNumber(video.likes)} likes</small></span>
+                </a>
+              ))}
+            </div>
+          ) : null}
+          <div className="trackingRuleSummary"><small>Tracking</small><strong>{[social.trackingHashtags, social.trackingKeywords].filter(Boolean).join(" · ") || "All public videos"}</strong></div>
     </LiquidGlass>
   );
 }
@@ -4747,10 +4790,73 @@ function creatorStatus(social: SocialAccount) {
   return "Source limited";
 }
 
-function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; isFiltered?: boolean }) {
+function creatorDealCost(social: SocialAccount, views: number) {
+  const fixed = social.dealType === "fixed" || social.dealType === "hybrid" ? social.fixedFee ?? 0 : 0;
+  const variable = social.dealType === "cpm" || social.dealType === "hybrid" ? ((social.cpmRate ?? 0) * views) / 1000 : 0;
+  return fixed + variable;
+}
+
+function creatorDealLabel(social: SocialAccount) {
+  const currency = social.dealCurrency || "USD";
+  if (social.dealType === "fixed") return `${formatCurrency(social.fixedFee ?? 0, currency)} fixed`;
+  if (social.dealType === "cpm") return `${formatUnitCurrency(social.cpmRate ?? 0, currency)} CPM`;
+  if (social.dealType === "hybrid") return `${formatCurrency(social.fixedFee ?? 0, currency)} + ${formatUnitCurrency(social.cpmRate ?? 0, currency)} CPM`;
+  return "No deal";
+}
+
+function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
   const videoBackedTotals = videoTotals(videos);
   const socialBackedTotals = socialTotals(socials);
   const totals = videos.length ? videoBackedTotals : socialBackedTotals;
+  const [editingId, setEditingId] = useState("");
+  const [savingId, setSavingId] = useState("");
+  const [editor, setEditor] = useState({ creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> });
+  const totalCost = socials.reduce((sum, social) => {
+    const socialVideos = videos.filter((video) => video.socialAccountId === social.id);
+    const views = socialVideos.length ? videoTotals(socialVideos).views : socialMetricValue(social, "views");
+    return sum + creatorDealCost(social, views);
+  }, 0);
+
+  function editCreator(social: SocialAccount) {
+    setEditingId(social.id);
+    setEditor({
+      creatorName: social.creatorName || social.handle.replace(/^@/, ""),
+      cpmRate: social.cpmRate ? String(social.cpmRate) : "",
+      dealCurrency: social.dealCurrency || "USD",
+      dealType: social.dealType || "none",
+      email: social.email || "",
+      fixedFee: social.fixedFee ? String(social.fixedFee) : "",
+      trackingHashtags: social.trackingHashtags || "",
+      trackingKeywords: social.trackingKeywords || "",
+      trackingMatch: social.trackingMatch || "any",
+    });
+  }
+
+  async function saveCreator(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const social = socials.find((row) => row.id === editingId);
+    if (!social) return;
+    setSavingId(social.id);
+    try {
+      const response = await fetch(`/api/social-accounts/${encodeURIComponent(social.id)}`, {
+        body: JSON.stringify({ ...editor, fixedFee: Number(editor.fixedFee) || 0, cpmRate: Number(editor.cpmRate) || 0 }),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      });
+      if (!response.ok) throw new Error("Creator update failed");
+      const updated = { ...social, ...editor, fixedFee: Number(editor.fixedFee) || 0, cpmRate: Number(editor.cpmRate) || 0, status: "Provider pending" as const };
+      setSocials((rows) => rows.map((row) => row.id === social.id ? updated : row));
+      const profileResponse = await fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`);
+      const profile = await profileResponse.json() as Partial<SocialAccount> & { videoMetricsReady?: boolean; videos?: SocialProfileVideo[] };
+      const synced = { ...updated, ...profile, status: profile.videoMetricsReady ? "Ready for public tracking" as const : "No public metrics" as const };
+      setSocials((rows) => rows.map((row) => row.id === social.id ? synced : row));
+      const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
+      setCreatorVideos((rows) => [...nextVideos, ...rows.filter((video) => video.socialAccountId !== social.id)]);
+      setEditingId("");
+    } finally {
+      setSavingId("");
+    }
+  }
 
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No creator matches this search" : "No creators yet"} text={isFiltered ? "Clear the search or try another creator handle." : "Add public handles in Social Tracking to build the creator CRM."} />;
 
@@ -4772,6 +4878,11 @@ function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioA
           <h2>Engagement</h2>
           <strong>{totals.engagement ? `${totals.engagement.toFixed(1)}%` : "—"}</strong>
         </LiquidGlass>
+        <LiquidGlass className="panel moduleCard">
+          <span className="cardAccentRail" aria-hidden="true" />
+          <h2>Creator cost</h2>
+          <strong>{totalCost ? formatCurrency(totalCost, "USD") : "—"}</strong>
+        </LiquidGlass>
       </section>
 
       <LiquidGlass className="panel dataPanel creatorSheetPanel">
@@ -4782,8 +4893,11 @@ function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioA
         <div className="table creatorSheetTable">
           <div className="tableRow tableHead creatorSheetHead">
             <span>Creator</span>
+            <span>Contact</span>
             <span>App</span>
             <span>Platform</span>
+            <span>Deal</span>
+            <span>Rules</span>
             <span>Status</span>
             <span>Followers</span>
             <span>Videos</span>
@@ -4797,6 +4911,7 @@ function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioA
             <span>Cost</span>
             <span>CPM</span>
             <span>Last update</span>
+            <span>Manage</span>
           </div>
           {socials.map((social) => {
             const app = apps.find((row) => row.id === social.appId);
@@ -4804,13 +4919,17 @@ function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioA
             const socialVideoTotals = videoTotals(socialVideos);
             const loading = isSocialLoading(social);
             const views = socialVideos.length ? socialVideoTotals.views : socialMetricValue(social, "views");
+            const dealCost = creatorDealCost(social, views);
             const createdAt = new Date(social.createdAt);
             const dateLabel = Number.isNaN(createdAt.getTime()) ? "—" : createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
             return (
               <div className="tableRow creatorSheetRow" key={`creator-${social.id}`}>
-                <span className="creatorIdentity"><strong>{social.handle}</strong><small>{social.followers ? `${formatNumber(social.followers)} followers` : "Public handle"}</small></span>
+                <span className="creatorIdentity"><strong>{social.creatorName || social.handle.replace(/^@/, "")}</strong><small>{social.handle}</small></span>
+                <span>{social.email || "—"}</span>
                 <span>{app ? appDisplayName(app.name) : "Unmapped"}</span>
                 <span>{social.platform}</span>
+                <span><strong>{creatorDealLabel(social)}</strong></span>
+                <span><small>{[social.trackingHashtags, social.trackingKeywords].filter(Boolean).join(" · ") || "All videos"}</small></span>
                 <span><b className={social.status === "Ready for public tracking" ? "statusOk" : "statusDraft"}>{creatorStatus(social)}</b></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={social.followers ?? 0} loading={loading} /></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length || socialMetricValue(social, "videos")} loading={loading} /></span>
@@ -4821,14 +4940,16 @@ function Creators({ apps, socials, videos, isFiltered = false }: { apps: StudioA
                 <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.shares : socialMetricValue(social, "shares")} loading={loading} /></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.favorites : socialMetricValue(social, "favorites")} loading={loading} /></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.engagement : socialMetricValue(social, "engagement")} loading={loading} suffix="%" /></span>
-                <span>{socialVideos.reduce((sum, video) => sum + video.cost, 0) ? formatCurrency(socialVideos.reduce((sum, video) => sum + video.cost, 0), "USD") : "—"}</span>
-                <span>{views && socialVideos.reduce((sum, video) => sum + video.cost, 0) ? formatUnitCurrency((socialVideos.reduce((sum, video) => sum + video.cost, 0) / views) * 1000, "USD") : "—"}</span>
+                <span>{dealCost ? formatCurrency(dealCost, social.dealCurrency || "USD") : "—"}</span>
+                <span>{views && dealCost ? formatUnitCurrency((dealCost / views) * 1000, social.dealCurrency || "USD") : "—"}</span>
                 <span>{social.lastSyncedAt ? new Date(social.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : dateLabel}</span>
+                <span><button className="ghostButton compactButton" type="button" onClick={() => editCreator(social)}>Edit</button></span>
               </div>
             );
           })}
         </div>
       </LiquidGlass>
+      {editingId ? <div className="appWizardBackdrop creatorEditorBackdrop" role="presentation"><form className="appWizard creatorEditor" onSubmit={saveCreator} role="dialog" aria-modal="true"><header><div><p className="caption">Creator CRM</p><h2>Edit creator</h2></div><button className="iconButton" type="button" onClick={() => setEditingId("")} aria-label="Close"><X size={20} /></button></header><div className="creatorEditorBody"><div className="creatorFormGrid"><input value={editor.creatorName} onChange={(event) => setEditor((value) => ({ ...value, creatorName: event.target.value }))} placeholder="Creator name" /><input type="email" value={editor.email} onChange={(event) => setEditor((value) => ({ ...value, email: event.target.value }))} placeholder="Email" /><select value={editor.dealType} onChange={(event) => setEditor((value) => ({ ...value, dealType: event.target.value as NonNullable<SocialAccount["dealType"]> }))}><option value="none">No deal</option><option value="fixed">Fixed</option><option value="cpm">CPM</option><option value="hybrid">Hybrid</option></select><input type="number" min="0" step="0.01" value={editor.fixedFee} onChange={(event) => setEditor((value) => ({ ...value, fixedFee: event.target.value }))} placeholder="Fixed fee" /><input type="number" min="0" step="0.01" value={editor.cpmRate} onChange={(event) => setEditor((value) => ({ ...value, cpmRate: event.target.value }))} placeholder="CPM rate" /><select value={editor.dealCurrency} onChange={(event) => setEditor((value) => ({ ...value, dealCurrency: event.target.value }))}><option>USD</option><option>EUR</option><option>GBP</option></select></div><div className="creatorFormGrid trackingFields"><input value={editor.trackingHashtags} onChange={(event) => setEditor((value) => ({ ...value, trackingHashtags: event.target.value }))} placeholder="#hashtags to track" /><input value={editor.trackingKeywords} onChange={(event) => setEditor((value) => ({ ...value, trackingKeywords: event.target.value }))} placeholder="Caption keywords" /><select value={editor.trackingMatch} onChange={(event) => setEditor((value) => ({ ...value, trackingMatch: event.target.value as NonNullable<SocialAccount["trackingMatch"]> }))}><option value="any">Match any</option><option value="all">Match all</option></select></div></div><footer><button className="ghostButton" type="button" onClick={() => setEditingId("")}>Cancel</button><button className="primaryButton" type="submit" disabled={savingId === editingId}>{savingId === editingId ? "Syncing…" : "Save & sync"}</button></footer></form></div> : null}
     </section>
   );
 }

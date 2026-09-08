@@ -146,6 +146,10 @@ function compactVideoUrl(platform: string, handle: string, videoId: string) {
   return "";
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function fetchTikwmVideos(handle: string) {
   const timeout = withTimeout(8_000);
   try {
@@ -322,8 +326,9 @@ export async function GET(request: Request) {
         videoMetricsReady: false,
       });
     const profile = await fetchSocialProfile(platform, handle, fallback);
-    if (accountId) await persistSocialProfile(accountId, platform, handle, profile);
-    return Response.json(profile);
+    const filteredProfile = accountId ? await applyAccountTrackingRules(accountId, profile) : profile;
+    if (accountId) await persistSocialProfile(accountId, platform, handle, filteredProfile);
+    return Response.json(filteredProfile);
   } catch (error) {
     return Response.json({
       error: error instanceof Error ? error.message : "Social lookup failed",
@@ -332,6 +337,49 @@ export async function GET(request: Request) {
       source: "TikTok public profile",
     });
   }
+}
+
+async function applyAccountTrackingRules(accountId: string, profile: SocialProfileMetrics): Promise<SocialProfileMetrics> {
+  const session = await getOrCreateLocalSession();
+  const db = await getDb();
+  const [account] = await db.select().from(socialAccounts).where(and(
+    eq(socialAccounts.id, accountId),
+    eq(socialAccounts.workspaceId, session.workspaceId),
+  )).limit(1);
+  if (!account) return profile;
+
+  const hashtags = account.trackingHashtags.split(",").map((value) => value.trim().replace(/^#+/, "")).filter(Boolean);
+  const keywords = account.trackingKeywords.split(",").map((value) => value.trim()).filter(Boolean);
+  const conditions = [
+    ...hashtags.map((tag) => (title: string) => title.includes(`#${tag}`) || new RegExp(`(^|\\s)${escapeRegExp(tag)}(\\s|$)`, "i").test(title)),
+    ...keywords.map((keyword) => (title: string) => title.includes(keyword)),
+  ];
+  if (!conditions.length) return profile;
+
+  const videos = (profile.videos ?? []).filter((video) => {
+    const title = String(video.title || "").toLowerCase();
+    const results = conditions.map((condition) => condition(title));
+    return account.trackingMatch === "all" ? results.every(Boolean) : results.some(Boolean);
+  });
+  const views = videos.reduce((sum, video) => sum + (video.views ?? 0), 0);
+  const likes = videos.reduce((sum, video) => sum + (video.likes ?? 0), 0);
+  const comments = videos.reduce((sum, video) => sum + (video.comments ?? 0), 0);
+  const shares = videos.reduce((sum, video) => sum + (video.shares ?? 0), 0);
+  const favorites = videos.reduce((sum, video) => sum + (video.favorites ?? 0), 0);
+  return {
+    ...profile,
+    avgViews: videos.length ? views / videos.length : 0,
+    comments,
+    engagementRate: views ? (likes / views) * 100 : 0,
+    favorites,
+    likes,
+    posts: videos.length,
+    shares,
+    source: `${profile.source} · filtered`,
+    videos,
+    videoMetricsReady: profile.videoMetricsReady,
+    views,
+  };
 }
 
 async function persistSocialProfile(accountId: string, platform: string, handle: string, profile: SocialProfileMetrics) {
@@ -378,10 +426,10 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
   const creatorId = existingCreator?.id ?? `creator-${stableKey([session.workspaceId, normalizedPlatform, normalizedHandle])}`;
   const creatorValues = {
     workspaceId: session.workspaceId,
-    name: normalizedHandle,
+    name: socialAccount.creatorName || normalizedHandle,
     handle: normalizedHandle,
     platform: normalizedPlatform,
-    email: null,
+    email: socialAccount.email || null,
     status: profile.videoMetricsReady ? "tracked" : "source_limited",
     updatedAt: timestamp,
   };
@@ -395,6 +443,11 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
     });
   }
 
+  await db.delete(creatorVideos).where(and(
+    eq(creatorVideos.workspaceId, session.workspaceId),
+    eq(creatorVideos.socialAccountId, accountId),
+  ));
+
   for (const video of profile.videos ?? []) {
     const remoteVideoId = String(video.id || video.url || crypto.randomUUID());
     const videoId = `video-${stableKey([session.workspaceId, accountId, remoteVideoId])}`;
@@ -407,6 +460,7 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
       platform: normalizedPlatform,
       url: video.url || compactVideoUrl(normalizedPlatform, normalizedHandle, remoteVideoId),
       title: video.title || null,
+      thumbnailUrl: video.thumbnailUrl || null,
       publishedAt: video.publishedAt || null,
       cost: 0,
       views: Math.round(video.views ?? 0),
@@ -417,15 +471,10 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
       attributedInstalls: 0,
       updatedAt: timestamp,
     };
-    const [existingVideo] = await db.select().from(creatorVideos).where(eq(creatorVideos.id, videoId)).limit(1);
-    if (existingVideo) {
-      await db.update(creatorVideos).set(videoValues).where(eq(creatorVideos.id, videoId));
-    } else {
-      await db.insert(creatorVideos).values({
-        id: videoId,
-        ...videoValues,
-        createdAt: timestamp,
-      });
-    }
+    await db.insert(creatorVideos).values({
+      id: videoId,
+      ...videoValues,
+      createdAt: timestamp,
+    });
   }
 }

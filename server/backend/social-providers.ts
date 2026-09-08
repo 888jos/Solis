@@ -22,6 +22,7 @@ export type SocialVideo = {
   publishedAt?: string;
   shares?: number;
   title?: string;
+  thumbnailUrl?: string;
   url?: string;
   views?: number;
 };
@@ -78,6 +79,15 @@ function itemTitle(item: ApifyItem) {
   return String(item.text ?? item.caption ?? item.title ?? item.description ?? "").trim();
 }
 
+function itemThumbnail(item: ApifyItem) {
+  const videoMeta = item.videoMeta && typeof item.videoMeta === "object" ? item.videoMeta as ApifyItem : {};
+  const images = Array.isArray(item.images) ? item.images : [];
+  return String(
+    item.coverUrl ?? item.thumbnailUrl ?? item.displayUrl ?? item.imageUrl ??
+    videoMeta.coverUrl ?? videoMeta.originalCoverUrl ?? images[0] ?? ""
+  ).trim();
+}
+
 function itemPublishedAt(item: ApifyItem) {
   const raw = item.createTimeISO ?? item.takenAtTimestamp ?? item.timestamp ?? item.createdAt ?? item.createTime;
   if (typeof raw === "number" && Number.isFinite(raw)) {
@@ -104,6 +114,7 @@ function normalizeVideos(items: ApifyItem[]): SocialVideo[] {
       publishedAt: itemPublishedAt(item),
       shares: nestedMetric(item, ["stats", "statsV2", "counts"], ["shareCount", "sharesCount", "share_count", "shares"]),
       title: itemTitle(item),
+      thumbnailUrl: itemThumbnail(item) || undefined,
       url: itemUrl(item),
       views: nestedMetric(item, ["stats", "statsV2", "counts"], ["playCount", "viewCount", "viewsCount", "videoViewCount", "plays", "views"]),
     }))

@@ -12,6 +12,15 @@ type SocialAccountBody = {
   source?: string;
   trackingMode?: string;
   workspaceId?: string;
+  creatorName?: string;
+  email?: string;
+  dealType?: string;
+  fixedFee?: number;
+  cpmRate?: number;
+  dealCurrency?: string;
+  trackingHashtags?: string;
+  trackingKeywords?: string;
+  trackingMatch?: string;
 };
 
 export const dynamic = "force-dynamic";
@@ -66,6 +75,15 @@ export async function POST(request: Request) {
       platform,
       handle,
       trackingMode: body?.trackingMode?.trim() || "public_handle",
+      creatorName: body?.creatorName?.trim() || null,
+      email: body?.email?.trim() || null,
+      dealType: body?.dealType?.trim().toLowerCase() || "none",
+      fixedFee: Number.isFinite(Number(body?.fixedFee)) ? Number(body?.fixedFee) : 0,
+      cpmRate: Number.isFinite(Number(body?.cpmRate)) ? Number(body?.cpmRate) : 0,
+      dealCurrency: body?.dealCurrency?.trim().toUpperCase() || "USD",
+      trackingHashtags: body?.trackingHashtags?.trim().toLowerCase() || "",
+      trackingKeywords: body?.trackingKeywords?.trim().toLowerCase() || "",
+      trackingMatch: body?.trackingMatch === "all" ? "all" : "any",
       source: body?.source?.trim() || null,
       status: "pending",
       lastSyncedAt: null,
