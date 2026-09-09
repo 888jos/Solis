@@ -2732,7 +2732,7 @@ function MonetizationPage({ apps, metrics, isSyncing, setActivePage }: { apps: S
     <>
       <section className="monetizationHero">
         <LiquidGlass className="panel monetizationCommandCard">
-          <p className="caption">Monetization engine</p>
+          <div className="panelHeader"><div><p className="caption">Monetization engine</p><h2>Unit economics</h2></div><span className="pill">{analytics.revenueSource} · {analytics.health}/5 signals</span></div>
           <div className="monetizationCommandMain">
             <span><strong>{formatCurrency(analytics.revenue, analytics.currency)}</strong><small>Revenue</small></span>
             <span><strong>{paidConversion.toFixed(1)}%</strong><small>Install to paid</small></span>
@@ -2746,7 +2746,7 @@ function MonetizationPage({ apps, metrics, isSyncing, setActivePage }: { apps: S
         </LiquidGlass>
 
         <div className="monetizationScoreGrid">
-          <MonetizationScoreCard title="ARPU" value={formatUnitCurrency(analytics.averageRevenuePerDownload, analytics.currency)} detail={`${formatNumber(analytics.downloads)} downloads`} values={aggregateMonetizationTrendPoints(metrics, "arpu").map((point) => point.value)} onClick={() => setActivePage("revenue")} />
+          <MonetizationScoreCard title="ARPD" value={formatUnitCurrency(analytics.averageRevenuePerDownload, analytics.currency)} detail={`${formatNumber(analytics.downloads)} downloads`} values={aggregateMonetizationTrendPoints(metrics, "arpu").map((point) => point.value)} onClick={() => setActivePage("revenue")} />
           <MonetizationScoreCard title="Sub share" value={`${analytics.subscriptionShare.toFixed(0)}%`} detail={`${formatNumber(analytics.subscriptions)} subs`} values={[analytics.inAppPurchases, analytics.subscriptions]} onClick={() => setActivePage("subscriptions")} />
           <MonetizationScoreCard title="Paid rows" value={formatNumber(analytics.revenueRows)} detail={analytics.financeRows ? "Financial live" : "Sales report"} values={aggregateMonetizationTrendPoints(metrics, "paidUnits").map((point) => point.value)} onClick={() => setActivePage("paywall")} />
         </div>

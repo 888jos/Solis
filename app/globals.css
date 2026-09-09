@@ -8564,6 +8564,13 @@ body {
   transform: none !important;
 }
 
+.monetizationRow:hover,
+.monetizationActions button:hover {
+  border-color: var(--viral-border) !important;
+  background: #19191d !important;
+  transform: none !important;
+}
+
 @media (max-width: 760px) {
   .revenueSignalGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
