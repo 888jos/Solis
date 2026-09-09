@@ -45,3 +45,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     return fail(500, "social_account_update_failed", error instanceof Error ? error.message : "Creator could not be updated.");
   }
 }
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  try {
+    const session = await getOrCreateLocalSession();
+    const { id } = await context.params;
+    const db = await getDb();
+    await db.delete(socialAccounts).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId)));
+    return ok({ id });
+  } catch (error) {
+    return fail(500, "social_account_delete_failed", error instanceof Error ? error.message : "Creator could not be deleted.");
+  }
+}

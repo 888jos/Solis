@@ -4612,6 +4612,10 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
+  const [platformFilter, setPlatformFilter] = useState("all");
+  const [appFilter, setAppFilter] = useState("all");
+  const [creatorFilter, setCreatorFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   async function syncSocial(social: SocialAccount) {
     if (activeLookups.has(social.id)) return;
@@ -4636,8 +4640,22 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
     }
   }
 
-  const totals = videoTotals(videos);
-  const selectedHandle = socials.find((social) => social.id === selectedHandleId) ?? socials[0];
+  const visibleSocials = socials.filter((social) =>
+    (platformFilter === "all" || social.platform === platformFilter) &&
+    (appFilter === "all" || social.appId === appFilter) &&
+    (creatorFilter === "all" || social.id === creatorFilter) &&
+    (statusFilter === "all" || social.status === statusFilter),
+  );
+  const visibleVideos = videos.filter((video) => visibleSocials.some((social) => social.id === video.socialAccountId));
+  const totals = videoTotals(visibleVideos);
+  const selectedHandle = visibleSocials.find((social) => social.id === selectedHandleId) ?? visibleSocials[0];
+  const dailyTrend = Array.from(visibleVideos.reduce((daily, video) => {
+    const day = (video.publishedAt || video.createdAt || "").slice(0, 10) || "Unknown";
+    const current = daily.get(day) ?? 0;
+    const value = selectedMetric === "videos" ? 1 : selectedMetric === "views" ? video.views : selectedMetric === "likes" ? video.likes : selectedMetric === "comments" ? video.comments : selectedMetric === "shares" ? video.shares : selectedMetric === "favorites" ? video.favorites : selectedMetric === "avgViews" ? video.views : 0;
+    daily.set(day, current + value);
+    return daily;
+  }, new Map<string, number>()).entries()).sort(([a], [b]) => a.localeCompare(b)).map(([day, value]) => ({ label: day === "Unknown" ? day : day.slice(5), value }));
   const hasMetrics = totals.videos > 0 || totals.views > 0 || totals.likes > 0 || totals.comments > 0 || totals.shares > 0 || totals.favorites > 0 || totals.engagement > 0;
   const isLoading = activeLookups.size > 0 || socials.some(isSocialLoading);
   const loadingCount = Math.max(activeLookups.size, socials.filter(isSocialLoading).length);
@@ -4663,6 +4681,12 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
 
   return (
     <section className="socialTrackingPage">
+      <div className="socialFilterBar" aria-label="Social tracking filters">
+        <label><span>Platform</span><select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="all">All platforms</option><option>TikTok</option><option>Instagram</option><option>YouTube</option></select></label>
+        <label><span>App</span><select value={appFilter} onChange={(event) => setAppFilter(event.target.value)}><option value="all">All apps</option>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select></label>
+        <label><span>Creator</span><select value={creatorFilter} onChange={(event) => setCreatorFilter(event.target.value)}><option value="all">All creators</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.creatorName || social.handle}</option>)}</select></label>
+        <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option>Ready for public tracking</option><option>Provider pending</option><option>No public metrics</option><option>Not synced</option></select></label>
+      </div>
       <section className="moduleMatrix socialMetricGrid">
         {metricCards.map((card) => (
           <LiquidGlass as="button" className={selectedMetric === card.key ? "panel moduleCard socialMetricCard isSelected" : "panel moduleCard socialMetricCard"} type="button" onClick={() => setSelectedMetric(card.key)} key={card.key}>
@@ -4673,15 +4697,15 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
         ))}
       </section>
       {hasMetrics ? (
-        <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos published in period`} points={socials.map((social) => ({ label: social.handle, value: videoTotalMetric(videoTotals(videos.filter((video) => video.socialAccountId === social.id)), selectedMetric) }))} variant="number" currency="USD" />
+        <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend · daily`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos published in period · filters are local`} points={dailyTrend.length ? dailyTrend : [{ label: "Today", value: 0 }]} variant="number" currency="USD" />
       ) : isLoading ? (
         <SocialDataSkeleton count={loadingCount} />
       ) : (
         <LiquidGlass className="panel dataPanel socialDataNotice"><h2>No public video metrics</h2><span>{formatNumber(socials.length)} handles mapped</span><button className="ghostButton" type="button" disabled title="TikTok public pages do not always expose video stats without auth.">Source limited</button></LiquidGlass>
       )}
       <section className="socialGrid">
-      <SocialTable apps={apps} socials={socials} videos={videos} setSocials={setSocials} isFiltered={isFiltered} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} syncingIds={activeLookups} />
-        <SocialHandleCard apps={apps} social={selectedHandle} videos={videos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
+        <SocialTable apps={apps} socials={visibleSocials} videos={visibleVideos} setSocials={setSocials} isFiltered={isFiltered || visibleSocials.length !== socials.length} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} syncingIds={activeLookups} />
+        <SocialHandleCard apps={apps} social={selectedHandle} videos={visibleVideos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
       </section>
     </section>
   );
@@ -4864,6 +4888,13 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
     }
   }
 
+  async function deleteCreator(social: SocialAccount) {
+    if (!window.confirm(`Delete ${social.creatorName || social.handle} from Creators CRM?`)) return;
+    const response = await fetch(`/api/social-accounts/${encodeURIComponent(social.id)}`, { method: "DELETE" });
+    if (!response.ok) return;
+    setSocials((rows) => rows.filter((row) => row.id !== social.id));
+  }
+
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No creator matches this search" : "No creators yet"} text={isFiltered ? "Clear the search or try another creator handle." : "Add public handles in Social Tracking to build the creator CRM."} />;
 
   return (
@@ -4949,7 +4980,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
                 <span>{dealCost ? formatCurrency(dealCost, social.dealCurrency || "USD") : "—"}</span>
                 <span>{views && dealCost ? formatUnitCurrency((dealCost / views) * 1000, social.dealCurrency || "USD") : "—"}</span>
                 <span>{social.lastSyncedAt ? new Date(social.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : dateLabel}</span>
-                <span><button className="ghostButton compactButton" type="button" onClick={() => editCreator(social)}>Edit</button></span>
+                <span><button className="ghostButton compactButton" type="button" onClick={() => editCreator(social)}>Edit</button><button className="ghostButton compactButton dangerButton" type="button" onClick={() => void deleteCreator(social)}>Delete</button></span>
               </div>
             );
           })}
