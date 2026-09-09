@@ -2562,6 +2562,117 @@ input::placeholder {
   }
 }
 
+/* Desktop usability pass: the open rail owns the viewport, tables own their
+   horizontal overflow, and row hover stays neutral so gold remains a signal
+   for selection, focus, and primary actions. */
+html,
+body {
+  overflow-x: clip;
+}
+
+.appShell {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.workbench {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.socialMetricsTable,
+.creatorSheetTable,
+.campaignTable,
+.creativeTable,
+.asoTable {
+  position: relative;
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: #56575f transparent;
+  scrollbar-width: thin;
+}
+
+.socialMetricsTable::-webkit-scrollbar,
+.creatorSheetTable::-webkit-scrollbar,
+.campaignTable::-webkit-scrollbar,
+.creativeTable::-webkit-scrollbar,
+.asoTable::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.socialMetricsTable::-webkit-scrollbar-track,
+.creatorSheetTable::-webkit-scrollbar-track,
+.campaignTable::-webkit-scrollbar-track,
+.creativeTable::-webkit-scrollbar-track,
+.asoTable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.socialMetricsTable::-webkit-scrollbar-thumb,
+.creatorSheetTable::-webkit-scrollbar-thumb,
+.campaignTable::-webkit-scrollbar-thumb,
+.creativeTable::-webkit-scrollbar-thumb,
+.asoTable::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #56575f;
+  background-clip: padding-box;
+}
+
+.socialMetricsRow:hover,
+.creatorSheetRow:hover,
+.campaignRow:hover,
+.creativeRow:hover {
+  border-color: var(--viral-border) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+.socialMetricsRow:hover > span:first-child,
+.creatorSheetRow:hover > span:first-child {
+  background: #101014;
+}
+
+.socialMetricsRow:focus-visible,
+.creatorSheetRow:focus-visible,
+.campaignRow:focus-visible,
+.creativeRow:focus-visible,
+.tableRow:focus-visible {
+  outline: 2px solid rgba(215, 173, 92, 0.75);
+  outline-offset: -2px;
+}
+
+.socialMetricsRow.isSelected,
+.creatorSheetRow.isSelected,
+.campaignRow.isSelected,
+.creativeRow.isSelected {
+  border-color: rgba(215, 173, 92, 0.78) !important;
+}
+
+.socialMetricsRow.isSelected > span:first-child {
+  background: #14100a;
+}
+
+@media (min-width: 1281px) {
+  .workbench {
+    padding-right: 24px;
+  }
+
+  .topHeader {
+    margin-bottom: 24px;
+  }
+
+  .socialMetricsTable,
+  .creatorSheetTable,
+  .campaignTable,
+  .creativeTable,
+  .asoTable {
+    box-shadow: inset -18px 0 18px -22px rgba(255, 255, 255, 0.55);
+  }
+}
+
 .socialFilterBar {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -8367,4 +8478,43 @@ h2 {
   .trackingFields {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final desktop overrides: keep overflow local to data grids and reserve the
+   gold stroke for selected rows rather than ordinary pointer movement. */
+html,
+body {
+  overflow-x: hidden !important;
+}
+
+.appShell {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+.workbench {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+.socialMetricsRow:hover,
+.creatorSheetRow:hover,
+.campaignRow:hover,
+.creativeRow:hover {
+  border-color: var(--viral-border) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+.socialMetricsRow:hover > span:first-child,
+.creatorSheetRow:hover > span:first-child {
+  background: #101014 !important;
+}
+
+.campaignRow.isSelected,
+.creativeRow.isSelected,
+.socialMetricsRow.isSelected,
+.creatorSheetRow.isSelected {
+  border-color: rgba(215, 173, 92, 0.78) !important;
 }
