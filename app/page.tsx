@@ -2025,7 +2025,7 @@ export default function Home() {
   }
 
   function applyCustomDateRange() {
-    const latestDate = isoDateOffset(-1);
+    const latestDate = isoDateOffset(0);
     if (!customStartDate || !customEndDate) {
       setDateRangeError("Choose a start and end date.");
       return;
@@ -2035,7 +2035,7 @@ export default function Home() {
       return;
     }
     if (customEndDate > latestDate) {
-      setDateRangeError("Apple reports are available through yesterday.");
+      setDateRangeError("Choose a date up to today. Some provider data may be partial for today.");
       return;
     }
     const days = Math.floor((Date.parse(customEndDate) - Date.parse(customStartDate)) / 86_400_000) + 1;

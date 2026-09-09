@@ -4,7 +4,7 @@ import { socialAccounts, syncJobs } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { now } from "@/server/backend/http";
 
-const GLOBAL_SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const GLOBAL_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,7 @@ export async function POST() {
     status: "queued",
     recordsRead: 0,
     recordsWritten: 0,
-    message: "Manual-safe 12-hour social refresh",
+    message: "Manual-safe daily social refresh",
     createdAt: timestamp,
     updatedAt: timestamp,
   });
