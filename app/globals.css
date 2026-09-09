@@ -2575,6 +2575,7 @@ input::placeholder {
 .socialFilterBar label { display: grid; gap: 6px; }
 .socialFilterBar label span { color: rgba(255,255,255,.5); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .socialFilterBar select { min-height: 42px; padding: 0 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; background: #09090a; color: #fffaf2; font: inherit; }
+.formDataHint { display: block; margin-top: 6px; color: var(--viral-muted); font-size: 13px; }
 .syncNotice { position: fixed; left: 22px; bottom: 22px; z-index: 50; display: flex; align-items: flex-start; gap: 10px; width: min(390px, calc(100vw - 44px)); padding: 14px 15px; border: 1px solid rgba(215,173,92,.35); border-radius: 12px; background: rgba(20,20,22,.96); box-shadow: 0 16px 40px rgba(0,0,0,.38); backdrop-filter: blur(16px); }
 .syncNotice > div { display: grid; gap: 4px; min-width: 0; }
 .syncNotice strong { color: #fffaf2; font-size: 14px; }

@@ -2130,7 +2130,7 @@ export default function Home() {
   }
 
   const appFormCard = <AppForm appForm={appForm} addApp={addApp} updateAppForm={updateAppForm} setAppForm={setAppForm} open={appWizardOpen} setOpen={setAppWizardOpen} />;
-  const socialFormCard = <SocialForm apps={apps} socialForm={socialForm} selectedAppId={selectedAppId} addSocial={addSocial} updateSocialForm={updateSocialForm} />;
+  const socialFormCard = <SocialForm apps={apps} socials={socials} videos={creatorVideos} socialForm={socialForm} selectedAppId={selectedAppId} addSocial={addSocial} updateSocialForm={updateSocialForm} />;
 
   function renderPage() {
     if (!loaded) return <AnalyticsSkeleton />;
@@ -2568,11 +2568,11 @@ function AppForm({
   );
 }
 
-function SocialForm({ apps, socialForm, selectedAppId, addSocial, updateSocialForm }: { apps: StudioApp[]; socialForm: { platform: SocialAccount["platform"]; handle: string; appId: string; creatorName: string; email: string; dealType: NonNullable<SocialAccount["dealType"]>; fixedFee: string; cpmRate: string; dealCurrency: string; trackingHashtags: string; trackingKeywords: string; trackingMatch: NonNullable<SocialAccount["trackingMatch"]> }; selectedAppId: string; addSocial: (event: FormEvent<HTMLFormElement>) => void; updateSocialForm: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void }) {
+function SocialForm({ apps, socials, videos, socialForm, selectedAppId, addSocial, updateSocialForm }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; socialForm: { platform: SocialAccount["platform"]; handle: string; appId: string; creatorName: string; email: string; dealType: NonNullable<SocialAccount["dealType"]>; fixedFee: string; cpmRate: string; dealCurrency: string; trackingHashtags: string; trackingKeywords: string; trackingMatch: NonNullable<SocialAccount["trackingMatch"]> }; selectedAppId: string; addSocial: (event: FormEvent<HTMLFormElement>) => void; updateSocialForm: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void }) {
   const usesFixed = socialForm.dealType === "fixed" || socialForm.dealType === "hybrid";
   const usesCpm = socialForm.dealType === "cpm" || socialForm.dealType === "hybrid";
   return <LiquidGlass as="form" className="panel formPanel creatorOnboardingForm" onSubmit={addSocial}>
-    <div className="panelHeader"><div><p className="caption">Creator profile</p><h2>Add a creator</h2></div><span className="pill">Public data</span></div>
+    <div className="panelHeader"><div><p className="caption">Creator profile</p><h2>Add a creator</h2><small className="formDataHint">Current base: {formatNumber(videos.length)} tracked videos across {formatNumber(socials.length)} accounts</small></div><span className="pill">Public data</span></div>
     <div className="creatorFormSection"><strong>Identity</strong><div className="creatorFormGrid">
       <input name="creatorName" placeholder="Creator name" value={socialForm.creatorName} onChange={updateSocialForm} />
       <input name="email" type="email" placeholder="Email (optional)" value={socialForm.email} onChange={updateSocialForm} />
@@ -2590,7 +2590,7 @@ function SocialForm({ apps, socialForm, selectedAppId, addSocial, updateSocialFo
       <input name="trackingHashtags" placeholder="#cocorise, #morningroutine" value={socialForm.trackingHashtags} onChange={updateSocialForm} />
       <input name="trackingKeywords" placeholder="Caption contains (comma separated)" value={socialForm.trackingKeywords} onChange={updateSocialForm} />
       <select name="trackingMatch" value={socialForm.trackingMatch} onChange={updateSocialForm}><option value="any">Match any condition</option><option value="all">Match all conditions</option></select>
-    </div><small>Leave conditions empty to track every public video from this account.</small></div>
+    </div><small>Leave conditions empty to track every public video from this account. A new creator is synced immediately; filters are applied locally to the returned videos.</small></div>
     <button className="primaryButton" type="submit" disabled={!apps.length || !socialForm.handle.trim()}>Add creator</button>
   </LiquidGlass>;
 }
