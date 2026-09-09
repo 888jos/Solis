@@ -2657,6 +2657,7 @@ function AnalyticsPage({ kind, apps, metrics, previousMetrics, previousPeriodAva
       </section>
       <TrendPanel title={title} value={primaryValue} detail={`${trendDelta(trend).toFixed(0)}% vs previous split`} points={aggregateTrendPoints(metrics, trendKey)} variant={kind === "revenue" ? "currency" : "number"} currency={currency} />
       {kind === "revenue" || kind === "subscriptions" ? <RevenueBreakdown analytics={analytics} /> : null}
+      {kind === "revenue" ? <RevenueSignals analytics={analytics} /> : null}
       {kind === "revenue" ? <RevenueMap metrics={metrics} currency={currency} /> : null}
     </>
   );
@@ -4001,6 +4002,24 @@ function RevenueBreakdown({ analytics }: { analytics: ReturnType<typeof revenueA
           </div>
         ))}
       </div>
+    </LiquidGlass>
+  );
+}
+
+function RevenueSignals({ analytics }: { analytics: ReturnType<typeof revenueAnalytics> }) {
+  const paidUnits = analytics.subscriptions + analytics.inAppPurchases;
+  const revenuePerPaidUnit = paidUnits ? analytics.revenue / paidUnits : null;
+  const source = analytics.revenueSource ?? "None";
+  return (
+    <LiquidGlass className="panel dataPanel revenueSignalsPanel">
+      <div className="panelHeader"><div><p className="caption">Revenue quality</p><h2>What the number includes</h2></div><span className="pill">{source}</span></div>
+      <div className="revenueSignalGrid">
+        <div><strong>{formatNumber(analytics.revenueRows)}</strong><span>Revenue rows</span></div>
+        <div><strong>{formatNumber(paidUnits)}</strong><span>Paid units</span></div>
+        <div><strong>{formatUnitCurrency(analytics.averageRevenuePerDownload, analytics.currency)}</strong><span>Revenue / download</span></div>
+        <div><strong>{revenuePerPaidUnit === null ? "—" : formatUnitCurrency(revenuePerPaidUnit, analytics.currency)}</strong><span>Revenue / paid unit</span></div>
+      </div>
+      <p className="revenueSignalNote">Source: {source === "Financial" ? "Apple financial reports" : source === "Sales" ? "Apple sales reports" : "No monetization source detected"}. Refunds and subscription lifecycle data will appear once the relevant source is connected.</p>
     </LiquidGlass>
   );
 }
