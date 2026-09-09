@@ -7085,8 +7085,16 @@ h2 {
 }
 
 .subscriptionRow:hover {
-  border-color: rgba(215, 173, 92, 0.38);
-  background: #1d1d21;
+  border-color: var(--viral-border) !important;
+  background: #19191d !important;
+  transform: none !important;
+}
+
+.subscriptionDataNote {
+  margin: 0;
+  color: var(--viral-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .subscriptionRow strong {

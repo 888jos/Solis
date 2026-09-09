@@ -2846,13 +2846,14 @@ function SubscriptionsPage({ apps, metrics, isSyncing, setActivePage }: { apps: 
 
       <section className="subscriptionGrid">
         <LiquidGlass className="panel dataPanel subscriptionLifecyclePanel">
-          <div className="panelHeader"><div><p className="caption">Lifecycle</p><h2>Subscription health</h2></div><span className="pill">Apple sales</span></div>
+          <div className="panelHeader"><div><p className="caption">Lifecycle</p><h2>Subscription health</h2></div><span className="pill">{analytics.revenueSource} · {analytics.health}/5 signals</span></div>
           <div className="subscriptionLifecycle">
             <LifecycleMetric label="New subs" value={formatNumber(analytics.subscriptions)} state="Live" />
             <LifecycleMetric label="Trials" value="Connect RevenueCat" state="Pending" />
             <LifecycleMetric label="Cancellations" value="Connect RevenueCat" state="Pending" />
-            <LifecycleMetric label="Refunds" value={analytics.revenueRows ? "Included in revenue" : "Pending"} state={analytics.revenueRows ? "Live" : "Pending"} />
+            <LifecycleMetric label="Refunds" value="Connect RevenueCat" state="Pending" />
           </div>
+          <p className="subscriptionDataNote">Apple sales reports provide paid units and proceeds. Active subscriptions, trials, cancellations and refund events require a lifecycle source.</p>
         </LiquidGlass>
 
         <LiquidGlass className="panel dataPanel subscriptionLifecyclePanel">
