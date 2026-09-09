@@ -1227,6 +1227,11 @@ function revenueAnalytics(metrics: AppStoreMetric[]) {
   const averageRevenuePerUser = downloads ? revenue / downloads : null;
   const monetizationRate = downloads ? (monetizedUnits / downloads) * 100 : 0;
   const subscriptionShare = monetizedUnits ? (subscriptions / monetizedUnits) * 100 : 0;
+  const revenueSource = metrics.some((metric) => metric.revenueSource === "Financial")
+    ? "Financial" as const
+    : metrics.some((metric) => metric.revenueSource === "Sales")
+      ? "Sales" as const
+      : "None" as const;
   const health = [
     metrics.length > 0,
     revenueRows > 0,
@@ -1234,7 +1239,7 @@ function revenueAnalytics(metrics: AppStoreMetric[]) {
     monetizedUnits > 0,
     downloads > 0,
   ].filter(Boolean).length;
-  return { averageRevenuePerDownload, averageRevenuePerUser, currency, downloads, financeRows, health, inAppPurchases, monetizationRate, monetizedUnits, revenue, revenueRows, subscriptionShare, subscriptions };
+  return { averageRevenuePerDownload, averageRevenuePerUser, currency, downloads, financeRows, health, inAppPurchases, monetizationRate, monetizedUnits, revenue, revenueRows, revenueSource, subscriptionShare, subscriptions };
 }
 
 type MonetizationTrendKey = "proceeds" | "downloads" | "paidUnits" | "arpu" | "conversion";
@@ -2656,8 +2661,8 @@ function AnalyticsPage({ kind, apps, metrics, previousMetrics, previousPeriodAva
         <Module label="Monetization" title="ARPU" value={analytics.averageRevenuePerUser === null ? "—" : formatUnitCurrency(analytics.averageRevenuePerUser, currency)} text="Revenue / downloads." chartValues={arpuValues} hideChart={kind === "acquisition"} hideTrend={kind === "acquisition"} trendLoading={trendLoading} trendSignalOverride={arpuSignal} page="monetization" setActivePage={setActivePage} />
       </section>
       <TrendPanel title={title} value={primaryValue} detail={`${trendDelta(trend).toFixed(0)}% vs previous split`} points={aggregateTrendPoints(metrics, trendKey)} variant={kind === "revenue" ? "currency" : "number"} currency={currency} />
-      {kind === "revenue" || kind === "subscriptions" ? <RevenueBreakdown analytics={analytics} /> : null}
       {kind === "revenue" ? <RevenueSignals analytics={analytics} /> : null}
+      {kind === "revenue" || kind === "subscriptions" ? <RevenueBreakdown analytics={analytics} /> : null}
       {kind === "revenue" ? <RevenueMap metrics={metrics} currency={currency} /> : null}
     </>
   );
@@ -4012,7 +4017,7 @@ function RevenueSignals({ analytics }: { analytics: ReturnType<typeof revenueAna
   const source = analytics.revenueSource ?? "None";
   return (
     <LiquidGlass className="panel dataPanel revenueSignalsPanel">
-      <div className="panelHeader"><div><p className="caption">Revenue quality</p><h2>What the number includes</h2></div><span className="pill">{source}</span></div>
+      <div className="panelHeader"><div><p className="caption">Revenue quality</p><h2>What the number includes</h2></div><span className="pill">{source} · {analytics.health}/5 signals</span></div>
       <div className="revenueSignalGrid">
         <div><strong>{formatNumber(analytics.revenueRows)}</strong><span>Revenue rows</span></div>
         <div><strong>{formatNumber(paidUnits)}</strong><span>Paid units</span></div>

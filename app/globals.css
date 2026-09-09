@@ -8558,6 +8558,12 @@ body {
   line-height: 1.45;
 }
 
+.revenueMapPanel .countryRow:hover {
+  border-color: var(--viral-border) !important;
+  background: #19191d !important;
+  transform: none !important;
+}
+
 @media (max-width: 760px) {
   .revenueSignalGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
