@@ -30,8 +30,7 @@ export type SocialVideo = {
 type ApifyItem = Record<string, unknown>;
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const SOCIAL_VIDEO_LIMIT = 12;
-const SOCIAL_VIDEO_MAX_AGE_DAYS = 90;
+const SOCIAL_VIDEO_LIMIT = 1_000_000;
 
 function cleanBareHandle(value: string) {
   return value.trim().replace(/^@+/, "").replace(/[^a-zA-Z0-9._-]/g, "");
@@ -124,13 +123,7 @@ function normalizeVideos(items: ApifyItem[]): SocialVideo[] {
 }
 
 function recentVideos(items: ApifyItem[]) {
-  const cutoff = Date.now() - SOCIAL_VIDEO_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
   return normalizeVideos(items)
-    .filter((video) => {
-      if (!video.publishedAt) return true;
-      const publishedAt = new Date(video.publishedAt).getTime();
-      return Number.isNaN(publishedAt) || publishedAt >= cutoff;
-    })
     .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime())
     .slice(0, SOCIAL_VIDEO_LIMIT);
 }
