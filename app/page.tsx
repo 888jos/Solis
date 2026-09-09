@@ -4961,7 +4961,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
             const dateLabel = Number.isNaN(createdAt.getTime()) ? "—" : createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
             return (
               <div className="tableRow creatorSheetRow" key={`creator-${social.id}`}>
-                <span className="creatorIdentity"><strong>{social.creatorName || social.handle.replace(/^@/, "")}</strong><small>{social.handle}</small></span>
+                <span className="creatorIdentity"><span className="creatorIdentityTop"><strong>{social.creatorName || social.handle.replace(/^@/, "")}</strong><button className="ghostButton compactButton dangerButton" type="button" onClick={() => void deleteCreator(social)}>Delete</button></span><small>{social.handle}</small></span>
                 <span>{social.email || "—"}</span>
                 <span>{app ? appDisplayName(app.name) : "Unmapped"}</span>
                 <span>{social.platform}</span>
