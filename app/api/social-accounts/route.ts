@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       trackingKeywords: body?.trackingKeywords?.trim().toLowerCase() || "",
       trackingMatch: body?.trackingMatch === "all" ? "all" : "any",
       source: body?.source?.trim() || null,
-      status: "pending",
+      status: "idle",
       lastSyncedAt: null,
       createdAt,
       updatedAt: createdAt,

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ElementType, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, ElementType, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import type { GlobeMethods } from "react-globe.gl";
@@ -174,7 +174,7 @@ type SocialAccount = {
   engagementRate?: number;
   source?: string;
   lastSyncedAt?: string | number | Date | null;
-  status: "No public metrics" | "Provider pending" | "Ready for public tracking";
+  status: "Not synced" | "No public metrics" | "Provider pending" | "Ready for public tracking";
   createdAt: string;
   creatorName?: string | null;
   email?: string | null;
@@ -1485,6 +1485,16 @@ export default function Home() {
   const [socialForm, setSocialForm] = useState(emptySocialForm);
   const artworkLookups = useRef(new Set<string>());
 
+  useLayoutEffect(() => {
+    const hashPage = window.location.hash.replace("#", "");
+    if (!hashPage) return;
+    const normalizedPage = normalizeRoutePage(hashPage);
+    // Restore the deep link before paint so refresh never flashes the default page.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActivePage(normalizedPage);
+    if (hashPage !== normalizedPage) window.history.replaceState(null, "", `#${normalizedPage}`);
+  }, []);
+
   const openPage = useCallback((page: PageKey) => {
     const normalizedPage = normalizeRoutePage(page);
     setActivePage(normalizedPage);
@@ -1530,7 +1540,7 @@ export default function Home() {
           const backendSocials = socialsPayload.data?.socialAccounts?.map((social) => ({
             ...social,
             platform: social.platform.charAt(0).toUpperCase() + social.platform.slice(1).toLowerCase() as SocialAccount["platform"],
-            status: social.status === "ready" ? "Ready for public tracking" as const : social.status === "no_public_metrics" ? "No public metrics" as const : "Provider pending" as const,
+            status: social.status === "ready" ? "Ready for public tracking" as const : social.status === "no_public_metrics" ? "No public metrics" as const : social.status === "syncing" ? "Provider pending" as const : "Not synced" as const,
           })) ?? [];
           if (appsPayload.ok) resolvedApps = backendApps;
           if (socialsPayload.ok) resolvedSocials = backendSocials;
@@ -1888,7 +1898,7 @@ export default function Home() {
     if (!socialForm.handle.trim() || !selectedAppId) return;
     const handle = normalizeHandle(socialForm.handle);
     if (!handle) return;
-    const draftSocial: SocialAccount = { id: `${socialForm.platform}-${handle}-${Date.now()}`, handle, platform: socialForm.platform, appId: selectedAppId, creatorName: socialForm.creatorName.trim() || handle.replace(/^@/, ""), email: socialForm.email.trim(), dealType: socialForm.dealType, fixedFee: Number(socialForm.fixedFee) || 0, cpmRate: Number(socialForm.cpmRate) || 0, dealCurrency: socialForm.dealCurrency, trackingHashtags: socialForm.trackingHashtags, trackingKeywords: socialForm.trackingKeywords, trackingMatch: socialForm.trackingMatch, status: "Provider pending", createdAt: new Date().toISOString() };
+    const draftSocial: SocialAccount = { id: `${socialForm.platform}-${handle}-${Date.now()}`, handle, platform: socialForm.platform, appId: selectedAppId, creatorName: socialForm.creatorName.trim() || handle.replace(/^@/, ""), email: socialForm.email.trim(), dealType: socialForm.dealType, fixedFee: Number(socialForm.fixedFee) || 0, cpmRate: Number(socialForm.cpmRate) || 0, dealCurrency: socialForm.dealCurrency, trackingHashtags: socialForm.trackingHashtags, trackingKeywords: socialForm.trackingKeywords, trackingMatch: socialForm.trackingMatch, status: "Not synced", createdAt: new Date().toISOString() };
     setSocials((current) => {
       const exists = current.some((row) => row.platform === socialForm.platform && normalizeHandle(row.handle) === handle);
       if (exists) return current;
@@ -1906,7 +1916,7 @@ export default function Home() {
         setSocials((current) => current.map((row) => row.id === draftSocial.id ? {
           ...saved,
           platform: socialForm.platform,
-          status: "Provider pending",
+          status: "Not synced",
         } : row));
       }
     } catch {
@@ -2050,6 +2060,7 @@ export default function Home() {
   const socialFormCard = <SocialForm apps={apps} socialForm={socialForm} selectedAppId={selectedAppId} addSocial={addSocial} updateSocialForm={updateSocialForm} />;
 
   function renderPage() {
+    if (!loaded) return <AnalyticsSkeleton />;
     if (activePage === "landing") return <LandingPage totals={totals} setActivePage={openPage} />;
     if (activePage === "onboarding") return <OnboardingPage apps={apps} socials={socials} metrics={currentMetrics} appFormCard={appFormCard} socialFormCard={socialFormCard} syncError={syncError} setActivePage={openPage} />;
     if (activePage === "overview") return <AnalyticsPage kind="revenue" apps={scopedApps} metrics={currentMetrics} previousMetrics={previousMetrics} previousPeriodAvailable={Boolean(previousDateRange)} syncingAppId={syncingAppId} syncError={syncError} setActivePage={openPage} />;
@@ -2063,7 +2074,7 @@ export default function Home() {
     if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
     if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "quality") return <QualityPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -2506,7 +2517,7 @@ function SocialForm({ apps, socialForm, selectedAppId, addSocial, updateSocialFo
       <input name="trackingKeywords" placeholder="Caption contains (comma separated)" value={socialForm.trackingKeywords} onChange={updateSocialForm} />
       <select name="trackingMatch" value={socialForm.trackingMatch} onChange={updateSocialForm}><option value="any">Match any condition</option><option value="all">Match all conditions</option></select>
     </div><small>Leave conditions empty to track every public video from this account.</small></div>
-    <button className="primaryButton" type="submit" disabled={!apps.length || !socialForm.handle.trim()}>Add creator &amp; sync</button>
+    <button className="primaryButton" type="submit" disabled={!apps.length || !socialForm.handle.trim()}>Add creator</button>
   </LiquidGlass>;
 }
 
@@ -4532,13 +4543,6 @@ function hasDetailedSocialMetrics(social: SocialAccount) {
   return Boolean(social.views || social.avgViews || social.comments || social.shares || social.favorites);
 }
 
-function needsSocialLookup(social: SocialAccount) {
-  if (social.status === "Provider pending") return true;
-  if (social.platform !== "TikTok") return false;
-  if (social.status === "No public metrics") return false;
-  return !hasDetailedSocialMetrics(social);
-}
-
 function socialMetricDisplay(value: number, loading: boolean, suffix = "") {
   if (loading) return <SkeletonLine className="socialMetricSkeleton" />;
   return value ? `${formatNumber(Math.round(value))}${suffix}` : "—";
@@ -4555,66 +4559,29 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
-  const inFlightLookups = useRef(new Set<string>());
-  const lookupTargets = useMemo(() => socials.filter(needsSocialLookup).map((social) => ({
-    appId: social.appId,
-    handle: social.handle,
-    id: social.id,
-    platform: social.platform,
-  })), [socials]);
-  const lookupSignature = JSON.stringify(lookupTargets);
 
-  useEffect(() => {
-    const targets = JSON.parse(lookupSignature) as Array<{ appId: string; handle: string; id: string; platform: SocialAccount["platform"] }>;
-    for (const social of targets) {
-      if (inFlightLookups.current.has(social.id)) continue;
-      inFlightLookups.current.add(social.id);
-      setActiveLookups((current) => new Set(current).add(social.id));
-      setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "Provider pending" } : row));
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), SOCIAL_LOOKUP_TIMEOUT_MS);
-      fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`, { signal: controller.signal })
-        .then((response) => response.json())
-        .then((profile: Partial<SocialAccount> & { status?: SocialAccount["status"]; videoMetricsReady?: boolean; videos?: SocialProfileVideo[] }) => {
-          const nextStatus = profile.videoMetricsReady ? "Ready for public tracking" : "No public metrics";
-          const socialSnapshot: SocialAccount = { appId: social.appId, createdAt: new Date().toISOString(), handle: social.handle, id: social.id, platform: social.platform, status: nextStatus };
-          setSocials((current) => current.map((row) => row.id === social.id ? {
-            ...row,
-            followers: Number.isFinite(profile.followers) ? profile.followers : row.followers,
-            views: Number.isFinite(profile.views) ? profile.views : row.views,
-            avgViews: Number.isFinite(profile.avgViews) ? profile.avgViews : row.avgViews,
-            likes: Number.isFinite(profile.likes) ? profile.likes : row.likes,
-            comments: Number.isFinite(profile.comments) ? profile.comments : row.comments,
-            favorites: Number.isFinite(profile.favorites) ? profile.favorites : row.favorites,
-            posts: Number.isFinite(profile.posts) ? profile.posts : row.posts,
-            shares: Number.isFinite(profile.shares) ? profile.shares : row.shares,
-            engagementRate: Number.isFinite(profile.engagementRate) ? profile.engagementRate : row.engagementRate,
-            source: typeof profile.source === "string" ? profile.source : row.source,
-            status: nextStatus,
-          } : row));
-          if (profile.videos?.length) {
-            const nextVideos = profile.videos.map((video) => creatorVideoFromSocialProfile(video, socialSnapshot));
-            setCreatorVideos((current) => {
-              const ids = new Set(nextVideos.map((video) => video.id));
-              const keys = new Set(nextVideos.map((video) => `${video.socialAccountId}:${video.url || video.id}`));
-              return [...nextVideos, ...current.filter((video) => !ids.has(video.id) && !keys.has(`${video.socialAccountId}:${video.url || video.id}`))];
-            });
-          }
-        })
-        .catch(() => {
-          setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "No public metrics" } : row));
-        })
-        .finally(() => {
-          window.clearTimeout(timer);
-          inFlightLookups.current.delete(social.id);
-          setActiveLookups((current) => {
-            const next = new Set(current);
-            next.delete(social.id);
-            return next;
-          });
-        });
+  async function syncSocial(social: SocialAccount) {
+    if (activeLookups.has(social.id)) return;
+    setActiveLookups((current) => new Set(current).add(social.id));
+    setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "Provider pending" } : row));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), SOCIAL_LOOKUP_TIMEOUT_MS);
+    try {
+      const response = await fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`, { method: "POST", signal: controller.signal });
+      const profile = await response.json() as Partial<SocialAccount> & { error?: string; videoMetricsReady?: boolean; videos?: SocialProfileVideo[] };
+      if (!response.ok) throw new Error(profile.error || "Social sync failed");
+      const nextStatus = profile.videoMetricsReady ? "Ready for public tracking" : "No public metrics";
+      const synced = { ...social, ...profile, status: nextStatus as SocialAccount["status"] };
+      setSocials((current) => current.map((row) => row.id === social.id ? synced : row));
+      const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
+      setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== social.id)]);
+    } catch {
+      setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: social.status } : row));
+    } finally {
+      window.clearTimeout(timer);
+      setActiveLookups((current) => { const next = new Set(current); next.delete(social.id); return next; });
     }
-  }, [lookupSignature, setCreatorVideos, setSocials]);
+  }
 
   const totals = socialTotals(socials);
   const selectedHandle = socials.find((social) => social.id === selectedHandleId) ?? socials[0];
@@ -4660,7 +4627,7 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
         <LiquidGlass className="panel dataPanel socialDataNotice"><h2>No public video metrics</h2><span>{formatNumber(socials.length)} handles mapped</span><button className="ghostButton" type="button" disabled title="TikTok public pages do not always expose video stats without auth.">Source limited</button></LiquidGlass>
       )}
       <section className="socialGrid">
-        <SocialTable apps={apps} socials={socials} setSocials={setSocials} isFiltered={isFiltered} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} />
+      <SocialTable apps={apps} socials={socials} setSocials={setSocials} isFiltered={isFiltered} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} syncingIds={activeLookups} />
         <SocialHandleCard apps={apps} social={selectedHandle} videos={videos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
       </section>
     </section>
@@ -4682,7 +4649,7 @@ function SocialMetricCell({ suffix = "", value, loading }: { suffix?: string; va
   return value ? <>{formatNumber(Math.round(value))}{suffix}</> : <>—</>;
 }
 
-function SocialTable({ apps, socials, setSocials, isFiltered = false, onSelect, selectedId }: { apps: StudioApp[]; socials: SocialAccount[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean; onSelect?: (id: string) => void; selectedId?: string }) {
+function SocialTable({ apps, socials, setSocials, isFiltered = false, onSelect, onSync, selectedId, syncingIds = new Set<string>() }: { apps: StudioApp[]; socials: SocialAccount[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean; onSelect?: (id: string) => void; onSync?: (social: SocialAccount) => void; selectedId?: string; syncingIds?: Set<string> }) {
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No handle matches this search" : "No social handles yet"} text={isFiltered ? "Clear the search or try another handle, platform or mapped app." : "Add a TikTok, Instagram or YouTube handle and map it to an app."} />;
   return (
     <LiquidGlass className="panel dataPanel socialTablePanel">
@@ -4725,7 +4692,7 @@ function SocialTable({ apps, socials, setSocials, isFiltered = false, onSelect, 
               <span className="socialMetricNumber"><SocialMetricCell value={shares} loading={loading} /></span>
               <span className="socialMetricNumber"><SocialMetricCell value={favorites} loading={loading} /></span>
               <span className="socialMetricNumber"><SocialMetricCell value={engagement} loading={loading} suffix="%" /></span>
-              <span><button className="ghostButton" type="button" onClick={(event) => { event.stopPropagation(); setSocials((rows) => rows.filter((row) => row.id !== social.id)); }}>Remove</button></span>
+              <span className="socialManageActions"><button className="ghostButton" type="button" disabled={syncingIds.has(social.id)} onClick={(event) => { event.stopPropagation(); onSync?.(social); }}>{syncingIds.has(social.id) ? "Syncing…" : "Sync"}</button><button className="ghostButton" type="button" onClick={(event) => { event.stopPropagation(); setSocials((rows) => rows.filter((row) => row.id !== social.id)); }}>Remove</button></span>
             </div>
           );
         })}
@@ -4804,7 +4771,7 @@ function creatorDealLabel(social: SocialAccount) {
   return "No deal";
 }
 
-function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
+function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
   const videoBackedTotals = videoTotals(videos);
   const socialBackedTotals = socialTotals(socials);
   const totals = videos.length ? videoBackedTotals : socialBackedTotals;
@@ -4844,14 +4811,8 @@ function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFilte
         method: "PATCH",
       });
       if (!response.ok) throw new Error("Creator update failed");
-      const updated = { ...social, ...editor, fixedFee: Number(editor.fixedFee) || 0, cpmRate: Number(editor.cpmRate) || 0, status: "Provider pending" as const };
+      const updated = { ...social, ...editor, fixedFee: Number(editor.fixedFee) || 0, cpmRate: Number(editor.cpmRate) || 0 };
       setSocials((rows) => rows.map((row) => row.id === social.id ? updated : row));
-      const profileResponse = await fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`);
-      const profile = await profileResponse.json() as Partial<SocialAccount> & { videoMetricsReady?: boolean; videos?: SocialProfileVideo[] };
-      const synced = { ...updated, ...profile, status: profile.videoMetricsReady ? "Ready for public tracking" as const : "No public metrics" as const };
-      setSocials((rows) => rows.map((row) => row.id === social.id ? synced : row));
-      const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
-      setCreatorVideos((rows) => [...nextVideos, ...rows.filter((video) => video.socialAccountId !== social.id)]);
       setEditingId("");
     } finally {
       setSavingId("");

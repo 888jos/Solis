@@ -309,15 +309,32 @@ async function fetchTikTokPublic(handle: string): Promise<SocialProfilePayload> 
   }
 }
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const url = new URL(request.url);
   const platform = url.searchParams.get("platform") ?? "";
   const handle = cleanHandle(url.searchParams.get("handle") ?? "");
   const accountId = url.searchParams.get("accountId") ?? "";
 
   if (!handle) return Response.json({ error: "Missing handle" }, { status: 400 });
+  if (!accountId) return Response.json({ error: "Missing accountId" }, { status: 400 });
 
   try {
+    const session = await getOrCreateLocalSession();
+    const db = await getDb();
+    const [account] = await db.select().from(socialAccounts).where(and(
+      eq(socialAccounts.id, accountId),
+      eq(socialAccounts.workspaceId, session.workspaceId),
+    )).limit(1);
+    if (!account) return Response.json({ error: "Social account not found" }, { status: 404 });
+    if (account.status === "syncing") return Response.json({ error: "Sync already running" }, { status: 409 });
+    const lastSyncedAt = Number(account.lastSyncedAt || 0) * 1000;
+    if (lastSyncedAt && Date.now() - lastSyncedAt < 15 * 60 * 1000) {
+      return Response.json({ error: "This account was synced less than 15 minutes ago" }, { status: 429 });
+    }
+    await db.update(socialAccounts).set({ status: "syncing", updatedAt: now() }).where(and(
+      eq(socialAccounts.id, accountId),
+      eq(socialAccounts.workspaceId, session.workspaceId),
+    ));
     const fallback = platform.toLowerCase() === "tiktok"
       ? () => fetchTikTokPublic(handle)
       : async (): Promise<SocialProfilePayload> => ({
@@ -337,6 +354,10 @@ export async function GET(request: Request) {
       source: "TikTok public profile",
     });
   }
+}
+
+export async function GET() {
+  return Response.json({ error: "Social sync requires an explicit POST action" }, { status: 405, headers: { Allow: "POST" } });
 }
 
 async function applyAccountTrackingRules(accountId: string, profile: SocialProfileMetrics): Promise<SocialProfileMetrics> {

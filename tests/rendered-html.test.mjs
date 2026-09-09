@@ -41,7 +41,7 @@ test("server-renders the DriftOS workspace without fake metrics", async () => {
   assert.doesNotMatch(html, /No revenue found/);
   assert.doesNotMatch(html, /Category/);
   assert.match(html, /Revenue/);
-  assert.match(html, /Connect an app/);
+  assert.doesNotMatch(html, /Connect an app/);
   assert.match(html, /Revenue Analytics/);
   assert.match(html, /Monetization/);
   assert.match(html, /Paywall/);
@@ -143,9 +143,9 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.doesNotMatch(page, /page:\s*"pricing"/);
   assert.match(page, /marketingViews/);
   assert.match(page, /expenses/);
-  assert.match(page, /hasDetailedSocialMetrics/);
+  assert.match(page, /method: "POST"/);
   assert.match(page, /videoMetricsReady/);
-  assert.match(page, /inFlightLookups/);
+  assert.doesNotMatch(page, /inFlightLookups/);
   assert.match(page, /socialMetricSkeleton/);
   assert.match(page, /aria-current/);
   assert.match(page, /MiniChart/);

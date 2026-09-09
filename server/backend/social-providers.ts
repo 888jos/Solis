@@ -30,6 +30,8 @@ export type SocialVideo = {
 type ApifyItem = Record<string, unknown>;
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
+const SOCIAL_VIDEO_LIMIT = 12;
+const SOCIAL_VIDEO_MAX_AGE_DAYS = 90;
 
 function cleanBareHandle(value: string) {
   return value.trim().replace(/^@+/, "").replace(/[^a-zA-Z0-9._-]/g, "");
@@ -121,6 +123,18 @@ function normalizeVideos(items: ApifyItem[]): SocialVideo[] {
     .filter((video) => video.views || video.likes || video.comments || video.shares || video.favorites);
 }
 
+function recentVideos(items: ApifyItem[]) {
+  const cutoff = Date.now() - SOCIAL_VIDEO_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  return normalizeVideos(items)
+    .filter((video) => {
+      if (!video.publishedAt) return true;
+      const publishedAt = new Date(video.publishedAt).getTime();
+      return Number.isNaN(publishedAt) || publishedAt >= cutoff;
+    })
+    .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime())
+    .slice(0, SOCIAL_VIDEO_LIMIT);
+}
+
 function summarizeVideos(videos: SocialVideo[], source: string, profile?: ApifyItem): SocialProfileMetrics {
   const posts = videos.length || firstMetric(profile ?? {}, ["videoCount", "postsCount", "posts", "mediaCount"]);
   const views = videos.reduce((sum, video) => sum + (video.views ?? 0), 0);
@@ -182,7 +196,7 @@ async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics
     profiles: [bareHandle],
     profileScrapeSections: ["videos"],
     profileSorting: "latest",
-    resultsPerPage: 30,
+    resultsPerPage: SOCIAL_VIDEO_LIMIT,
     excludePinnedPosts: false,
     shouldDownloadCovers: false,
     shouldDownloadSlideshowImages: false,
@@ -190,7 +204,7 @@ async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics
     shouldDownloadVideos: false,
   });
   if (!items.length) return null;
-  return summarizeVideos(normalizeVideos(items), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
+  return summarizeVideos(recentVideos(items), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
 }
 
 async function fetchInstagramViaApify(handle: string): Promise<SocialProfileMetrics | null> {
@@ -198,11 +212,11 @@ async function fetchInstagramViaApify(handle: string): Promise<SocialProfileMetr
   const bareHandle = cleanBareHandle(handle);
   const items = await callApifyActor(actor, {
     directUrls: [`https://www.instagram.com/${bareHandle}/`],
-    resultsLimit: 30,
+    resultsLimit: SOCIAL_VIDEO_LIMIT,
     resultsType: "posts",
   });
   if (!items.length) return null;
-  return summarizeVideos(normalizeVideos(items), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
+  return summarizeVideos(recentVideos(items), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
 }
 
 export async function fetchSocialProfile(platform: string, handle: string, fallback: () => Promise<SocialProfileMetrics>) {

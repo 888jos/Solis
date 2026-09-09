@@ -36,8 +36,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       trackingHashtags: body?.trackingHashtags?.trim().toLowerCase() || "",
       trackingKeywords: body?.trackingKeywords?.trim().toLowerCase() || "",
       trackingMatch: body?.trackingMatch === "all" ? "all" : "any",
-      status: "pending",
-      lastSyncedAt: null,
       updatedAt: now(),
     }).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId)));
     const [socialAccount] = await db.select().from(socialAccounts).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId))).limit(1);
