@@ -4629,9 +4629,7 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
   const [platformFilter, setPlatformFilter] = useState("all");
-  const [appFilter, setAppFilter] = useState("all");
   const [creatorFilter, setCreatorFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
 
   async function syncSocial(social: SocialAccount) {
     if (activeLookups.has(social.id)) return;
@@ -4667,9 +4665,7 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
 
   const visibleSocials = socials.filter((social) =>
     (platformFilter === "all" || social.platform === platformFilter) &&
-    (appFilter === "all" || social.appId === appFilter) &&
-    (creatorFilter === "all" || social.id === creatorFilter) &&
-    (statusFilter === "all" || social.status === statusFilter),
+    (creatorFilter === "all" || social.id === creatorFilter),
   );
   const visibleVideos = videos.filter((video) => visibleSocials.some((social) => social.id === video.socialAccountId));
   const totals = videoTotals(visibleVideos);
@@ -4706,12 +4702,6 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
 
   return (
     <section className="socialTrackingPage">
-      <div className="socialFilterBar" aria-label="Social tracking filters">
-        <label><span>Platform</span><select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="all">All platforms</option><option>TikTok</option><option>Instagram</option><option>YouTube</option></select></label>
-        <label><span>App</span><select value={appFilter} onChange={(event) => setAppFilter(event.target.value)}><option value="all">All apps</option>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select></label>
-        <label><span>Creator</span><select value={creatorFilter} onChange={(event) => setCreatorFilter(event.target.value)}><option value="all">All creators</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.creatorName || social.handle}</option>)}</select></label>
-        <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option>Ready for public tracking</option><option>Provider pending</option><option>No public metrics</option><option>Not synced</option></select></label>
-      </div>
       <section className="moduleMatrix socialMetricGrid">
         {metricCards.map((card) => (
           <LiquidGlass as="button" className={selectedMetric === card.key ? "panel moduleCard socialMetricCard isSelected" : "panel moduleCard socialMetricCard"} type="button" onClick={() => setSelectedMetric(card.key)} key={card.key}>
@@ -4721,6 +4711,11 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
           </LiquidGlass>
         ))}
       </section>
+      <div className="socialFilterBar" aria-label="Social tracking filters">
+        <label><span>Platform</span><select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="all">All platforms</option><option>TikTok</option><option>Instagram</option><option>YouTube</option></select></label>
+        <label><span>Creator</span><select value={creatorFilter} onChange={(event) => setCreatorFilter(event.target.value)}><option value="all">All creators</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.creatorName || social.handle}</option>)}</select></label>
+        <div className="filterSummary"><strong>{formatNumber(visibleSocials.length)}</strong><span>creators selected</span></div>
+      </div>
       {hasMetrics ? (
         <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend · daily`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos published in period · filters are local`} points={dailyTrend.length ? dailyTrend : [{ label: "Today", value: 0 }]} variant="number" currency="USD" />
       ) : isLoading ? (
