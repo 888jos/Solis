@@ -347,6 +347,18 @@ export async function POST(request: Request) {
     if (accountId) await persistSocialProfile(accountId, platform, handle, filteredProfile);
     return Response.json(filteredProfile);
   } catch (error) {
+    if (accountId) {
+      try {
+        const session = await getOrCreateLocalSession();
+        const db = await getDb();
+        await db.update(socialAccounts).set({ status: "no_public_metrics", lastError: error instanceof Error ? error.message : "Social lookup failed", updatedAt: now() }).where(and(
+          eq(socialAccounts.id, accountId),
+          eq(socialAccounts.workspaceId, session.workspaceId),
+        ));
+      } catch {
+        // Preserve the original provider error response if status persistence fails.
+      }
+    }
     return Response.json({
       error: error instanceof Error ? error.message : "Social lookup failed",
       status: "No public metrics",

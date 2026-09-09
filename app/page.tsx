@@ -1484,6 +1484,7 @@ export default function Home() {
   const emptySocialForm = { platform: "TikTok" as SocialAccount["platform"], handle: "", appId: "", creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> };
   const [socialForm, setSocialForm] = useState(emptySocialForm);
   const artworkLookups = useRef(new Set<string>());
+  const generalSocialSyncAttempted = useRef(false);
 
   useLayoutEffect(() => {
     const hashPage = window.location.hash.replace("#", "");
@@ -1626,6 +1627,29 @@ export default function Home() {
   useEffect(() => {
     if (loaded) window.localStorage.setItem(CREATOR_VIDEO_STORAGE, JSON.stringify(creatorVideos));
   }, [creatorVideos, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !socials.length || generalSocialSyncAttempted.current) return;
+    generalSocialSyncAttempted.current = true;
+    void fetch("/api/social-sync", { method: "POST" })
+      .then((response) => response.json())
+      .then(async (payload: { skipped?: boolean }) => {
+        if (payload.skipped) return;
+        const [socialsResponse, videosResponse] = await Promise.all([
+          fetch(`/api/social-accounts?workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}`, { cache: "no-store" }),
+          fetch(`/api/creator-videos?workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}`, { cache: "no-store" }),
+        ]);
+        const socialsPayload = await socialsResponse.json() as { data?: { socialAccounts?: SocialAccount[] } };
+        const videosPayload = await videosResponse.json() as { data?: { videos?: BackendCreatorVideo[] } };
+        if (socialsPayload.data?.socialAccounts) setSocials(socialsPayload.data.socialAccounts.map((social) => ({
+          ...social,
+          platform: social.platform.charAt(0).toUpperCase() + social.platform.slice(1).toLowerCase() as SocialAccount["platform"],
+          status: social.status === "ready" ? "Ready for public tracking" : social.status === "no_public_metrics" ? "No public metrics" : social.status === "syncing" ? "Provider pending" : "Not synced",
+        })));
+        if (videosPayload.data?.videos) setCreatorVideos(videosPayload.data.videos.map(creatorVideoFromBackend));
+      })
+      .catch(() => undefined);
+  }, [loaded, socials.length]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1913,11 +1937,22 @@ export default function Home() {
       const payload = await response.json() as { ok?: boolean; data?: { socialAccount?: SocialAccount } };
       if (response.ok && payload.ok && payload.data?.socialAccount) {
         const saved = payload.data.socialAccount;
-        setSocials((current) => current.map((row) => row.id === draftSocial.id ? {
+        const syncingSocial: SocialAccount = {
           ...saved,
           platform: socialForm.platform,
-          status: "Not synced",
-        } : row));
+          status: "Provider pending",
+        };
+        setSocials((current) => current.map((row) => row.id === draftSocial.id ? syncingSocial : row));
+        void fetch(`/api/social-profile?platform=${encodeURIComponent(syncingSocial.platform)}&handle=${encodeURIComponent(syncingSocial.handle)}&accountId=${encodeURIComponent(syncingSocial.id)}`, { method: "POST" })
+          .then(async (syncResponse) => ({ response: syncResponse, profile: await syncResponse.json() as Partial<SocialAccount> & { videos?: SocialProfileVideo[]; videoMetricsReady?: boolean } }))
+          .then(({ response: syncResponse, profile }) => {
+            if (!syncResponse.ok) return;
+            const synced = { ...syncingSocial, ...profile, status: profile.videoMetricsReady ? "Ready for public tracking" as const : "No public metrics" as const };
+            setSocials((current) => current.map((row) => row.id === syncingSocial.id ? synced : row));
+            const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
+            setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== syncingSocial.id)]);
+          })
+          .catch(() => undefined);
       }
     } catch {
       // Keep the local row as a draft if the local backend is temporarily down.
