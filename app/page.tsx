@@ -378,9 +378,10 @@ function isoDay(date: Date) {
 }
 
 function resolveClientDateRange(dateRange: string) {
+  const today = parseIsoDay(isoDateOffset(0))!;
   const yesterday = parseIsoDay(isoDateOffset(-1))!;
   const presets: Record<string, { count: number; end: Date }> = {
-    today: { count: 1, end: yesterday },
+    today: { count: 1, end: today },
     yesterday: { count: 1, end: yesterday },
     "7d": { count: 7, end: yesterday },
     "30d": { count: 30, end: yesterday },
@@ -413,13 +414,10 @@ function previousDateRangeKey(dateRange: string) {
 
 function videoIsInDateRange(video: CreatorVideo, dateRange: string) {
   if (dateRange === "all") return true;
-  if (!video.publishedAt) return false;
-  const custom = dateRange.match(/^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
-  const presetDays: Record<string, number> = { today: 1, yesterday: 1, "7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365 };
-  const end = custom ? parseIsoDay(custom[2]) : parseIsoDay(isoDateOffset(dateRange === "yesterday" ? -1 : 0));
-  const start = custom ? parseIsoDay(custom[1]) : end && presetDays[dateRange] ? addUtcDays(end, -presetDays[dateRange] + 1) : null;
-  const publishedDay = parseIsoDay(video.publishedAt.slice(0, 10));
-  return Boolean(start && end && publishedDay && publishedDay >= start && publishedDay <= end);
+  const range = resolveClientDateRange(dateRange);
+  const sourceDate = video.publishedAt || video.createdAt;
+  const publishedDay = sourceDate ? parseIsoDay(sourceDate.slice(0, 10)) : null;
+  return Boolean(range?.start && range.end && publishedDay && publishedDay >= range.start && publishedDay <= range.end);
 }
 const InteractiveGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 const knownApps = {
@@ -2222,7 +2220,7 @@ export default function Home() {
           <div className="topActions">
             <div className="dateRangePicker">
               <label className="rangeControl"><CalendarRange size={22} strokeWidth={2} /><select value={dateRange.startsWith("custom:") ? "custom" : dateRange} onChange={(event) => selectDateRange(event.target.value)} aria-label="Date range"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">1 Week</option><option value="30d">Last 30 Days</option><option value="90d">Last 90 Days</option><option value="180d">Last 180 Days</option><option value="365d">Last 365 Days</option><option value="all">All Time</option><option value="custom">{dateRange.startsWith("custom:") ? customRangeLabel(customStartDate, customEndDate) : "Custom"}</option></select></label>
-              {customRangeOpen ? <div className="customDatePopover" role="dialog" aria-label="Custom date range"><label>From<input type="date" value={customStartDate} max={customEndDate || isoDateOffset(-1)} onChange={(event) => setCustomStartDate(event.target.value)} /></label><label>To<input type="date" value={customEndDate} min={customStartDate} max={isoDateOffset(-1)} onChange={(event) => setCustomEndDate(event.target.value)} /></label>{dateRangeError ? <small>{dateRangeError}</small> : null}<div><button type="button" onClick={() => setCustomRangeOpen(false)}>Cancel</button><button className="applyDateButton" type="button" onClick={applyCustomDateRange}>Apply</button></div></div> : null}
+              {customRangeOpen ? <div className="customDatePopover" role="dialog" aria-label="Custom date range"><label>From<input type="date" value={customStartDate} max={customEndDate || isoDateOffset(0)} onChange={(event) => setCustomStartDate(event.target.value)} /></label><label>To<input type="date" value={customEndDate} min={customStartDate} max={isoDateOffset(0)} onChange={(event) => setCustomEndDate(event.target.value)} /></label>{dateRangeError ? <small>{dateRangeError}</small> : null}<div><button type="button" onClick={() => setCustomRangeOpen(false)}>Cancel</button><button className="applyDateButton" type="button" onClick={applyCustomDateRange}>Apply</button></div></div> : null}
             </div>
             {activePage === "social" ? <button className="primaryTopButton" type="button" onClick={() => setSocialFormOpen(true)}><AtSign size={20} strokeWidth={2} />Add @</button> : null}
             <button type="button" onClick={exportWorkspace}><Download size={21} strokeWidth={2} />Export</button>
@@ -4640,6 +4638,15 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
     }
   }
 
+  async function removeSocial(social: SocialAccount) {
+    if (!window.confirm(`Remove ${social.creatorName || social.handle} and its tracked videos?`)) return;
+    const response = await fetch(`/api/social-accounts/${encodeURIComponent(social.id)}`, { method: "DELETE" });
+    if (!response.ok) return;
+    setSocials((current) => current.filter((row) => row.id !== social.id));
+    setCreatorVideos((current) => current.filter((video) => video.socialAccountId !== social.id));
+    if (selectedHandleId === social.id) setSelectedHandleId(null);
+  }
+
   const visibleSocials = socials.filter((social) =>
     (platformFilter === "all" || social.platform === platformFilter) &&
     (appFilter === "all" || social.appId === appFilter) &&
@@ -4704,7 +4711,7 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
         <LiquidGlass className="panel dataPanel socialDataNotice"><h2>No public video metrics</h2><span>{formatNumber(socials.length)} handles mapped</span><button className="ghostButton" type="button" disabled title="TikTok public pages do not always expose video stats without auth.">Source limited</button></LiquidGlass>
       )}
       <section className="socialGrid">
-        <SocialTable apps={apps} socials={visibleSocials} videos={visibleVideos} setSocials={setSocials} isFiltered={isFiltered || visibleSocials.length !== socials.length} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} syncingIds={activeLookups} />
+        <SocialTable apps={apps} socials={visibleSocials} videos={visibleVideos} setSocials={setSocials} isFiltered={isFiltered || visibleSocials.length !== socials.length} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} onRemove={removeSocial} syncingIds={activeLookups} />
         <SocialHandleCard apps={apps} social={selectedHandle} videos={visibleVideos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
       </section>
     </section>
@@ -4726,7 +4733,7 @@ function SocialMetricCell({ suffix = "", value, loading }: { suffix?: string; va
   return value ? <>{formatNumber(Math.round(value))}{suffix}</> : <>—</>;
 }
 
-function SocialTable({ apps, socials, videos: periodVideos, setSocials, isFiltered = false, onSelect, onSync, selectedId, syncingIds = new Set<string>() }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean; onSelect?: (id: string) => void; onSync?: (social: SocialAccount) => void; selectedId?: string; syncingIds?: Set<string> }) {
+function SocialTable({ apps, socials, videos: periodVideos, setSocials, isFiltered = false, onSelect, onSync, onRemove, selectedId, syncingIds = new Set<string>() }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean; onSelect?: (id: string) => void; onSync?: (social: SocialAccount) => void; onRemove?: (social: SocialAccount) => void; selectedId?: string; syncingIds?: Set<string> }) {
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No handle matches this search" : "No social handles yet"} text={isFiltered ? "Clear the search or try another handle, platform or mapped app." : "Add a TikTok, Instagram or YouTube handle and map it to an app."} />;
   return (
     <LiquidGlass className="panel dataPanel socialTablePanel">
@@ -4764,7 +4771,7 @@ function SocialTable({ apps, socials, videos: periodVideos, setSocials, isFilter
               <span className="socialMetricNumber"><SocialMetricCell value={shares} loading={loading} /></span>
               <span className="socialMetricNumber"><SocialMetricCell value={favorites} loading={loading} /></span>
               <span className="socialMetricNumber"><SocialMetricCell value={engagement} loading={loading} suffix="%" /></span>
-              <span className="socialManageActions"><button className="ghostButton" type="button" disabled={syncingIds.has(social.id)} onClick={(event) => { event.stopPropagation(); onSync?.(social); }}>{syncingIds.has(social.id) ? "Syncing…" : "Sync"}</button><button className="ghostButton" type="button" onClick={(event) => { event.stopPropagation(); setSocials((rows) => rows.filter((row) => row.id !== social.id)); }}>Remove</button></span>
+              <span className="socialManageActions"><button className="ghostButton" type="button" disabled={syncingIds.has(social.id)} onClick={(event) => { event.stopPropagation(); onSync?.(social); }}>{syncingIds.has(social.id) ? "Syncing…" : "Sync"}</button><button className="ghostButton dangerButton" type="button" onClick={(event) => { event.stopPropagation(); onRemove?.(social); }}>Remove</button></span>
             </div>
           );
         })}
@@ -4844,6 +4851,7 @@ function creatorDealLabel(social: SocialAccount) {
 
 function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
   const totals = videoTotals(videos);
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState("");
   const [savingId, setSavingId] = useState("");
   const [editor, setEditor] = useState({ creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> });
@@ -4852,6 +4860,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
     const views = videoTotals(socialVideos).views;
     return sum + creatorDealCost(social, views);
   }, 0);
+  const selectedCreator = socials.find((social) => social.id === selectedCreatorId);
 
   function editCreator(social: SocialAccount) {
     setEditingId(social.id);
@@ -4893,6 +4902,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
     const response = await fetch(`/api/social-accounts/${encodeURIComponent(social.id)}`, { method: "DELETE" });
     if (!response.ok) return;
     setSocials((rows) => rows.filter((row) => row.id !== social.id));
+    setSelectedCreatorId((current) => current === social.id ? null : current);
   }
 
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No creator matches this search" : "No creators yet"} text={isFiltered ? "Clear the search or try another creator handle." : "Add public handles in Social Tracking to build the creator CRM."} />;
@@ -4961,7 +4971,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
             const dateLabel = Number.isNaN(createdAt.getTime()) ? "—" : createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
             return (
               <div className="tableRow creatorSheetRow" key={`creator-${social.id}`}>
-                <span className="creatorIdentity"><span className="creatorIdentityTop"><strong>{social.creatorName || social.handle.replace(/^@/, "")}</strong><button className="ghostButton compactButton dangerButton" type="button" onClick={() => void deleteCreator(social)}>Delete</button></span><small>{social.handle}</small></span>
+                <span className="creatorIdentity"><span className="creatorIdentityTop"><button className="creatorNameButton" type="button" onClick={() => setSelectedCreatorId(social.id)}>{social.creatorName || social.handle.replace(/^@/, "")}</button><button className="ghostButton compactButton dangerButton" type="button" onClick={() => void deleteCreator(social)}>Delete</button></span><small>{social.handle}</small></span>
                 <span>{social.email || "—"}</span>
                 <span>{app ? appDisplayName(app.name) : "Unmapped"}</span>
                 <span>{social.platform}</span>
@@ -4986,9 +4996,15 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
           })}
         </div>
       </LiquidGlass>
+      {selectedCreator ? <CreatorProfilePanel creator={selectedCreator} app={apps.find((app) => app.id === selectedCreator.appId)} videos={videos.filter((video) => video.socialAccountId === selectedCreator.id)} onClose={() => setSelectedCreatorId(null)} onEdit={() => { setSelectedCreatorId(null); editCreator(selectedCreator); }} onDelete={() => void deleteCreator(selectedCreator)} /> : null}
       {editingId ? <div className="appWizardBackdrop creatorEditorBackdrop" role="presentation"><form className="appWizard creatorEditor" onSubmit={saveCreator} role="dialog" aria-modal="true"><header><div><p className="caption">Creator CRM</p><h2>Edit creator</h2></div><button className="iconButton" type="button" onClick={() => setEditingId("")} aria-label="Close"><X size={20} /></button></header><div className="creatorEditorBody"><div className="creatorFormGrid"><input value={editor.creatorName} onChange={(event) => setEditor((value) => ({ ...value, creatorName: event.target.value }))} placeholder="Creator name" /><input type="email" value={editor.email} onChange={(event) => setEditor((value) => ({ ...value, email: event.target.value }))} placeholder="Email" /><select value={editor.dealType} onChange={(event) => setEditor((value) => ({ ...value, dealType: event.target.value as NonNullable<SocialAccount["dealType"]> }))}><option value="none">No deal</option><option value="fixed">Fixed</option><option value="cpm">CPM</option><option value="hybrid">Hybrid</option></select><input type="number" min="0" step="0.01" value={editor.fixedFee} onChange={(event) => setEditor((value) => ({ ...value, fixedFee: event.target.value }))} placeholder="Fixed fee" /><input type="number" min="0" step="0.01" value={editor.cpmRate} onChange={(event) => setEditor((value) => ({ ...value, cpmRate: event.target.value }))} placeholder="CPM rate" /><select value={editor.dealCurrency} onChange={(event) => setEditor((value) => ({ ...value, dealCurrency: event.target.value }))}><option>USD</option><option>EUR</option><option>GBP</option></select></div><div className="creatorFormGrid trackingFields"><input value={editor.trackingHashtags} onChange={(event) => setEditor((value) => ({ ...value, trackingHashtags: event.target.value }))} placeholder="#hashtags to track" /><input value={editor.trackingKeywords} onChange={(event) => setEditor((value) => ({ ...value, trackingKeywords: event.target.value }))} placeholder="Caption keywords" /><select value={editor.trackingMatch} onChange={(event) => setEditor((value) => ({ ...value, trackingMatch: event.target.value as NonNullable<SocialAccount["trackingMatch"]> }))}><option value="any">Match any</option><option value="all">Match all</option></select></div></div><footer><button className="ghostButton" type="button" onClick={() => setEditingId("")}>Cancel</button><button className="primaryButton" type="submit" disabled={savingId === editingId}>{savingId === editingId ? "Syncing…" : "Save & sync"}</button></footer></form></div> : null}
     </section>
   );
+}
+
+function CreatorProfilePanel({ creator, app, videos, onClose, onEdit, onDelete }: { creator: SocialAccount; app?: StudioApp; videos: CreatorVideo[]; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
+  const totals = videoTotals(videos);
+  return <div className="creatorProfileBackdrop" role="presentation" onMouseDown={onClose}><aside className="creatorProfilePanel" role="dialog" aria-modal="true" aria-label={`${creator.creatorName || creator.handle} profile`} onMouseDown={(event) => event.stopPropagation()}><header className="creatorProfileHeader"><div><p className="caption">Creator profile</p><h2>{creator.creatorName || creator.handle.replace(/^@/, "")}</h2><span>{creator.handle} · {creator.platform}</span></div><button className="iconButton" type="button" onClick={onClose} aria-label="Close creator profile"><X size={20} /></button></header><div className="creatorProfileStats"><span><strong>{formatNumber(totals.videos)}</strong><small>Videos</small></span><span><strong>{formatNumber(totals.views)}</strong><small>Views</small></span><span><strong>{formatNumber(totals.likes)}</strong><small>Likes</small></span><span><strong>{totals.engagement.toFixed(1)}%</strong><small>Engagement</small></span></div><div className="creatorProfileInfo"><div><small>App</small><strong>{app ? appDisplayName(app.name) : "Unmapped"}</strong></div><div><small>Contact</small><strong>{creator.email || "No email"}</strong></div><div><small>Deal</small><strong>{creatorDealLabel(creator)}</strong></div><div><small>Tracking rules</small><strong>{[creator.trackingHashtags, creator.trackingKeywords].filter(Boolean).join(" · ") || "All public videos"}</strong></div></div><div className="creatorProfileVideos"><div className="panelHeader"><div><p className="caption">Content</p><h3>Tracked videos</h3></div><span className="pill">{videos.length}</span></div>{videos.length ? videos.slice(0, 12).map((video) => <a href={video.url || "#"} target="_blank" rel="noreferrer" key={`creator-profile-video-${video.id}`}>{video.thumbnailUrl ? <Image src={video.thumbnailUrl} alt="" width={44} height={56} unoptimized /> : <i><Clapperboard size={17} /></i>}<span><strong>{video.title || "Tracked video"}</strong><small>{formatNumber(video.views)} views · {video.publishedAt ? formatDateLabel(video.publishedAt.slice(0, 10)) : "Date unknown"}</small></span></a>) : <p className="settingsEmpty">No tracked videos in this period.</p>}</div><footer className="creatorProfileFooter"><button className="ghostButton" type="button" onClick={onEdit}>Edit details</button><button className="ghostButton dangerButton" type="button" onClick={onDelete}>Delete creator</button></footer></aside></div>;
 }
 
 function EmptyPanel({ title, text }: { title: string; text: string }) {

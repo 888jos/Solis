@@ -7826,6 +7826,89 @@ h2 {
   font-weight: 620;
 }
 
+.creatorNameButton {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fffaf2;
+  font: inherit;
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+}
+
+.creatorNameButton:hover { color: var(--orange-2); }
+
+.creatorProfileBackdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, .64);
+  backdrop-filter: blur(8px);
+}
+
+.creatorProfilePanel {
+  width: min(520px, 100vw);
+  height: 100%;
+  overflow-y: auto;
+  padding: 28px;
+  border-left: 1px solid rgba(215, 173, 92, .28);
+  background: #111113;
+  box-shadow: -20px 0 60px rgba(0, 0, 0, .36);
+}
+
+.creatorProfileHeader,
+.creatorProfileFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.creatorProfileHeader h2 { margin: 4px 0 6px; font-size: 28px; }
+.creatorProfileHeader span { color: var(--viral-muted); }
+
+.creatorProfileStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 26px 0;
+}
+
+.creatorProfileStats span,
+.creatorProfileInfo > div {
+  display: grid;
+  gap: 6px;
+  padding: 13px;
+  border: 1px solid var(--viral-border);
+  border-radius: 10px;
+  background: #080809;
+}
+
+.creatorProfileStats strong { font-size: 20px; color: #fffaf2; }
+.creatorProfileStats small,
+.creatorProfileInfo small { color: var(--viral-muted); font-size: 12px; }
+
+.creatorProfileInfo { display: grid; gap: 8px; }
+.creatorProfileInfo strong { overflow-wrap: anywhere; font-size: 14px; }
+.creatorProfileVideos { margin-top: 28px; }
+.creatorProfileVideos h3 { margin: 0; font-size: 20px; }
+.creatorProfileVideos a { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--viral-border); }
+.creatorProfileVideos img,
+.creatorProfileVideos i { width: 44px; height: 56px; object-fit: cover; border-radius: 7px; background: #050506; display: grid; place-items: center; }
+.creatorProfileVideos a > span { display: grid; gap: 4px; min-width: 0; }
+.creatorProfileVideos a strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creatorProfileVideos a small { color: var(--viral-muted); }
+.creatorProfileFooter { align-items: center; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--viral-border); }
+
+@media (max-width: 760px) {
+  .creatorProfilePanel { padding: 20px; }
+  .creatorProfileStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .creatorIdentity small,
 .creatorSheetEmpty {
   color: rgba(255, 255, 255, 0.48);

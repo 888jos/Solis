@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { socialAccounts } from "@/db/schema";
+import { creatorVideos, creators, socialAccounts } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { fail, now, ok, readJson } from "@/server/backend/http";
 
@@ -51,7 +51,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const session = await getOrCreateLocalSession();
     const { id } = await context.params;
     const db = await getDb();
+    const [account] = await db.select().from(socialAccounts).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId))).limit(1);
+    if (!account) return fail(404, "social_account_not_found", "Creator was not found.");
+    await db.delete(creatorVideos).where(and(eq(creatorVideos.socialAccountId, id), eq(creatorVideos.workspaceId, session.workspaceId)));
     await db.delete(socialAccounts).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId)));
+    await db.delete(creators).where(and(eq(creators.workspaceId, session.workspaceId), eq(creators.platform, account.platform), eq(creators.handle, account.handle)));
     return ok({ id });
   } catch (error) {
     return fail(500, "social_account_delete_failed", error instanceof Error ? error.message : "Creator could not be deleted.");
