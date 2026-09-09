@@ -2575,6 +2575,9 @@ input::placeholder {
 .socialFilterBar label { display: grid; gap: 6px; }
 .socialFilterBar label span { color: rgba(255,255,255,.5); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .socialFilterBar select { min-height: 42px; padding: 0 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; background: #09090a; color: #fffaf2; font: inherit; }
+.filterSummary { display: flex; align-items: center; gap: 8px; padding: 0 6px; color: var(--viral-muted); }
+.filterSummary strong { color: #fffaf2; font-size: 22px; }
+.filterSummary span { font-size: 13px; }
 .creatorIdentityTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .creatorIdentityTop .compactButton { opacity: .9; }
 
@@ -7812,6 +7815,22 @@ h2 {
 
 .creatorSheetRow {
   min-height: 74px;
+}
+
+.socialMetricsHead > span:first-child,
+.socialMetricsRow > span:first-child,
+.creatorSheetHead > span:first-child,
+.creatorSheetRow > span:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #0b0b0d;
+}
+
+.socialMetricsRow:hover > span:first-child,
+.socialMetricsRow.isSelected > span:first-child,
+.creatorSheetRow:hover > span:first-child {
+  background: #12100c;
 }
 
 .creatorIdentity {

@@ -4850,17 +4850,25 @@ function creatorDealLabel(social: SocialAccount) {
 }
 
 function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
-  const totals = videoTotals(videos);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
+  const [platformFilter, setPlatformFilter] = useState("all");
+  const [appFilter, setAppFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState("");
   const [savingId, setSavingId] = useState("");
   const [editor, setEditor] = useState({ creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> });
-  const totalCost = socials.reduce((sum, social) => {
+  const visibleCreators = socials.filter((social) =>
+    (platformFilter === "all" || social.platform === platformFilter) &&
+    (appFilter === "all" || social.appId === appFilter) &&
+    (statusFilter === "all" || creatorStatus(social) === statusFilter),
+  );
+  const totals = videoTotals(videos.filter((video) => visibleCreators.some((social) => social.id === video.socialAccountId)));
+  const totalCost = visibleCreators.reduce((sum, social) => {
     const socialVideos = videos.filter((video) => video.socialAccountId === social.id);
     const views = videoTotals(socialVideos).views;
     return sum + creatorDealCost(social, views);
   }, 0);
-  const selectedCreator = socials.find((social) => social.id === selectedCreatorId);
+  const selectedCreator = visibleCreators.find((social) => social.id === selectedCreatorId);
 
   function editCreator(social: SocialAccount) {
     setEditingId(social.id);
@@ -4909,6 +4917,12 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
 
   return (
     <section className="creatorsCrmPage">
+      <div className="socialFilterBar creatorFilterBar" aria-label="Creator CRM filters">
+        <label><span>Platform</span><select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="all">All platforms</option><option>TikTok</option><option>Instagram</option><option>YouTube</option></select></label>
+        <label><span>App</span><select value={appFilter} onChange={(event) => setAppFilter(event.target.value)}><option value="all">All apps</option>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select></label>
+        <label><span>Status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option>Tracked</option><option>Syncing</option><option>Source limited</option></select></label>
+        <div className="filterSummary"><strong>{formatNumber(visibleCreators.length)}</strong><span>matching creators</span></div>
+      </div>
       <section className="moduleMatrix creatorCrmStats">
         <LiquidGlass className="panel moduleCard">
           <span className="cardAccentRail" aria-hidden="true" />
@@ -4935,7 +4949,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
       <LiquidGlass className="panel dataPanel creatorSheetPanel">
         <div className="panelHeader">
           <div><p className="caption">Sheet</p><h2>Creator tracking</h2></div>
-          <span className="pill">{formatNumber(socials.length)} rows</span>
+          <span className="pill">{formatNumber(visibleCreators.length)} rows</span>
         </div>
         <div className="table creatorSheetTable">
           <div className="tableRow tableHead creatorSheetHead">
@@ -4960,7 +4974,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
             <span>Last update</span>
             <span>Manage</span>
           </div>
-          {socials.map((social) => {
+          {visibleCreators.map((social) => {
             const app = apps.find((row) => row.id === social.appId);
             const socialVideos = videos.filter((video) => video.socialAccountId === social.id);
             const socialVideoTotals = videoTotals(socialVideos);
