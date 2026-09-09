@@ -1633,8 +1633,11 @@ export default function Home() {
     generalSocialSyncAttempted.current = true;
     void fetch("/api/social-sync", { method: "POST" })
       .then((response) => response.json())
-      .then(async (payload: { skipped?: boolean }) => {
+      .then(async (payload: { skipped?: boolean; accounts?: Array<{ id: string; platform: string; handle: string }> }) => {
         if (payload.skipped) return;
+        for (const account of payload.accounts ?? []) {
+          await fetch(`/api/social-profile?platform=${encodeURIComponent(account.platform)}&handle=${encodeURIComponent(account.handle)}&accountId=${encodeURIComponent(account.id)}`, { method: "POST" });
+        }
         const [socialsResponse, videosResponse] = await Promise.all([
           fetch(`/api/social-accounts?workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}`, { cache: "no-store" }),
           fetch(`/api/creator-videos?workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}`, { cache: "no-store" }),
@@ -1923,6 +1926,7 @@ export default function Home() {
     const handle = normalizeHandle(socialForm.handle);
     if (!handle) return;
     const draftSocial: SocialAccount = { id: `${socialForm.platform}-${handle}-${Date.now()}`, handle, platform: socialForm.platform, appId: selectedAppId, creatorName: socialForm.creatorName.trim() || handle.replace(/^@/, ""), email: socialForm.email.trim(), dealType: socialForm.dealType, fixedFee: Number(socialForm.fixedFee) || 0, cpmRate: Number(socialForm.cpmRate) || 0, dealCurrency: socialForm.dealCurrency, trackingHashtags: socialForm.trackingHashtags, trackingKeywords: socialForm.trackingKeywords, trackingMatch: socialForm.trackingMatch, status: "Not synced", createdAt: new Date().toISOString() };
+    let persistedId = draftSocial.id;
     setSocials((current) => {
       const exists = current.some((row) => row.platform === socialForm.platform && normalizeHandle(row.handle) === handle);
       if (exists) return current;
@@ -1934,28 +1938,28 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         method: "POST",
       });
-      const payload = await response.json() as { ok?: boolean; data?: { socialAccount?: SocialAccount } };
+      const payload = await response.json() as { ok?: boolean; data?: { duplicate?: boolean; socialAccount?: SocialAccount }; error?: { message?: string } };
+      if (!response.ok || !payload.ok || !payload.data?.socialAccount) throw new Error(payload.error?.message || "Creator could not be saved");
       if (response.ok && payload.ok && payload.data?.socialAccount) {
         const saved = payload.data.socialAccount;
+        persistedId = saved.id;
         const syncingSocial: SocialAccount = {
           ...saved,
           platform: socialForm.platform,
           status: "Provider pending",
         };
         setSocials((current) => current.map((row) => row.id === draftSocial.id ? syncingSocial : row));
-        void fetch(`/api/social-profile?platform=${encodeURIComponent(syncingSocial.platform)}&handle=${encodeURIComponent(syncingSocial.handle)}&accountId=${encodeURIComponent(syncingSocial.id)}`, { method: "POST" })
-          .then(async (syncResponse) => ({ response: syncResponse, profile: await syncResponse.json() as Partial<SocialAccount> & { videos?: SocialProfileVideo[]; videoMetricsReady?: boolean } }))
-          .then(({ response: syncResponse, profile }) => {
-            if (!syncResponse.ok) return;
-            const synced = { ...syncingSocial, ...profile, status: profile.videoMetricsReady ? "Ready for public tracking" as const : "No public metrics" as const };
-            setSocials((current) => current.map((row) => row.id === syncingSocial.id ? synced : row));
-            const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
-            setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== syncingSocial.id)]);
-          })
-          .catch(() => undefined);
+        const syncResponse = await fetch(`/api/social-profile?platform=${encodeURIComponent(syncingSocial.platform)}&handle=${encodeURIComponent(syncingSocial.handle)}&accountId=${encodeURIComponent(syncingSocial.id)}`, { method: "POST" });
+        const profile = await syncResponse.json() as Partial<SocialAccount> & { error?: string; videos?: SocialProfileVideo[]; videoMetricsReady?: boolean };
+        if (!syncResponse.ok) throw new Error(profile.error || `Could not sync ${syncingSocial.handle}`);
+        const synced = { ...syncingSocial, ...profile, status: profile.videoMetricsReady ? "Ready for public tracking" as const : "No public metrics" as const };
+        setSocials((current) => current.map((row) => row.id === syncingSocial.id ? synced : row));
+        const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
+        setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== syncingSocial.id)]);
       }
-    } catch {
-      // Keep the local row as a draft if the local backend is temporarily down.
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : `Could not sync ${handle}`);
+      setSocials((current) => current.map((row) => row.id === persistedId || row.id === draftSocial.id ? { ...row, status: "Not synced" } : row));
     }
     setSocialForm({ ...emptySocialForm, appId: selectedAppId });
     setSocialFormOpen(false);

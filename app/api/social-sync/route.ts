@@ -8,7 +8,7 @@ const GLOBAL_SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+export async function POST() {
   const session = await getOrCreateLocalSession();
   const db = await getDb();
   const [latest] = await db.select().from(syncJobs).where(and(
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     provider: "apify",
     kind: "social_global",
     dateRange: "90d",
-    status: "running",
+    status: "queued",
     recordsRead: 0,
     recordsWritten: 0,
     message: "Manual-safe 12-hour social refresh",
@@ -41,27 +41,10 @@ export async function POST(request: Request) {
   });
 
   const accounts = await db.select().from(socialAccounts).where(eq(socialAccounts.workspaceId, session.workspaceId));
-  const cookie = request.headers.get("cookie") || "";
-  const origin = new URL(request.url).origin;
-  const results = await Promise.allSettled(accounts.map(async (account) => {
-    const url = new URL("/api/social-profile", origin);
-    url.searchParams.set("platform", account.platform);
-    url.searchParams.set("handle", account.handle);
-    url.searchParams.set("accountId", account.id);
-    const response = await fetch(url, { method: "POST", headers: cookie ? { cookie } : undefined });
-    if (!response.ok && response.status !== 429) throw new Error(`Sync failed for ${account.handle}`);
-    return response.status;
-  }));
-  const succeeded = results.filter((result) => result.status === "fulfilled").length;
-  const failed = results.length - succeeded;
-  await db.update(syncJobs).set({
-    status: failed ? "retryable" : "success",
-    recordsRead: accounts.length,
-    recordsWritten: succeeded,
-    message: failed ? `${failed} account syncs failed` : `${succeeded} accounts refreshed`,
-    updatedAt: now(),
-  }).where(eq(syncJobs.id, jobId));
-
-  return Response.json({ ok: true, skipped: false, synced: succeeded, failed });
+  return Response.json({
+    ok: true,
+    skipped: false,
+    jobId,
+    accounts: accounts.map((account) => ({ id: account.id, platform: account.platform, handle: account.handle })),
+  });
 }
-
