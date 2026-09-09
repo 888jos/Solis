@@ -18,6 +18,16 @@ type SocialAccountPatch = {
   trackingMatch?: string;
 };
 
+function videoMatchesRules(title: string, hashtags: string, keywords: string, match: string) {
+  const normalizedTitle = title.toLowerCase();
+  const conditions = [
+    ...hashtags.split(",").map((value) => value.trim().replace(/^#+/, "")).filter(Boolean).map((tag) => normalizedTitle.includes(`#${tag.toLowerCase()}`) || new RegExp(`(^|\\s)${tag.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}($|\\s)`, "i").test(title)),
+    ...keywords.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean).map((keyword) => normalizedTitle.includes(keyword)),
+  ];
+  if (!conditions.length) return true;
+  return match === "all" ? conditions.every(Boolean) : conditions.some(Boolean);
+}
+
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -38,6 +48,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       trackingMatch: body?.trackingMatch === "all" ? "all" : "any",
       updatedAt: now(),
     }).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId)));
+    const currentVideos = await db.select({ id: creatorVideos.id, title: creatorVideos.title }).from(creatorVideos).where(and(eq(creatorVideos.socialAccountId, id), eq(creatorVideos.workspaceId, session.workspaceId)));
+    for (const video of currentVideos) {
+      if (!videoMatchesRules(video.title || "", body?.trackingHashtags?.trim() || "", body?.trackingKeywords?.trim() || "", body?.trackingMatch === "all" ? "all" : "any")) {
+        await db.delete(creatorVideos).where(eq(creatorVideos.id, video.id));
+      }
+    }
     const [socialAccount] = await db.select().from(socialAccounts).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId))).limit(1);
     if (!socialAccount) return fail(404, "social_account_not_found", "Creator was not found.");
     return ok({ socialAccount });

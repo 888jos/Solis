@@ -2130,7 +2130,7 @@ export default function Home() {
     if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={periodCreatorVideos} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
     if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "quality") return <QualityPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -4849,7 +4849,7 @@ function creatorDealLabel(social: SocialAccount) {
   return "No deal";
 }
 
-function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
+function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
   const [platformFilter, setPlatformFilter] = useState("all");
   const [appFilter, setAppFilter] = useState("all");
@@ -4899,6 +4899,9 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
       if (!response.ok) throw new Error("Creator update failed");
       const updated = { ...social, ...editor, fixedFee: Number(editor.fixedFee) || 0, cpmRate: Number(editor.cpmRate) || 0 };
       setSocials((rows) => rows.map((row) => row.id === social.id ? updated : row));
+      const videosResponse = await fetch(`/api/creator-videos?socialAccountId=${encodeURIComponent(social.id)}`, { cache: "no-store" });
+      const videosPayload = await videosResponse.json() as { data?: { videos?: CreatorVideo[] } };
+      if (videosResponse.ok && videosPayload.data?.videos) setCreatorVideos((rows) => [...videosPayload.data!.videos!, ...rows.filter((video) => video.socialAccountId !== social.id)]);
       setEditingId("");
     } finally {
       setSavingId("");
@@ -4910,6 +4913,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
     const response = await fetch(`/api/social-accounts/${encodeURIComponent(social.id)}`, { method: "DELETE" });
     if (!response.ok) return;
     setSocials((rows) => rows.filter((row) => row.id !== social.id));
+    setCreatorVideos((rows) => rows.filter((video) => video.socialAccountId !== social.id));
     setSelectedCreatorId((current) => current === social.id ? null : current);
   }
 
