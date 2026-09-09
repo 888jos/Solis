@@ -410,6 +410,17 @@ function previousDateRangeKey(dateRange: string) {
   const previousStart = addUtcDays(previousEnd, -current.count + 1);
   return customRangeKey(isoDay(previousStart), isoDay(previousEnd));
 }
+
+function videoIsInDateRange(video: CreatorVideo, dateRange: string) {
+  if (dateRange === "all") return true;
+  if (!video.publishedAt) return false;
+  const custom = dateRange.match(/^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/);
+  const presetDays: Record<string, number> = { today: 1, yesterday: 1, "7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365 };
+  const end = custom ? parseIsoDay(custom[2]) : parseIsoDay(isoDateOffset(dateRange === "yesterday" ? -1 : 0));
+  const start = custom ? parseIsoDay(custom[1]) : end && presetDays[dateRange] ? addUtcDays(end, -presetDays[dateRange] + 1) : null;
+  const publishedDay = parseIsoDay(video.publishedAt.slice(0, 10));
+  return Boolean(start && end && publishedDay && publishedDay >= start && publishedDay <= end);
+}
 const InteractiveGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 const knownApps = {
   cocorise: {
@@ -1782,6 +1793,14 @@ export default function Home() {
       return [social.handle, social.platform, social.status, mappedApp].join(" ").toLowerCase().includes(normalizedSearch);
     });
   }, [apps, normalizedSearch, scopedSocials]);
+  const scopedCreatorVideos = useMemo(
+    () => creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId)),
+    [creatorVideos, scopedApps],
+  );
+  const periodCreatorVideos = useMemo(
+    () => scopedCreatorVideos.filter((video) => videoIsInDateRange(video, dateRange)),
+    [dateRange, scopedCreatorVideos],
+  );
 
   const workspaceSearchResults = useMemo(() => {
     const navItems = navSections.flatMap((section) => section.items);
@@ -2110,10 +2129,10 @@ export default function Home() {
     if (activePage === "monetization") return <MonetizationPage apps={scopedApps} metrics={currentMetrics} isSyncing={Boolean(syncingAppId)} setActivePage={openPage} />;
     if (activePage === "acquisition") return <AnalyticsPage kind="acquisition" apps={scopedApps} metrics={currentMetrics} previousMetrics={previousMetrics} previousPeriodAvailable={Boolean(previousDateRange)} syncingAppId={syncingAppId} syncError={syncError} setActivePage={openPage} />;
     if (activePage === "aso") return <AsoPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
-    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
-    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={creatorVideos.filter((video) => scopedApps.some((app) => app.id === video.appId))} setSocials={setSocials} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={periodCreatorVideos} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
+    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "quality") return <QualityPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -4569,11 +4588,6 @@ function socialTotals(socials: SocialAccount[]) {
   return { avgViews, comments, engagement, favorites, likes, shares, videos, views };
 }
 
-function socialTrendValues(socials: SocialAccount[], key: SocialMetricKey) {
-  const values = socials.map((social) => socialMetricValue(social, key)).filter((value) => value > 0);
-  return values.length ? values : [];
-}
-
 function isSocialLoading(social: SocialAccount) {
   return social.status === "Provider pending";
 }
@@ -4622,7 +4636,7 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
     }
   }
 
-  const totals = socialTotals(socials);
+  const totals = videoTotals(videos);
   const selectedHandle = socials.find((social) => social.id === selectedHandleId) ?? socials[0];
   const hasMetrics = totals.videos > 0 || totals.views > 0 || totals.likes > 0 || totals.comments > 0 || totals.shares > 0 || totals.favorites > 0 || totals.engagement > 0;
   const isLoading = activeLookups.size > 0 || socials.some(isSocialLoading);
@@ -4633,14 +4647,14 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
     return isLoading || socials.some((social) => lookupIds.has(social.id) || (social.platform === "TikTok" && social.status === "No public metrics" && !hasDetailedSocialMetrics(social) && key !== "videos" && key !== "likes"));
   };
   const metricCards = [
-    { key: "videos" as const, title: "Videos", value: socialMetricDisplay(totals.videos, metricIsLoading("videos", totals.videos)), values: socialTrendValues(socials, "videos") },
-    { key: "views" as const, title: "Views", value: socialMetricDisplay(totals.views, metricIsLoading("views", totals.views)), values: socialTrendValues(socials, "views") },
-    { key: "avgViews" as const, title: "Avg views", value: socialMetricDisplay(totals.avgViews, metricIsLoading("avgViews", totals.avgViews)), values: socialTrendValues(socials, "avgViews") },
-    { key: "likes" as const, title: "Likes", value: socialMetricDisplay(totals.likes, metricIsLoading("likes", totals.likes)), values: socialTrendValues(socials, "likes") },
-    { key: "comments" as const, title: "Comments", value: socialMetricDisplay(totals.comments, metricIsLoading("comments", totals.comments)), values: socialTrendValues(socials, "comments") },
-    { key: "shares" as const, title: "Shares", value: socialMetricDisplay(totals.shares, metricIsLoading("shares", totals.shares)), values: socialTrendValues(socials, "shares") },
-    { key: "favorites" as const, title: "Favorites", value: socialMetricDisplay(totals.favorites, metricIsLoading("favorites", totals.favorites)), values: socialTrendValues(socials, "favorites") },
-    { key: "engagement" as const, title: "Engagement", value: socialMetricDisplay(totals.engagement, metricIsLoading("engagement", totals.engagement), "%"), values: socialTrendValues(socials, "engagement") },
+    { key: "videos" as const, title: "Videos", value: socialMetricDisplay(totals.videos, metricIsLoading("videos", totals.videos)) },
+    { key: "views" as const, title: "Views", value: socialMetricDisplay(totals.views, metricIsLoading("views", totals.views)) },
+    { key: "avgViews" as const, title: "Avg views", value: socialMetricDisplay(totals.avgViews, metricIsLoading("avgViews", totals.avgViews)) },
+    { key: "likes" as const, title: "Likes", value: socialMetricDisplay(totals.likes, metricIsLoading("likes", totals.likes)) },
+    { key: "comments" as const, title: "Comments", value: socialMetricDisplay(totals.comments, metricIsLoading("comments", totals.comments)) },
+    { key: "shares" as const, title: "Shares", value: socialMetricDisplay(totals.shares, metricIsLoading("shares", totals.shares)) },
+    { key: "favorites" as const, title: "Favorites", value: socialMetricDisplay(totals.favorites, metricIsLoading("favorites", totals.favorites)) },
+    { key: "engagement" as const, title: "Engagement", value: socialMetricDisplay(totals.engagement, metricIsLoading("engagement", totals.engagement), "%") },
   ];
 
   if (!socials.length) {
@@ -4658,15 +4672,15 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
           </LiquidGlass>
         ))}
       </section>
-      {hasMetrics && !(isLoading && !socialTrendValues(socials, selectedMetric).length) ? (
-        <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend`} value={socialMetricText(socialMetricValue({ id: "total", handle: "total", platform: "TikTok", appId: "all", createdAt: "", status: "Ready for public tracking", posts: totals.videos, avgViews: totals.avgViews, likes: totals.likes, comments: totals.comments, shares: totals.shares, favorites: totals.favorites, engagementRate: totals.engagement }, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos tracked`} points={socials.map((social) => ({ label: social.handle, value: socialMetricValue(social, selectedMetric) }))} variant="number" currency="USD" />
+      {hasMetrics ? (
+        <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos published in period`} points={socials.map((social) => ({ label: social.handle, value: videoTotalMetric(videoTotals(videos.filter((video) => video.socialAccountId === social.id)), selectedMetric) }))} variant="number" currency="USD" />
       ) : isLoading ? (
         <SocialDataSkeleton count={loadingCount} />
       ) : (
         <LiquidGlass className="panel dataPanel socialDataNotice"><h2>No public video metrics</h2><span>{formatNumber(socials.length)} handles mapped</span><button className="ghostButton" type="button" disabled title="TikTok public pages do not always expose video stats without auth.">Source limited</button></LiquidGlass>
       )}
       <section className="socialGrid">
-      <SocialTable apps={apps} socials={socials} setSocials={setSocials} isFiltered={isFiltered} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} syncingIds={activeLookups} />
+      <SocialTable apps={apps} socials={socials} videos={videos} setSocials={setSocials} isFiltered={isFiltered} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} syncingIds={activeLookups} />
         <SocialHandleCard apps={apps} social={selectedHandle} videos={videos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
       </section>
     </section>
@@ -4688,7 +4702,7 @@ function SocialMetricCell({ suffix = "", value, loading }: { suffix?: string; va
   return value ? <>{formatNumber(Math.round(value))}{suffix}</> : <>—</>;
 }
 
-function SocialTable({ apps, socials, setSocials, isFiltered = false, onSelect, onSync, selectedId, syncingIds = new Set<string>() }: { apps: StudioApp[]; socials: SocialAccount[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean; onSelect?: (id: string) => void; onSync?: (social: SocialAccount) => void; selectedId?: string; syncingIds?: Set<string> }) {
+function SocialTable({ apps, socials, videos: periodVideos, setSocials, isFiltered = false, onSelect, onSync, selectedId, syncingIds = new Set<string>() }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean; onSelect?: (id: string) => void; onSync?: (social: SocialAccount) => void; selectedId?: string; syncingIds?: Set<string> }) {
   if (!socials.length) return <EmptyPanel title={isFiltered ? "No handle matches this search" : "No social handles yet"} text={isFiltered ? "Clear the search or try another handle, platform or mapped app." : "Add a TikTok, Instagram or YouTube handle and map it to an app."} />;
   return (
     <LiquidGlass className="panel dataPanel socialTablePanel">
@@ -4697,14 +4711,9 @@ function SocialTable({ apps, socials, setSocials, isFiltered = false, onSelect, 
         <div className="tableRow tableHead socialMetricsHead"><span>Handle</span><span>Platform</span><span>App</span><span>Videos</span><span>Views</span><span>Avg views</span><span>Likes</span><span>Comments</span><span>Shares</span><span>Favorites</span><span>Engagement</span><span>Manage</span></div>
         {socials.map((social) => {
           const app = apps.find((row) => row.id === social.appId);
-          const videos = socialMetricValue(social, "videos");
-          const views = socialMetricValue(social, "views");
-          const avgViews = socialMetricValue(social, "avgViews");
-          const likes = socialMetricValue(social, "likes");
-          const comments = socialMetricValue(social, "comments");
-          const shares = socialMetricValue(social, "shares");
-          const favorites = socialMetricValue(social, "favorites");
-          const engagement = socialMetricValue(social, "engagement");
+          const totals = videoTotals(periodVideos.filter((video) => video.socialAccountId === social.id));
+          const videos = totals.videos;
+          const { views, avgViews, likes, comments, shares, favorites, engagement } = totals;
           const isSelected = selectedId === social.id;
           const loading = isSocialLoading(social);
           return (
@@ -4750,17 +4759,16 @@ function videoTotals(videos: CreatorVideo[]) {
   return { avgViews: videos.length && views ? views / videos.length : 0, comments, engagement, favorites, likes, shares, videos: videos.length, views };
 }
 
+function videoTotalMetric(totals: ReturnType<typeof videoTotals>, key: SocialMetricKey) {
+  return totals[key];
+}
+
 function SocialHandleCard({ apps, social, videos }: { apps: StudioApp[]; social?: SocialAccount; videos: CreatorVideo[] }) {
   if (!social) return <LiquidGlass className="panel dataPanel socialHandleDetail"><h2>Select a handle</h2></LiquidGlass>;
   const app = apps.find((row) => row.id === social.appId);
-  const totals = videos.length ? videoTotals(videos) : null;
-  const videoCount = totals?.videos ?? socialMetricValue(social, "videos");
-  const views = totals?.views ?? socialMetricValue(social, "views");
-  const likes = totals?.likes ?? socialMetricValue(social, "likes");
-  const comments = totals?.comments ?? socialMetricValue(social, "comments");
-  const shares = totals?.shares ?? socialMetricValue(social, "shares");
-  const favorites = totals?.favorites ?? socialMetricValue(social, "favorites");
-  const engagement = totals?.engagement ?? socialMetricValue(social, "engagement");
+  const totals = videoTotals(videos);
+  const videoCount = totals.videos;
+  const { views, likes, comments, shares, favorites, engagement } = totals;
   const loading = isSocialLoading(social);
   return (
     <LiquidGlass className="panel dataPanel socialHandleDetail">
@@ -4811,15 +4819,13 @@ function creatorDealLabel(social: SocialAccount) {
 }
 
 function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; isFiltered?: boolean }) {
-  const videoBackedTotals = videoTotals(videos);
-  const socialBackedTotals = socialTotals(socials);
-  const totals = videos.length ? videoBackedTotals : socialBackedTotals;
+  const totals = videoTotals(videos);
   const [editingId, setEditingId] = useState("");
   const [savingId, setSavingId] = useState("");
   const [editor, setEditor] = useState({ creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> });
   const totalCost = socials.reduce((sum, social) => {
     const socialVideos = videos.filter((video) => video.socialAccountId === social.id);
-    const views = socialVideos.length ? videoTotals(socialVideos).views : socialMetricValue(social, "views");
+    const views = videoTotals(socialVideos).views;
     return sum + creatorDealCost(social, views);
   }, 0);
 
@@ -4918,7 +4924,7 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
             const socialVideos = videos.filter((video) => video.socialAccountId === social.id);
             const socialVideoTotals = videoTotals(socialVideos);
             const loading = isSocialLoading(social);
-            const views = socialVideos.length ? socialVideoTotals.views : socialMetricValue(social, "views");
+            const views = socialVideoTotals.views;
             const dealCost = creatorDealCost(social, views);
             const createdAt = new Date(social.createdAt);
             const dateLabel = Number.isNaN(createdAt.getTime()) ? "—" : createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -4932,14 +4938,14 @@ function Creators({ apps, socials, videos, setSocials, isFiltered = false }: { a
                 <span><small>{[social.trackingHashtags, social.trackingKeywords].filter(Boolean).join(" · ") || "All videos"}</small></span>
                 <span><b className={social.status === "Ready for public tracking" ? "statusOk" : "statusDraft"}>{creatorStatus(social)}</b></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={social.followers ?? 0} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length || socialMetricValue(social, "videos")} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.videos} loading={loading} /></span>
                 <span className="socialMetricNumber"><SocialMetricCell value={views} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.avgViews : socialMetricValue(social, "avgViews")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.likes : socialMetricValue(social, "likes")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.comments : socialMetricValue(social, "comments")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.shares : socialMetricValue(social, "shares")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.favorites : socialMetricValue(social, "favorites")} loading={loading} /></span>
-                <span className="socialMetricNumber"><SocialMetricCell value={socialVideos.length ? socialVideoTotals.engagement : socialMetricValue(social, "engagement")} loading={loading} suffix="%" /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.avgViews} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.likes} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.comments} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.shares} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.favorites} loading={loading} /></span>
+                <span className="socialMetricNumber"><SocialMetricCell value={socialVideoTotals.engagement} loading={loading} suffix="%" /></span>
                 <span>{dealCost ? formatCurrency(dealCost, social.dealCurrency || "USD") : "—"}</span>
                 <span>{views && dealCost ? formatUnitCurrency((dealCost / views) * 1000, social.dealCurrency || "USD") : "—"}</span>
                 <span>{social.lastSyncedAt ? new Date(social.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : dateLabel}</span>

@@ -476,10 +476,11 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
     });
   }
 
-  await db.delete(creatorVideos).where(and(
+  const existingVideos = await db.select({ id: creatorVideos.id }).from(creatorVideos).where(and(
     eq(creatorVideos.workspaceId, session.workspaceId),
     eq(creatorVideos.socialAccountId, accountId),
   ));
+  const existingVideoIds = new Set(existingVideos.map((video) => video.id));
 
   for (const video of profile.videos ?? []) {
     const remoteVideoId = String(video.id || video.url || crypto.randomUUID());
@@ -504,10 +505,14 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
       attributedInstalls: 0,
       updatedAt: timestamp,
     };
-    await db.insert(creatorVideos).values({
-      id: videoId,
-      ...videoValues,
-      createdAt: timestamp,
-    });
+    if (existingVideoIds.has(videoId)) {
+      await db.update(creatorVideos).set(videoValues).where(eq(creatorVideos.id, videoId));
+    } else {
+      await db.insert(creatorVideos).values({
+        id: videoId,
+        ...videoValues,
+        createdAt: timestamp,
+      });
+    }
   }
 }
