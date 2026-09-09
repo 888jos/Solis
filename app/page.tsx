@@ -256,6 +256,8 @@ type AiMessage = {
   text: string;
 };
 
+type SyncNotice = { kind: "error" | "info" | "success"; title: string; detail: string };
+
 type VoiceRecognitionEvent = {
   results: { transcript?: string }[][];
 };
@@ -1477,6 +1479,7 @@ export default function Home() {
   const autoSyncAttempts = useRef(new Map<string, number>());
   const [autoSyncRevision, setAutoSyncRevision] = useState(0);
   const [syncError, setSyncError] = useState("");
+  const [syncNotice, setSyncNotice] = useState<SyncNotice | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState(DEFAULT_DATE_RANGE);
   const previousDateRange = useMemo(() => previousDateRangeKey(dateRange), [dateRange]);
@@ -1640,10 +1643,14 @@ export default function Home() {
   useEffect(() => {
     if (!loaded || !socials.length || generalSocialSyncAttempted.current) return;
     generalSocialSyncAttempted.current = true;
+    setSyncNotice({ kind: "info", title: "Social sync", detail: "Checking the daily Apify refresh…" });
     void fetch("/api/social-sync", { method: "POST" })
       .then((response) => response.json())
-      .then(async (payload: { skipped?: boolean; accounts?: Array<{ id: string; platform: string; handle: string }> }) => {
-        if (payload.skipped) return;
+      .then(async (payload: { skipped?: boolean; accounts?: Array<{ id: string; platform: string; handle: string }>; nextSyncAt?: string }) => {
+        if (payload.skipped) {
+          setSyncNotice({ kind: "success", title: "Social data is up to date", detail: payload.nextSyncAt ? `Next Apify sync ${new Date(payload.nextSyncAt).toLocaleString()}.` : "Daily sync already completed." });
+          return;
+        }
         for (const account of payload.accounts ?? []) {
           await fetch(`/api/social-profile?platform=${encodeURIComponent(account.platform)}&handle=${encodeURIComponent(account.handle)}&accountId=${encodeURIComponent(account.id)}`, { method: "POST" });
         }
@@ -1659,9 +1666,16 @@ export default function Home() {
           status: social.status === "ready" ? "Ready for public tracking" : social.status === "no_public_metrics" ? "No public metrics" : social.status === "syncing" ? "Provider pending" : "Not synced",
         })));
         if (videosPayload.data?.videos) setCreatorVideos(videosPayload.data.videos.map(creatorVideoFromBackend));
+        setSyncNotice({ kind: "success", title: "Apify sync complete", detail: `${payload.accounts?.length ?? 0} creator handles refreshed.` });
       })
-      .catch(() => undefined);
+      .catch(() => setSyncNotice({ kind: "error", title: "Apify sync failed", detail: "Existing data is still available. Retry the creator sync if needed." }));
   }, [loaded, socials.length]);
+
+  useEffect(() => {
+    if (!syncNotice) return;
+    const timer = window.setTimeout(() => setSyncNotice(null), 9000);
+    return () => window.clearTimeout(timer);
+  }, [syncNotice]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1965,7 +1979,8 @@ export default function Home() {
           platform: socialForm.platform,
           status: "Provider pending",
         };
-        setSocials((current) => current.map((row) => row.id === draftSocial.id ? syncingSocial : row));
+        setSocials((current) => [...current.filter((row) => row.id !== draftSocial.id && row.id !== saved.id), syncingSocial]);
+        setSyncNotice({ kind: "info", title: `${syncingSocial.creatorName || syncingSocial.handle} saved`, detail: "Creator sync in progress…" });
         const syncResponse = await fetch(`/api/social-profile?platform=${encodeURIComponent(syncingSocial.platform)}&handle=${encodeURIComponent(syncingSocial.handle)}&accountId=${encodeURIComponent(syncingSocial.id)}`, { method: "POST" });
         const profile = await syncResponse.json() as Partial<SocialAccount> & { error?: string; videos?: SocialProfileVideo[]; videoMetricsReady?: boolean };
         if (!syncResponse.ok) throw new Error(profile.error || `Could not sync ${syncingSocial.handle}`);
@@ -1973,10 +1988,12 @@ export default function Home() {
         setSocials((current) => current.map((row) => row.id === syncingSocial.id ? synced : row));
         const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
         setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== syncingSocial.id)]);
+        setSyncNotice({ kind: "success", title: `${synced.creatorName || synced.handle} is ready`, detail: `${nextVideos.length} videos available in Social Tracking, Creatives and Creators CRM.` });
       }
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : `Could not sync ${handle}`);
       setSocials((current) => current.map((row) => row.id === persistedId || row.id === draftSocial.id ? { ...row, status: "Not synced" } : row));
+      setSyncNotice({ kind: "error", title: `${handle} saved but not synced`, detail: error instanceof Error ? error.message : "The creator is visible, but video sync needs a retry." });
     }
     setSocialForm({ ...emptySocialForm, appId: selectedAppId });
     setSocialFormOpen(false);
@@ -2291,6 +2308,7 @@ export default function Home() {
           </section>
         </div>
       ) : null}
+      {syncNotice ? <div className={`syncNotice syncNotice-${syncNotice.kind}`} role="status"><span className="syncNoticeDot" aria-hidden="true" /><div><strong>{syncNotice.title}</strong><small>{syncNotice.detail}</small></div><button type="button" onClick={() => setSyncNotice(null)} aria-label="Dismiss sync status">×</button></div> : null}
       <AiDock
         input={aiInput}
         isListening={aiListening}
