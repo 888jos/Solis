@@ -469,6 +469,7 @@ type AppFormState = {
   platform: string;
   privateKeyName: string;
   privateKeyPath: string;
+  privateKeyContent: string;
   sku: string;
   vendorNumber: string;
 };
@@ -482,6 +483,7 @@ type BackendApp = {
   developerName?: string | null;
   displayName: string | null;
   id: string;
+  hasPrivateKey?: boolean;
   issuerId?: string | null;
   keyId?: string | null;
   name: string;
@@ -740,8 +742,8 @@ function appFromBackend(row: BackendApp): StudioApp {
     keyId: row.keyId || "",
     issuerId: row.issuerId || "",
     vendorNumber: row.vendorNumber || "",
-    privateKeyName: row.privateKeySecretRef?.split("/").pop() || "",
-    privateKeyPath: row.privateKeySecretRef || "",
+    privateKeyName: row.privateKeySecretRef?.split("/").pop() || (row.hasPrivateKey ? "Apple key securely stored" : ""),
+    privateKeyPath: row.hasPrivateKey && !row.privateKeySecretRef ? "uploaded-key" : row.privateKeySecretRef || "",
     status: "Missing credentials",
     createdAt,
   };
@@ -1496,7 +1498,7 @@ export default function Home() {
   const [aiListening, setAiListening] = useState(false);
   const [aiInput, setAiInput] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([{ id: "welcome", role: "assistant", text: "Ask about revenue, ASO, marketing, releases or what to fix next." }]);
-  const emptyAppForm: AppFormState = { name: "", platform: "iOS", bundleId: "", appStoreId: "", sku: "", keyId: "", issuerId: "", vendorNumber: "", privateKeyName: "", privateKeyPath: "", credentialPreset: "" };
+  const emptyAppForm: AppFormState = { name: "", platform: "iOS", bundleId: "", appStoreId: "", sku: "", keyId: "", issuerId: "", vendorNumber: "", privateKeyName: "", privateKeyPath: "", privateKeyContent: "", credentialPreset: "" };
   const [appForm, setAppForm] = useState<AppFormState>(emptyAppForm);
   const emptySocialForm = { platform: "TikTok" as SocialAccount["platform"], handle: "", appId: "", creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> };
   const [socialForm, setSocialForm] = useState(emptySocialForm);
@@ -1905,7 +1907,7 @@ export default function Home() {
     event.preventDefault();
     if (!appForm.name.trim()) return;
     const appleApp = await lookupAppleApp(appForm.appStoreId).catch(() => null);
-    const hasCredentials = Boolean(appForm.credentialPreset || (appForm.keyId.trim() && appForm.issuerId.trim() && appForm.vendorNumber.trim() && appForm.appStoreId.trim() && (appForm.privateKeyName.trim() || appForm.privateKeyPath.trim())));
+    const hasCredentials = Boolean(appForm.credentialPreset || (appForm.keyId.trim() && appForm.issuerId.trim() && appForm.vendorNumber.trim() && appForm.appStoreId.trim() && (appForm.privateKeyContent || (appForm.privateKeyPath.trim() && appForm.privateKeyPath !== "uploaded-key"))));
     const draftApp: StudioApp = {
         id: `${appForm.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
         artworkUrl: appleApp?.artworkUrl || "",
@@ -1936,7 +1938,8 @@ export default function Home() {
           name: appDisplayName(draftApp.name),
           platform: draftApp.platform,
           primaryCurrency: "USD",
-          privateKeySecretRef: draftApp.privateKeyPath,
+          privateKeySecretRef: draftApp.privateKeyPath === "uploaded-key" ? "" : draftApp.privateKeyPath,
+          privateKey: appForm.privateKeyContent || undefined,
           sku: draftApp.sku,
           vendorNumber: draftApp.vendorNumber,
           workspaceId: DEFAULT_WORKSPACE_ID,
@@ -1949,7 +1952,8 @@ export default function Home() {
       setApps((current) => [...current.filter((app) => app.appStoreId !== draftApp.appStoreId), appFromBackend(payload.data!.app!)]);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "App could not be saved.");
-      setApps((current) => [...current, draftApp]);
+      setAppWizardOpen(false);
+      return;
     }
     setAppForm(emptyAppForm);
     setAppWizardOpen(false);
@@ -2481,7 +2485,7 @@ function OnboardingPage({ apps, socials, metrics, appFormCard, socialFormCard, s
         <div>
           <p className="caption">Release setup</p>
           <h2>Bring the studio online.</h2>
-          <p>Add your App Store app, attach the `.p8` key path, sync Apple KPIs, then map public handles for marketing context.</p>
+          <p>Add your App Store app, securely upload its `.p8` key, sync Apple KPIs, then map public handles for marketing context.</p>
         </div>
         <div className="onboardingProgress">{steps.map((step) => <button type="button" className={step.ready ? "isDone" : ""} onClick={() => setActivePage(step.label.includes("social") ? "social" : "apps")} key={step.label}><strong>{step.label}</strong><span>{step.value}</span></button>)}</div>
       </LiquidGlass>
@@ -2511,9 +2515,26 @@ function AppForm({
   setOpen: (open: boolean) => void;
 }) {
   const [step, setStep] = useState(0);
+  const [isDraggingKey, setIsDraggingKey] = useState(false);
+  const [keyFileError, setKeyFileError] = useState("");
+  const keyFileInput = useRef<HTMLInputElement>(null);
   const hasAppleConnection = Boolean(appForm.credentialPreset || (appForm.keyId.trim() && appForm.issuerId.trim() && appForm.vendorNumber.trim() && appForm.appStoreId.trim() && appForm.privateKeyPath.trim()));
   const close = () => { setOpen(false); setStep(0); };
   const openWizard = () => { setStep(0); setOpen(true); };
+  const loadPrivateKey = async (file?: File) => {
+    if (!file) return;
+    setKeyFileError("");
+    if (!file.name.toLowerCase().endsWith(".p8") || file.size > 64_000) {
+      setKeyFileError("Choose an Apple .p8 file smaller than 64 KB.");
+      return;
+    }
+    const content = await file.text();
+    if (!content.trim().startsWith("-----BEGIN PRIVATE KEY-----") || !content.includes("-----END PRIVATE KEY-----")) {
+      setKeyFileError("This file does not look like a valid App Store Connect .p8 key.");
+      return;
+    }
+    setAppForm((current) => ({ ...current, credentialPreset: "", privateKeyName: file.name, privateKeyPath: "uploaded-key", privateKeyContent: content }));
+  };
 
   return (
     <>
@@ -2532,8 +2553,8 @@ function AppForm({
               {step === 0 ? (
                 <section className="appWizardSlide">
                   <div className="appPresetGrid">
-                    <button className="presetButton" type="button" onClick={() => setAppForm((value) => ({ ...value, ...knownApps.cocorise }))}><span className="appScopeAvatar">CO</span><span><strong>Use Cocorise</strong><small>Server Apple preset</small></span></button>
-                    <button className="presetButton" type="button" onClick={() => setAppForm((value) => ({ ...value, ...knownApps.cortifree }))}><span className="appScopeAvatar">CF</span><span><strong>Use CortiFree</strong><small>Server Apple preset</small></span></button>
+                    <button className="presetButton" type="button" onClick={() => setAppForm((value) => ({ ...value, ...knownApps.cocorise, privateKeyContent: "", privateKeyName: "", privateKeyPath: "" }))}><span className="appScopeAvatar">CO</span><span><strong>Use Cocorise</strong><small>Server Apple preset</small></span></button>
+                    <button className="presetButton" type="button" onClick={() => setAppForm((value) => ({ ...value, ...knownApps.cortifree, privateKeyContent: "", privateKeyName: "", privateKeyPath: "" }))}><span className="appScopeAvatar">CF</span><span><strong>Use CortiFree</strong><small>Server Apple preset</small></span></button>
                   </div>
                   <div className="wizardFields twoCols">
                     <label><span>App name</span><input autoFocus name="name" placeholder="My app" value={appForm.name} onChange={updateAppForm} /></label>
@@ -2550,8 +2571,7 @@ function AppForm({
                     <label><span>Key ID</span><input name="keyId" placeholder="10 characters" value={appForm.keyId} onChange={updateAppForm} /></label>
                     <label><span>Issuer ID</span><input name="issuerId" placeholder="UUID" value={appForm.issuerId} onChange={updateAppForm} /></label>
                     <label><span>Vendor Number</span><input name="vendorNumber" placeholder="Sales reports" value={appForm.vendorNumber} onChange={updateAppForm} /></label>
-                    <label><span>.p8 filename</span><input name="privateKeyName" placeholder="AuthKey_XXXXXXXXXX.p8" value={appForm.privateKeyName} onChange={updateAppForm} /></label>
-                    <label className="wideInput"><span>Local .p8 path</span><input name="privateKeyPath" placeholder="Optional local path" value={appForm.privateKeyPath} onChange={updateAppForm} /></label>
+                    <div className="wideInput"><span className="keyUploadLabel">App Store Connect private key (.p8)</span><input ref={keyFileInput} className="keyFileInput" type="file" accept=".p8,application/x-pem-file" onChange={(event) => { void loadPrivateKey(event.target.files?.[0]); event.target.value = ""; }} /><button className={`keyDropZone ${isDraggingKey ? "isDragging" : ""} ${appForm.privateKeyContent ? "hasKeyFile" : ""}`} type="button" onClick={() => keyFileInput.current?.click()} onDragOver={(event) => { event.preventDefault(); setIsDraggingKey(true); }} onDragLeave={() => setIsDraggingKey(false)} onDrop={(event) => { event.preventDefault(); setIsDraggingKey(false); void loadPrivateKey(event.dataTransfer.files[0]); }}><span className="keyDropIcon"><Download size={18} /></span><span><strong>{appForm.privateKeyContent ? appForm.privateKeyName : "Choose a .p8 file or drop it here"}</strong><small>{appForm.privateKeyContent ? "Key selected · encrypted before storage" : "The key is sent securely and never stored in your browser profile"}</small></span><span className="keyBrowseButton">Browse</span></button>{keyFileError ? <small className="keyFileError">{keyFileError}</small> : null}{appForm.privateKeyPath === "uploaded-key" && !appForm.privateKeyContent ? <small className="keyFileStored">A private key is already securely stored for this app.</small> : null}</div>
                   </div>
                 </section>
               ) : (

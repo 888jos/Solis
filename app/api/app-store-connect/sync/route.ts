@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { dailyAppMetrics } from "@/db/schema";
+import { appStoreCredentials, dailyAppMetrics } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { createSyncJob, logBackendEvent, updateSyncJob } from "@/server/backend/jobs";
 import { now } from "@/server/backend/http";
+import { decryptAppPrivateKey, isEncryptedAppKey } from "@/server/backend/app-credentials";
 
 type SyncApp = {
   id: string;
@@ -175,6 +176,10 @@ export async function POST(request: Request) {
     const app = withServerCredentialPreset(rawApp);
     jobAppId = app.id;
     const db = await getDb();
+    const [storedCredential] = await db.select().from(appStoreCredentials).where(and(eq(appStoreCredentials.appId, app.id), eq(appStoreCredentials.workspaceId, workspaceId))).limit(1);
+    const uploadedPrivateKey = storedCredential?.privateKeySecretRef && isEncryptedAppKey(storedCredential.privateKeySecretRef)
+      ? await decryptAppPrivateKey(storedCredential.privateKeySecretRef)
+      : "";
     const job = await createSyncJob(db, {
       appId: app.id,
       dateRange: body.dateRange ?? "30d",
@@ -191,7 +196,7 @@ export async function POST(request: Request) {
       !app.issuerId ? "Issuer ID" : "",
       !app.vendorNumber ? "Vendor Number" : "",
       !app.appStoreId ? "App Store ID" : "",
-      !app.privateKeyPath ? "Direct .p8 path" : "",
+      !(uploadedPrivateKey || app.privateKeyPath) ? "Private .p8 key" : "",
     ].filter(Boolean);
 
     if (missing.length) {
@@ -205,9 +210,9 @@ export async function POST(request: Request) {
 
     const keyId = app.keyId!;
     const issuerId = app.issuerId!;
-    const privateKeyPath = normalizeLocalPath(app.privateKeyPath!);
+    const privateKeyPath = normalizeLocalPath(app.privateKeyPath || "");
     const vendorNumber = app.vendorNumber!;
-    const privateKey = await readPrivateKey(privateKeyPath);
+    const privateKey = uploadedPrivateKey || await readPrivateKey(privateKeyPath);
     const token = createAppStoreConnectToken({ issuerId, keyId, privateKey });
     const appInfo = await fetchAppleApp(app.appStoreId, token).catch(() => ({ data: { attributes: {} } } satisfies AppleAppResponse));
     const attrs = appInfo.data?.attributes ?? {};

@@ -5865,6 +5865,86 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.keyUploadLabel {
+  display: block;
+  margin-bottom: 7px;
+  color: #aaa7ad;
+  font-size: 12px;
+}
+
+.keyDropZone {
+  display: flex;
+  width: 100%;
+  min-height: 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed #55525b;
+  border-radius: 10px;
+  background: #202024;
+  color: #f4f1ed;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.keyDropZone:hover,
+.keyDropZone.isDragging,
+.keyDropZone.hasKeyFile {
+  border-color: #8b774e;
+  background: #24231f;
+}
+
+.keyDropZone > span:nth-of-type(2) {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.keyDropZone strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 580;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keyDropZone small,
+.keyFileStored {
+  color: var(--viral-muted);
+  font-size: 12px;
+}
+
+.keyDropIcon,
+.keyBrowseButton {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #c8a45c;
+}
+
+.keyBrowseButton {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #45434a;
+  border-radius: 7px;
+  color: #eee9e0;
+  font-size: 12px;
+}
+
+.keyFileInput {
+  display: none !important;
+}
+
+.keyFileError {
+  display: block;
+  margin-top: 7px;
+  color: #ff8585;
+  font-size: 12px;
+}
+
 .reviewSlide {
   gap: 16px;
 }
