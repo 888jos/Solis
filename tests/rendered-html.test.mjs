@@ -375,7 +375,7 @@ test("backend foundation exposes persistent SaaS resources", async () => {
       readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     ]);
 
-  assert.match(hosting, /"d1":\s*"DB"/);
+  assert.doesNotMatch(hosting, /"d1"\s*:/);
   assert.doesNotMatch(db, /import \{ env \} from "cloudflare:workers"/);
   assert.match(db, /await import\("cloudflare:workers"\)/);
   assert.match(schema, /syncJobs/);
@@ -417,7 +417,7 @@ test("backend foundation exposes persistent SaaS resources", async () => {
   assert.match(healthRoute, /database:\s*"ready"/);
 });
 
-test("Convex Solis is wired to the UI without replacing D1 storage", async () => {
+test("Convex Solis is wired to the UI as the persistent database", async () => {
   const [layout, providers, page, convexHealth, database] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/providers.tsx", import.meta.url), "utf8"),
@@ -429,7 +429,7 @@ test("Convex Solis is wired to the UI without replacing D1 storage", async () =>
   assert.match(layout, /<AppProviders>/);
   assert.match(providers, /import\.meta\.env\.VITE_CONVEX_URL/);
   assert.match(page, /useQuery\(api\.health\.ping\)/);
-  assert.match(page, /Existing app data remains in D1/);
+  assert.match(page, /App data is stored in Convex/);
   assert.match(convexHealth, /service:\s*"Solis"/);
-  assert.match(database, /drizzle-orm\/d1/);
+  assert.match(database, /SQLiteAsyncDialect/);
 });
