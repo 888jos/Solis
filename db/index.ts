@@ -51,7 +51,7 @@ function toConvexValue(value: unknown): unknown {
 function filtersFrom(condition: unknown, baseTable: string): Filter[] {
   if (!condition) return [];
   const { sql, params } = dialect.sqlToQuery(condition as any);
-  if (/\bor\b/i.test(sql)) throw new Error("The Convex D1-compatibility adapter does not support OR expressions yet.");
+  if (/\bor\b/i.test(sql)) throw new Error("The Convex SQLite-compatibility adapter does not support OR expressions yet.");
   const filters: Filter[] = [];
   const pattern = /"(?:[^"]+)"\."([^"]+)"\s*(is not null|is null|>=|<=|!=|=|>|<)(?:\s*(\?|null))?/gi;
   let parameter = 0;
@@ -65,7 +65,7 @@ function filtersFrom(condition: unknown, baseTable: string): Filter[] {
     });
   }
   if (parameter !== params.length || !filters.length) {
-    throw new Error(`Unsupported D1 query condition: ${sql}`);
+    throw new Error(`Unsupported SQLite query condition: ${sql}`);
   }
   return filters;
 }
@@ -76,7 +76,7 @@ function orderFrom(orderBy: unknown, baseTable: string): Order[] {
   return values.map((entry) => {
     const sql = dialect.sqlToQuery(entry as any).sql;
     const match = sql.match(/"(?:[^"]+)"\."([^"]+)"\s+(asc|desc)/i);
-    if (!match) throw new Error(`Unsupported D1 ordering: ${sql}`);
+    if (!match) throw new Error(`Unsupported SQLite ordering: ${sql}`);
     return { field: fieldName(baseTable, match[1]), direction: match[2].toLowerCase() as "asc" | "desc" };
   });
 }
@@ -84,7 +84,7 @@ function orderFrom(orderBy: unknown, baseTable: string): Order[] {
 function joinFrom(joinTable: object, condition: unknown) {
   const sql = dialect.sqlToQuery(condition as any).sql;
   const match = sql.match(/"([^"]+)"\."([^"]+)"\s*=\s*"([^"]+)"\."([^"]+)"/);
-  if (!match) throw new Error(`Unsupported D1 join: ${sql}`);
+  if (!match) throw new Error(`Unsupported SQLite join: ${sql}`);
   return {
     name: tableName(joinTable),
     baseField: fieldName(match[1] === tableName(joinTable) ? match[3] : tableName(joinTable), match[1] === tableName(joinTable) ? match[4] : match[2]),
