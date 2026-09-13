@@ -1,0 +1,10 @@
+import { query } from "./_generated/server";
+
+export const ping = query({
+  args: {},
+  handler: () => ({
+    ok: true,
+    service: "Solis",
+    checkedAt: Date.now(),
+  }),
+});

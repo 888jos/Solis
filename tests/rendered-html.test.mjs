@@ -416,3 +416,20 @@ test("backend foundation exposes persistent SaaS resources", async () => {
   assert.match(integrationConnectRoute, /secretRef/);
   assert.match(healthRoute, /database:\s*"ready"/);
 });
+
+test("Convex Solis is wired to the UI without replacing D1 storage", async () => {
+  const [layout, providers, page, convexHealth, database] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/providers.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../convex/health.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(layout, /<AppProviders>/);
+  assert.match(providers, /import\.meta\.env\.VITE_CONVEX_URL/);
+  assert.match(page, /useQuery\(api\.health\.ping\)/);
+  assert.match(page, /Existing app data remains in D1/);
+  assert.match(convexHealth, /service:\s*"Solis"/);
+  assert.match(database, /drizzle-orm\/d1/);
+});

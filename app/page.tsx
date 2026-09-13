@@ -4,6 +4,9 @@ import { ChangeEvent, ElementType, FormEvent, KeyboardEvent as ReactKeyboardEven
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import type { GlobeMethods } from "react-globe.gl";
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { isConvexConfigured } from "./providers";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -4273,8 +4276,10 @@ function IntegrationsPage({
     },
   ];
 
-  const connected = cards.filter((card) => card.status === "Connected").length;
-  const ready = cards.filter((card) => card.status !== "Needs setup").length;
+  const convexServices = isConvexConfigured ? 1 : 0;
+  const connected = cards.filter((card) => card.status === "Connected").length + convexServices;
+  const ready = cards.filter((card) => card.status !== "Needs setup").length + convexServices;
+  const serviceCount = cards.length + 1;
 
   return (
     <>
@@ -4289,10 +4294,11 @@ function IntegrationsPage({
             <p className="caption">Connections</p>
             <h2>Integrations</h2>
           </div>
-          <span className="pill">{cards.length} services</span>
+          <span className="pill">{serviceCount} services</span>
         </div>
         <div className="integrationGrid">
           {cards.map((card) => <IntegrationCard card={card} busy={loadingIntegrations || savingProvider === card.provider || (card.name === "App Store Connect" && Boolean(syncingAppId))} key={card.name} />)}
+          <ConvexConnectionCard />
         </div>
       </LiquidGlass>
       {configProvider ? (
@@ -4333,6 +4339,32 @@ function IntegrationsPage({
       {syncError ? <InlineError text={syncError} /> : null}
       <section className="setupGrid">{appFormCard}{socialFormCard}</section>
     </>
+  );
+}
+
+function ConvexConnectionCard() {
+  return isConvexConfigured ? <ConfiguredConvexCard /> : (
+    <div className="integrationCard convexIntegrationCard">
+      <span className="cardAccentRail" aria-hidden="true" />
+      <span className="integrationStatus needsSetup">Needs setup</span>
+      <span className="integrationTop"><Plug size={22} strokeWidth={1.7} /><strong>Convex</strong></span>
+      <span className="integrationSurface">Add VITE_CONVEX_URL to enable the live connection.</span>
+      <span className="integrationAction">Not configured</span>
+    </div>
+  );
+}
+
+function ConfiguredConvexCard() {
+  const health = useQuery(api.health.ping);
+  const connected = health?.ok === true;
+  return (
+    <div className="integrationCard convexIntegrationCard">
+      <span className="cardAccentRail" aria-hidden="true" />
+      <span className={`integrationStatus ${connected ? "connected" : "ready"}`}>{connected ? "Connected" : "Checking"}</span>
+      <span className="integrationTop"><Plug size={22} strokeWidth={1.7} /><strong>Convex · Solis</strong></span>
+      <span className="integrationSurface">Live query connection{health?.service ? ` · ${health.service}` : ""}. Existing app data remains in D1.</span>
+      <span className="integrationAction">{connected ? "Realtime backend ready" : "Waiting for deployment"}</span>
+    </div>
   );
 }
 
