@@ -1,5 +1,4 @@
 import { internalQuery } from "./_generated/server";
-import { v } from "convex/values";
 
 const tableNames = [
   "app_store_credentials", "apps", "aso_keyword_snapshots", "aso_keywords",
@@ -17,15 +16,5 @@ export const counts = internalQuery({
       result[tableName] = (await ctx.db.query(tableName).collect()).length;
     }
     return result;
-  },
-});
-
-export const records = internalQuery({
-  args: { tableName: v.string() },
-  handler: async (ctx, args) => {
-    if (!tableNames.includes(args.tableName as (typeof tableNames)[number])) {
-      throw new Error("Unknown migration table");
-    }
-    return await ctx.db.query(args.tableName as (typeof tableNames)[number]).collect();
   },
 });
