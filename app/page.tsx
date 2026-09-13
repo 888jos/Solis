@@ -4284,7 +4284,7 @@ function IntegrationsPage({
   return (
     <>
       <div className="integrationSummary">
-        <LiquidGlass className="panel moduleCard noMiniChart"><span className="cardAccentRail" aria-hidden="true" /><h2>Connected</h2><strong>{connected}</strong><small>{ready}/{cards.length} usable</small></LiquidGlass>
+        <LiquidGlass className="panel moduleCard noMiniChart"><span className="cardAccentRail" aria-hidden="true" /><h2>Connected</h2><strong>{connected}</strong><small>{ready}/{serviceCount} usable</small></LiquidGlass>
         <LiquidGlass className="panel moduleCard noMiniChart"><span className="cardAccentRail" aria-hidden="true" /><h2>Apps</h2><strong>{apps.length}</strong><small>{syncedApps.length} synced</small></LiquidGlass>
         <LiquidGlass className="panel moduleCard noMiniChart"><span className="cardAccentRail" aria-hidden="true" /><h2>Social</h2><strong>{socials.length}</strong><small>{tiktokHandles.length} TikTok</small></LiquidGlass>
       </div>
