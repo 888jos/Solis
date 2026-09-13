@@ -4266,11 +4266,11 @@ function IntegrationsPage({
     },
     {
       action: "Check backend",
-      description: "D1 is mounted locally and ready for persistent resources.",
+      description: "Solis API and persistent Convex database are ready for app data.",
       icon: Plug,
-      name: "D1 Backend",
+      name: "Solis Backend",
       onAction: () => window.open("/api/backend/health", "_blank", "noopener,noreferrer"),
-      provider: "d1_backend",
+      provider: "solis_backend",
       status: hasBackend ? "Connected" : "Needs setup",
       surface: "Apps, integrations, sync jobs, metrics, expenses",
     },
@@ -4362,7 +4362,7 @@ function ConfiguredConvexCard() {
       <span className="cardAccentRail" aria-hidden="true" />
       <span className={`integrationStatus ${connected ? "connected" : "ready"}`}>{connected ? "Connected" : "Checking"}</span>
       <span className="integrationTop"><Plug size={22} strokeWidth={1.7} /><strong>Convex · Solis</strong></span>
-      <span className="integrationSurface">Live query connection{health?.service ? ` · ${health.service}` : ""}. Existing app data remains in D1.</span>
+      <span className="integrationSurface">Live query connection{health?.service ? ` · ${health.service}` : ""}. App data is stored in Convex.</span>
       <span className="integrationAction">{connected ? "Realtime backend ready" : "Waiting for deployment"}</span>
     </div>
   );
