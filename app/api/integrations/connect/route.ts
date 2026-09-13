@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         verificationStatusCode: verification.statusCode,
       },
       provider,
-      secretRef: `local-d1:${workspaceId}:${provider}`,
+      secretRef: `solis:${workspaceId}:${provider}`,
       status: "connected",
       workspaceId,
     });
