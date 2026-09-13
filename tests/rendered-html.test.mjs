@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -300,16 +301,15 @@ test("app store sync endpoint keeps Apple credentials server-side", async () => 
   assert.match(route, /appInfoLocalizations/);
   assert.match(route, /appStoreVersionLocalizations/);
   assert.match(route, /keywords/);
-  assert.match(route, /parserVersion:\s*13/);
-  assert.match(route, /selectPrimaryCurrencySalesRows/);
-  assert.match(route, /byCurrency\.get\("USD"\)/);
+  assert.match(route, /parserVersion:\s*14/);
+  assert.match(route, /netAppleProceeds/);
+  assert.match(route, /appleRefundOrCreditAmount/);
   assert.match(route, /convertSalesRowsToUsd/);
-  assert.match(route, /ECB_DAILY_RATES_URL/);
+  assert.match(route, /getHistoricalExchangeRates/);
   assert.match(route, /return "other"/);
-  assert.match(route, /revenueInDisplayCurrency/);
-  assert.match(route, /grossBeforeAppleCommissionAndVat/);
+  assert.match(route, /currency: "USD"/);
   assert.match(route, /Customer Price/);
-  assert.match(route, /VAT Amount/);
+  assert.match(route, /Currency of Proceeds/);
   assert.match(route, /developerProceeds/);
   assert.match(route, /resolveDateRange/);
   assert.match(route, /MAX_CUSTOM_RANGE_DAYS = 3650/);
@@ -326,13 +326,35 @@ test("app store sync endpoint keeps Apple credentials server-side", async () => 
   assert.match(route, /Developer Proceeds/);
   assert.match(route, /timeSeries/);
   assert.match(route, /countryBreakdown/);
-  assert.match(route, /row\.revenue > 0 && row\.units > 0/);
+  assert.match(route, /row\.kind === "subscription" \|\| row\.kind === "in_app_purchase"/);
   assert.match(route, /Vendor Number/);
   assert.match(route, /normalizeCurrency/);
   assert.match(route, /mapWithConcurrency/);
   assert.match(route, /salesReportCache/);
   assert.match(route, /const \[aso, release, salesReport, financeReport\] = await Promise\.all/);
   assert.doesNotMatch(route, /console\.log\(privateKey|return json\(\{\s*privateKey/);
+});
+
+test("Apple proceeds net refunds and product-change credits and convert by report date", async () => {
+  const helperSource = await readFile(new URL("../server/backend/currency.ts", import.meta.url), "utf8");
+  const javascript = ts.transpileModule(helperSource, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const helperUrl = `data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`;
+  const { appleRefundOrCreditAmount, convertAmountToUsd, netAppleProceeds, parseEcbRateHistory } = await import(helperUrl);
+  const rates = parseEcbRateHistory(`<?xml version="1.0"?><Cube><Cube time="2026-09-11"><Cube currency="USD" rate="1.10"/><Cube currency="EUR" rate="1"/></Cube><Cube time="2026-09-10"><Cube currency="USD" rate="1.08"/><Cube currency="EUR" rate="1"/></Cube></Cube>`);
+
+  const sale = netAppleProceeds(1, 7);
+  const refund = netAppleProceeds(-1, 7);
+  const productChangeCredit = netAppleProceeds(-1, 2);
+  const replacementSubscription = netAppleProceeds(1, 10);
+  const euroSaleUsd = convertAmountToUsd(4, "EUR", "2026-09-11", rates);
+
+  assert.equal(sale + refund + productChangeCredit + replacementSubscription, 8);
+  assert.equal(appleRefundOrCreditAmount(refund), 7);
+  assert.equal(appleRefundOrCreditAmount(productChangeCredit), 2);
+  assert.equal(euroSaleUsd, 4.4);
+  assert.equal(convertAmountToUsd(4, "EUR", "2026-09-12", rates), 4.4);
 });
 
 test("backend foundation exposes persistent SaaS resources", async () => {

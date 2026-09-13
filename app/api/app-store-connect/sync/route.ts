@@ -8,6 +8,7 @@ import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { createSyncJob, logBackendEvent, updateSyncJob } from "@/server/backend/jobs";
 import { now } from "@/server/backend/http";
 import { decryptAppPrivateKey, isEncryptedAppKey } from "@/server/backend/app-credentials";
+import { appleRefundOrCreditAmount, convertAmountToUsd, getHistoricalExchangeRates, netAppleProceeds, normalizeCurrency, type HistoricalExchangeRates } from "@/server/backend/currency";
 
 type SyncApp = {
   id: string;
@@ -77,17 +78,21 @@ type ParsedSalesRow = {
   country: string;
   currency: string;
   developerProceeds: number;
+  grossCurrency: string;
+  grossRevenue: number;
   kind: string;
   revenue: number;
-  tax: number;
+  refunds: number;
   units: number;
 };
 
 type MetricPoint = {
   date: string;
   downloads: number;
+  grossRevenue: number;
   inAppPurchases: number;
   revenue: number;
+  refunds: number;
   subscriptions: number;
   units: number;
 };
@@ -103,7 +108,9 @@ type CountryBreakdown = {
 type ParsedFinanceRow = {
   currency: string;
   date: string;
+  grossRevenue: number;
   revenue: number;
+  refunds: number;
   source: string;
   units: number;
 };
@@ -120,15 +127,36 @@ type ParsedSalesReport = {
   rows: ParsedSalesRow[];
 };
 
+type SalesReportResult = {
+  reportStartDate: string | null;
+  reportEndDate: string | null;
+  currency: string;
+  grossRevenue: number;
+  refunds: number;
+  revenue: number;
+  revenueRows: number;
+  downloads: number;
+  units: number;
+  subscriptions: number;
+  inAppPurchases: number;
+  countries: number;
+  countryBreakdown: CountryBreakdown[];
+  timeSeries: MetricPoint[];
+  rows: number;
+  financeRows: number;
+  revenueSource: "Sales" | "None";
+  status: "synced" | "no_report";
+  message: string;
+};
+
 type SalesReportCacheEntry = {
   expiresAt: number;
   value: ParsedSalesReport | null;
 };
 
-type ExchangeRates = Map<string, number>;
+type ExchangeRates = HistoricalExchangeRates;
 
 const APPLE_API = "https://api.appstoreconnect.apple.com/v1";
-const ECB_DAILY_RATES_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml";
 const APPLE_FETCH_TIMEOUT_MS = 8_000;
 const APPLE_METADATA_TIMEOUT_MS = 10_000;
 const SALES_REPORT_CONCURRENCY = 12;
@@ -153,7 +181,6 @@ const SERVER_CREDENTIAL_PRESETS = {
   },
 } satisfies Record<NonNullable<SyncApp["credentialPreset"]>, { issuerId: string; keyId: string; privateKeyPath: string; vendorNumber: string }>;
 const salesReportCache = new Map<string, SalesReportCacheEntry>();
-let exchangeRateCache: { expiresAt: number; rates: ExchangeRates } | null = null;
 const FINANCE_REPORT_CANDIDATES = [
   { regionCode: "ZZ", reportType: "FINANCIAL" },
   { regionCode: "ZZ", reportType: "FINANCE_DETAIL" },
@@ -214,7 +241,7 @@ export async function POST(request: Request) {
     const vendorNumber = app.vendorNumber!;
     const privateKey = uploadedPrivateKey || await readPrivateKey(privateKeyPath);
     const token = createAppStoreConnectToken({ issuerId, keyId, privateKey });
-    const appInfo = await fetchAppleApp(app.appStoreId, token).catch(() => ({ data: { attributes: {} } } satisfies AppleAppResponse));
+    const appInfo: AppleAppResponse = await fetchAppleApp(app.appStoreId, token).catch(() => ({ data: { attributes: {} } }));
     const attrs = appInfo.data?.attributes ?? {};
     const matchContext = {
       appName: attrs.name ?? app.name,
@@ -260,7 +287,7 @@ export async function POST(request: Request) {
       ok: true,
       metrics: {
         appId: app.id,
-        parserVersion: 13,
+        parserVersion: 14,
         appName: attrs.name ?? app.name,
         bundleId: attrs.bundleId ?? app.bundleId,
         dateRange,
@@ -313,8 +340,10 @@ async function persistRevenueMetrics(
       ? [{
         date: input.report.reportEndDate ?? new Date().toISOString().slice(0, 10),
         downloads: input.report.downloads,
+        grossRevenue: input.report.grossRevenue,
         inAppPurchases: input.report.inAppPurchases,
         revenue: input.report.revenue,
+        refunds: input.report.refunds,
         subscriptions: input.report.subscriptions,
         units: input.report.units,
       }]
@@ -340,12 +369,12 @@ async function persistRevenueMetrics(
       currency: normalizeCurrency(input.currency),
       date: point.date,
       expenses: 0,
-      grossRevenue: point.revenue,
+      grossRevenue: point.grossRevenue,
       installs: point.downloads,
       mrr: 0,
       paidUnits: point.subscriptions + point.inAppPurchases,
       proceeds: point.revenue,
-      refunds: 0,
+      refunds: point.refunds,
       source,
       subscribers: point.subscriptions,
       trials: 0,
@@ -583,12 +612,14 @@ function splitKeywords(value: string) {
   return value.split(",").map((keyword) => keyword.trim()).filter(Boolean);
 }
 
-function emptySalesReport(message: string) {
+function emptySalesReport(message: string): SalesReportResult {
   return {
     reportStartDate: null,
     reportEndDate: null,
     currency: "USD",
     revenue: 0,
+    grossRevenue: 0,
+    refunds: 0,
     revenueRows: 0,
     downloads: 0,
     units: 0,
@@ -605,7 +636,7 @@ function emptySalesReport(message: string) {
   };
 }
 
-async function fetchSalesReports({ period, matchContext, token, vendorNumber }: { period: DatePeriod; matchContext: MatchContext; token: string; vendorNumber: string }) {
+async function fetchSalesReports({ period, matchContext, token, vendorNumber }: { period: DatePeriod; matchContext: MatchContext; token: string; vendorNumber: string }): Promise<SalesReportResult> {
   const days = period.days;
   const reports: ParsedSalesReport[] = [];
   const errors: Error[] = [];
@@ -618,26 +649,29 @@ async function fetchSalesReports({ period, matchContext, token, vendorNumber }: 
 
   if (!reports.length && errors.length === days.length) throw errors[0];
 
-  const rows = reports.flatMap((report) => report.rows);
-  const exchangeRates = await fetchExchangeRates().catch(() => null);
+  const rawRows = reports.flatMap((report) => report.rows);
+  const needsRates = rawRows.some((row) => (row.revenue && normalizeCurrency(row.currency) !== "USD") || (row.grossRevenue && normalizeCurrency(row.grossCurrency) !== "USD"));
+  const exchangeRates = needsRates ? await getHistoricalExchangeRates() : new Map<string, Map<string, number>>();
+  const convertedReports = reports.map((report) => ({ ...report, rows: convertSalesRowsToUsd(report.rows, report.date, exchangeRates) }));
+  const rows = convertedReports.flatMap((report) => report.rows);
   const countries = new Set(rows.map((row) => row.country).filter(Boolean)).size;
-  const reportDates = reports.filter((report) => report.rows.length).map((report) => report.date).sort();
-  // Storefront proceeds arrive in their settlement currency. Never add raw
-  // amounts from different currencies (for example, PHP and EUR).
-  const proceedsRows = exchangeRates ? convertSalesRowsToUsd(rows, exchangeRates) : selectPrimaryCurrencySalesRows(rows);
-  const currency = normalizeCurrency(proceedsRows.find((row) => row.currency)?.currency);
-  const revenue = proceedsRows.reduce((sum, row) => sum + row.revenue, 0);
-  const revenueRows = proceedsRows.filter((row) => row.revenue !== 0).length;
+  const reportDates = convertedReports.filter((report) => report.rows.length).map((report) => report.date).sort();
+  const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
+  const grossRevenue = rows.reduce((sum, row) => sum + row.grossRevenue, 0);
+  const refunds = rows.reduce((sum, row) => sum + row.refunds, 0);
+  const revenueRows = rows.filter((row) => row.revenue !== 0).length;
   const units = rows.reduce((sum, row) => sum + row.units, 0);
   const downloads = rows.filter((row) => row.kind === "download").reduce((sum, row) => sum + row.units, 0);
   const subscriptions = rows.filter((row) => row.kind === "subscription").reduce((sum, row) => sum + row.units, 0);
   const inAppPurchases = rows.filter((row) => row.kind === "in_app_purchase").reduce((sum, row) => sum + row.units, 0);
-  const countryBreakdown = buildCountryBreakdown(rows, currency, exchangeRates);
-  const timeSeries: MetricPoint[] = reports.filter((report) => report.rows.length).map((report) => ({
+  const countryBreakdown = buildCountryBreakdown(rows);
+  const timeSeries: MetricPoint[] = convertedReports.filter((report) => report.rows.length).map((report) => ({
     date: report.date,
     downloads: report.rows.filter((row) => row.kind === "download").reduce((sum, row) => sum + row.units, 0),
+    grossRevenue: report.rows.reduce((sum, row) => sum + row.grossRevenue, 0),
     inAppPurchases: report.rows.filter((row) => row.kind === "in_app_purchase").reduce((sum, row) => sum + row.units, 0),
-    revenue: report.rows.reduce((sum, row) => sum + revenueInDisplayCurrency(row.revenue, row.currency, currency, exchangeRates), 0),
+    revenue: report.rows.reduce((sum, row) => sum + row.revenue, 0),
+    refunds: report.rows.reduce((sum, row) => sum + row.refunds, 0),
     subscriptions: report.rows.filter((row) => row.kind === "subscription").reduce((sum, row) => sum + row.units, 0),
     units: report.rows.reduce((sum, row) => sum + row.units, 0),
   })).sort((a, b) => a.date.localeCompare(b.date));
@@ -645,7 +679,9 @@ async function fetchSalesReports({ period, matchContext, token, vendorNumber }: 
   return {
     reportStartDate: reportDates[0] ?? null,
     reportEndDate: reportDates.at(-1) ?? null,
-    currency,
+    currency: "USD",
+    grossRevenue,
+    refunds,
     revenue,
     revenueRows,
     downloads,
@@ -742,35 +778,46 @@ async function fetchFinanceReports({ period, matchContext, token, vendorNumber }
 
   const reports = results.filter((result): result is { month: string; rows: ParsedFinanceRow[] } => Boolean(result));
   if (!reports.length && errors.length) throw errors[0];
-  const rows = reports.flatMap((report) => report.rows).filter((row) => row.date >= period.startDate && row.date <= period.endDate);
-  const exchangeRates = await fetchExchangeRates().catch(() => null);
-  const selectedRows = exchangeRates ? convertFinanceRowsToUsd(rows, exchangeRates) : selectPrimaryCurrencyRows(rows);
+  const rawRows = reports.flatMap((report) => report.rows).filter((row) => row.date >= period.startDate && row.date <= period.endDate);
+  const needsRates = rawRows.some((row) => row.revenue && normalizeCurrency(row.currency) !== "USD");
+  const exchangeRates = needsRates ? await getHistoricalExchangeRates() : new Map<string, Map<string, number>>();
+  const selectedRows = convertFinanceRowsToUsd(rawRows, exchangeRates);
   const reportDates = selectedRows.map((row) => row.date).sort();
   const revenue = selectedRows.reduce((sum, row) => sum + row.revenue, 0);
   const revenueRows = selectedRows.filter((row) => row.revenue !== 0).length;
-  const currency = normalizeCurrency(selectedRows.find((row) => row.currency)?.currency);
+  const currency = "USD";
   const byDate = new Map<string, ParsedFinanceRow>();
 
   for (const row of selectedRows) {
-    const current = byDate.get(row.date) ?? { currency: row.currency, date: row.date, revenue: 0, source: row.source, units: 0 };
-    byDate.set(row.date, { ...current, revenue: current.revenue + row.revenue, units: current.units + row.units });
+    const current = byDate.get(row.date) ?? { currency: row.currency, date: row.date, grossRevenue: 0, revenue: 0, refunds: 0, source: row.source, units: 0 };
+    byDate.set(row.date, {
+      ...current,
+      grossRevenue: current.grossRevenue + row.grossRevenue,
+      revenue: current.revenue + row.revenue,
+      refunds: current.refunds + row.refunds,
+      units: current.units + row.units,
+    });
   }
 
   const timeSeries: MetricPoint[] = Array.from(byDate.values()).map((row) => ({
     date: row.date,
     downloads: 0,
+    grossRevenue: row.grossRevenue,
     inAppPurchases: 0,
     revenue: row.revenue,
+    refunds: row.refunds,
     subscriptions: 0,
     units: row.units,
   })).sort((a, b) => a.date.localeCompare(b.date));
 
   return {
     currency,
-    financeRows: rows.length,
+    financeRows: rawRows.length,
     financeReportEndDate: reportDates.at(-1) ?? null,
     financeReportStartDate: reportDates[0] ?? null,
     revenue,
+    grossRevenue: selectedRows.reduce((sum, row) => sum + row.grossRevenue, 0),
+    refunds: selectedRows.reduce((sum, row) => sum + row.refunds, 0),
     revenueRows,
     revenueSource: revenueRows ? "Financial" : "None",
     timeSeries,
@@ -799,20 +846,23 @@ function mergeReports(salesReport: Awaited<ReturnType<typeof fetchSalesReports>>
   const hasFinanceRevenue = Boolean(financeReport?.revenueRows);
   const hasSalesRevenue = Boolean(salesReport.revenueRows);
   const revenue = hasSalesRevenue ? salesReport.revenue : (financeReport?.revenue ?? 0);
-  const currency = hasSalesRevenue ? salesReport.currency : (financeReport?.currency ?? salesReport.currency);
+  const grossRevenue = hasSalesRevenue ? salesReport.grossRevenue : (financeReport?.grossRevenue ?? 0);
+  const refunds = hasSalesRevenue ? salesReport.refunds : (financeReport?.refunds ?? 0);
   const revenueRows = hasSalesRevenue ? salesReport.revenueRows : (financeReport?.revenueRows ?? 0);
-  const reportStartDate = [salesReport.reportStartDate, financeReport?.financeReportStartDate].filter(Boolean).sort()[0] ?? null;
-  const reportEndDate = [salesReport.reportEndDate, financeReport?.financeReportEndDate].filter(Boolean).sort().at(-1) ?? null;
+  const reportStartDate: string | null = [salesReport.reportStartDate, financeReport?.financeReportStartDate].filter(Boolean).sort()[0] ?? null;
+  const reportEndDate: string | null = [salesReport.reportEndDate, financeReport?.financeReportEndDate].filter(Boolean).sort().at(-1) ?? null;
 
   return {
     ...salesReport,
-    currency,
+    currency: "USD",
     financeRows: financeReport?.financeRows ?? 0,
     financeReportEndDate: financeReport?.financeReportEndDate ?? null,
     financeReportStartDate: financeReport?.financeReportStartDate ?? null,
     reportEndDate,
     reportStartDate,
     revenue,
+    grossRevenue,
+    refunds,
     revenueRows,
     revenueSource: hasSalesRevenue ? "Sales" : hasFinanceRevenue ? "Financial" : "None",
     status: salesReport.rows || financeReport?.financeRows ? "synced" : "no_report",
@@ -831,7 +881,7 @@ function syncMessage(hasSalesRows: boolean, hasFinanceRows: boolean, hasFinanceR
   return "No matching Apple report rows";
 }
 
-function buildCountryBreakdown(rows: ParsedSalesRow[], proceedsCurrency: string, exchangeRates: ExchangeRates | null = null) {
+function buildCountryBreakdown(rows: ParsedSalesRow[]) {
   const byCountry = new Map<string, CountryBreakdown>();
   for (const row of rows) {
     const country = row.country.trim().toUpperCase();
@@ -840,42 +890,26 @@ function buildCountryBreakdown(rows: ParsedSalesRow[], proceedsCurrency: string,
     byCountry.set(country, {
       country,
       downloads: current.downloads + (row.kind === "download" ? row.units : 0),
-      proceedsUnits: current.proceedsUnits + (row.revenue > 0 && row.units > 0 ? row.units : 0),
-      revenue: current.revenue + revenueInDisplayCurrency(row.revenue, row.currency, proceedsCurrency, exchangeRates),
+      proceedsUnits: current.proceedsUnits + (row.kind === "subscription" || row.kind === "in_app_purchase" ? row.units : 0),
+      revenue: current.revenue + row.revenue,
       units: current.units + row.units,
     });
   }
   return Array.from(byCountry.values()).sort((a, b) => Math.abs(b.revenue) - Math.abs(a.revenue) || b.downloads - a.downloads);
 }
 
-function revenueInDisplayCurrency(amount: number, currency: string, displayCurrency: string, rates: ExchangeRates | null) {
-  if (rates && displayCurrency === "USD") return convertAmountToUsd(amount, currency, rates) ?? 0;
-  return normalizeCurrency(currency) === displayCurrency ? amount : 0;
-}
-
-function selectPrimaryCurrencySalesRows(rows: ParsedSalesRow[]) {
-  if (!rows.length) return rows;
-  const byCurrency = new Map<string, ParsedSalesRow[]>();
-  for (const row of rows) {
-    const currency = normalizeCurrency(row.currency);
-    byCurrency.set(currency, [...(byCurrency.get(currency) ?? []), { ...row, currency }]);
-  }
-  const preferred = byCurrency.get("USD");
-  if (preferred?.some((row) => row.revenue !== 0)) return preferred;
-  return Array.from(byCurrency.values()).sort((a, b) => {
-    const aRevenue = a.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
-    const bRevenue = b.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
-    return bRevenue - aRevenue;
-  })[0] ?? [];
-}
-
 function mergeTimeSeries(salesSeries: MetricPoint[], financeSeries: MetricPoint[]) {
   if (!financeSeries.length) return salesSeries;
   const byDate = new Map<string, MetricPoint>();
-  for (const point of salesSeries) byDate.set(point.date, { ...point, revenue: 0 });
+  for (const point of salesSeries) byDate.set(point.date, { ...point, grossRevenue: 0, revenue: 0, refunds: 0 });
   for (const point of financeSeries) {
-    const current = byDate.get(point.date) ?? { date: point.date, downloads: 0, inAppPurchases: 0, revenue: 0, subscriptions: 0, units: 0 };
-    byDate.set(point.date, { ...current, revenue: current.revenue + point.revenue });
+    const current = byDate.get(point.date) ?? { date: point.date, downloads: 0, grossRevenue: 0, inAppPurchases: 0, revenue: 0, refunds: 0, subscriptions: 0, units: 0 };
+    byDate.set(point.date, {
+      ...current,
+      grossRevenue: current.grossRevenue + point.grossRevenue,
+      revenue: current.revenue + point.revenue,
+      refunds: current.refunds + point.refunds,
+    });
   }
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -981,7 +1015,7 @@ function parseSalesReport(text: string, matchContext: MatchContext) {
     rows: matched.map((row) => {
       const productType = String(row["Product Type Identifier"] ?? "").toUpperCase();
       const units = toNumber(row.Units);
-      const extendedProceeds = optionalNumber(row["Extended Partner Share"]);
+      const extendedProceeds = firstOptionalNumber(row["Extended Partner Share"], row["Extended Developer Proceeds"]);
       const unitProceeds = firstOptionalNumber(
         row["Developer Proceeds"],
         row.Proceeds,
@@ -999,33 +1033,25 @@ function parseSalesReport(text: string, matchContext: MatchContext) {
         row["Customer Price in Customer Currency"],
         row["Customer Price (Local Currency)"],
       );
-      const extendedTax = firstOptionalNumber(
-        row["Extended Tax"],
-        row["Tax Amount"],
-        row["Total Tax"],
-        row["VAT Amount"],
-      );
-      const unitTax = firstOptionalNumber(row.Tax, row.VAT, row["Tax per Unit"]);
-      const developerProceeds = extendedProceeds ?? ((unitProceeds ?? 0) * units);
-      const customerRevenue = extendedCustomerPrice ?? ((unitCustomerPrice ?? 0) * units);
-      const tax = extendedTax ?? ((unitTax ?? 0) * units);
+      const developerProceeds = netAppleProceeds(units, unitProceeds ?? 0, extendedProceeds);
       const hasCustomerPrice = unitCustomerPrice !== null || extendedCustomerPrice !== null;
-      const grossBeforeAppleCommissionAndVat = hasCustomerPrice
-        ? customerRevenue - tax
-        : developerProceeds;
-      const currency = hasCustomerPrice
-        ? String(row["Customer Currency"] ?? row["Currency of Proceeds"] ?? "")
-        : String(row["Currency of Proceeds"] ?? row["Customer Currency"] ?? "");
+      const customerRevenue = extendedCustomerPrice ?? (unitCustomerPrice === null ? developerProceeds : unitCustomerPrice * units);
+      const proceedsCurrency = requireReportCurrency(row["Currency of Proceeds"] ?? row["Partner Share Currency"], "Apple proceeds");
+      const grossCurrency = hasCustomerPrice
+        ? requireReportCurrency(row["Customer Currency"] ?? proceedsCurrency, "Apple customer sales")
+        : proceedsCurrency;
       return {
         country: String(row["Country Code"] ?? row["Provider Country"] ?? ""),
-        currency: normalizeCurrency(currency),
+        currency: proceedsCurrency,
         developerProceeds,
+        grossCurrency,
+        grossRevenue: customerRevenue,
         kind: classifyProductType(productType),
-        // Gross revenue for product analytics: customer price less explicit VAT/tax
-        // when Apple exposes it, before Apple's commission. If Sales only exposes
-        // proceeds fields, keep the best available value instead of inventing one.
-        revenue: grossBeforeAppleCommissionAndVat,
-        tax,
+        // Revenue is developer proceeds, not customer-billed sales. Multiplying
+        // the per-unit proceeds by signed units nets Apple refunds, bundle credits,
+        // and subscription product-change credits exactly once.
+        revenue: developerProceeds,
+        refunds: appleRefundOrCreditAmount(developerProceeds),
         units,
       };
     }),
@@ -1042,9 +1068,11 @@ function parseFinanceReport(text: string, matchContext: MatchContext, month: str
       const partnerShare = optionalNumber(row["Partner Share"] ?? row.Proceeds);
       const revenue = extendedPartnerShare ?? ((partnerShare ?? 0) * units);
       return {
-        currency: normalizeCurrency(String(row["Partner Share Currency"] ?? row["Customer Currency"] ?? "")),
+        currency: requireReportCurrency(row["Partner Share Currency"] ?? row["Customer Currency"], "Apple financial proceeds"),
         date: normalizeReportDate(String(row["Begin Date"] ?? row["End Date"] ?? month), month),
+        grossRevenue: revenue,
         revenue,
+        refunds: 0,
         source,
         units,
       };
@@ -1060,6 +1088,12 @@ function parseTabularReport(text: string) {
     const cells = line.split("\t");
     return Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""]));
   }) as Record<string, string>[];
+}
+
+function requireReportCurrency(value: unknown, label: string) {
+  const currency = String(value ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw new Error(`${label} currency is missing or invalid; refusing to label it USD.`);
+  return currency;
 }
 
 function matchesApp(row: Record<string, string>, matchContext: MatchContext) {
@@ -1159,61 +1193,36 @@ function financeMonthsForPeriod(period: DatePeriod) {
   return months;
 }
 
-function selectPrimaryCurrencyRows(rows: ParsedFinanceRow[]) {
-  if (!rows.length) return rows;
-  const byCurrency = new Map<string, ParsedFinanceRow[]>();
-  for (const row of rows) {
-    const currency = normalizeCurrency(row.currency);
-    byCurrency.set(currency, [...(byCurrency.get(currency) ?? []), { ...row, currency }]);
-  }
-  const preferred = byCurrency.get("USD");
-  if (preferred?.some((row) => row.revenue !== 0)) return preferred;
-  return Array.from(byCurrency.values()).sort((a, b) => {
-    const aRevenue = a.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
-    const bRevenue = b.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
-    return bRevenue - aRevenue;
-  })[0] ?? [];
-}
-
-async function fetchExchangeRates(): Promise<ExchangeRates> {
-  if (exchangeRateCache && exchangeRateCache.expiresAt > Date.now()) return exchangeRateCache.rates;
-  const response = await fetchWithTimeout(ECB_DAILY_RATES_URL, {}, "ECB exchange rates", 10_000);
-  if (!response.ok) throw new Error(`ECB exchange rates unavailable (${response.status}).`);
-  const xml = await response.text();
-  const rates: ExchangeRates = new Map([["EUR", 1]]);
-  for (const match of xml.matchAll(/currency=['"]([A-Z]{3})['"]\s+rate=['"]([0-9.]+)['"]/g)) {
-    const rate = Number.parseFloat(match[2]);
-    if (Number.isFinite(rate) && rate > 0) rates.set(match[1], rate);
-  }
-  if (!rates.has("USD")) throw new Error("ECB USD rate unavailable.");
-  exchangeRateCache = { expiresAt: Date.now() + 6 * 60 * 60_000, rates };
-  return rates;
-}
-
-function convertAmountToUsd(amount: number, currency: string, rates: ExchangeRates) {
-  const sourceRate = rates.get(normalizeCurrency(currency));
-  const usdRate = rates.get("USD");
-  if (!sourceRate || !usdRate) return null;
-  return (amount / sourceRate) * usdRate;
-}
-
-function convertSalesRowsToUsd(rows: ParsedSalesRow[], rates: ExchangeRates) {
-  return rows.flatMap((row) => {
-    const revenue = convertAmountToUsd(row.revenue, row.currency, rates);
-    return revenue === null ? [] : [{ ...row, currency: "USD", revenue }];
+function convertSalesRowsToUsd(rows: ParsedSalesRow[], date: string, rates: ExchangeRates) {
+  return rows.map((row) => {
+    const revenue = convertAmountToUsd(row.revenue, row.currency, date, rates);
+    const grossRevenue = convertAmountToUsd(row.grossRevenue, row.grossCurrency, date, rates);
+    if (revenue === null) throw new Error(`Apple proceeds in ${row.currency} could not be converted to USD for ${date}.`);
+    if (grossRevenue === null) throw new Error(`Apple customer sales in ${row.grossCurrency} could not be converted to USD for ${date}.`);
+    return {
+      ...row,
+      currency: "USD",
+      developerProceeds: revenue,
+      grossCurrency: "USD",
+      grossRevenue,
+      revenue,
+      refunds: appleRefundOrCreditAmount(revenue),
+    };
   });
 }
 
 function convertFinanceRowsToUsd(rows: ParsedFinanceRow[], rates: ExchangeRates) {
-  return rows.flatMap((row) => {
-    const revenue = convertAmountToUsd(row.revenue, row.currency, rates);
-    return revenue === null ? [] : [{ ...row, currency: "USD", revenue }];
+  return rows.map((row) => {
+    const revenue = convertAmountToUsd(row.revenue, row.currency, row.date, rates);
+    if (revenue === null) throw new Error(`Apple financial proceeds in ${row.currency} could not be converted to USD for ${row.date}.`);
+    return {
+      ...row,
+      currency: "USD",
+      grossRevenue: revenue,
+      revenue,
+      refunds: appleRefundOrCreditAmount(revenue),
+    };
   });
-}
-
-function normalizeCurrency(currency: string | undefined) {
-  const normalized = currency?.trim().toUpperCase();
-  return normalized && /^[A-Z]{3}$/.test(normalized) ? normalized : "USD";
 }
 
 async function appleError(response: Response, fallback: string) {

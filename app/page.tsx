@@ -101,6 +101,8 @@ type AppStoreMetric = {
   financeReportEndDate?: string | null;
   currency: string;
   revenue: number;
+  grossRevenue?: number;
+  refunds?: number;
   revenueRows: number;
   revenueSource?: "Financial" | "Sales" | "None";
   financeRows?: number;
@@ -121,6 +123,8 @@ type AppStoreMetric = {
     downloads: number;
     inAppPurchases: number;
     revenue: number;
+    grossRevenue?: number;
+    refunds?: number;
     subscriptions: number;
     units: number;
   }[];
@@ -346,7 +350,7 @@ const DEFAULT_WORKSPACE_ID = "drift-studio";
 const DEFAULT_DATE_RANGE = "30d";
 const CLIENT_SYNC_TIMEOUT_MS = 65_000;
 const MAX_CUSTOM_RANGE_DAYS = 3650;
-const CURRENT_PARSER_VERSION = 13;
+const CURRENT_PARSER_VERSION = 14;
 
 function isoDateOffset(daysFromToday: number) {
   const date = new Date();
@@ -935,6 +939,8 @@ function normalizeMetric(metric: AppStoreMetric): AppStoreMetric {
     financeRows: Number.isFinite(metric.financeRows) ? metric.financeRows : 0,
     inAppPurchases: Number.isFinite(metric.inAppPurchases) ? metric.inAppPurchases : 0,
     revenue: Number.isFinite(metric.revenue) ? metric.revenue : 0,
+    grossRevenue: Number.isFinite(metric.grossRevenue) ? metric.grossRevenue : (Number.isFinite(metric.revenue) ? metric.revenue : 0),
+    refunds: Number.isFinite(metric.refunds) ? metric.refunds : 0,
     revenueRows: Number.isFinite(metric.revenueRows) ? metric.revenueRows : 0,
     revenueSource: ["Financial", "Sales", "None"].includes(metric.revenueSource ?? "") ? metric.revenueSource : metric.revenueRows ? "Sales" : "None",
     rows: Number.isFinite(metric.rows) ? metric.rows : 0,
@@ -956,6 +962,8 @@ function normalizeMetric(metric: AppStoreMetric): AppStoreMetric {
       downloads: Number.isFinite(point.downloads) ? point.downloads : 0,
       inAppPurchases: Number.isFinite(point.inAppPurchases) ? point.inAppPurchases : 0,
       revenue: Number.isFinite(point.revenue) ? point.revenue : 0,
+      grossRevenue: Number.isFinite(point.grossRevenue) ? point.grossRevenue : (Number.isFinite(point.revenue) ? point.revenue : 0),
+      refunds: Number.isFinite(point.refunds) ? point.refunds : 0,
       subscriptions: Number.isFinite(point.subscriptions) ? point.subscriptions : 0,
       units: Number.isFinite(point.units) ? point.units : 0,
     })) : [],
@@ -1155,7 +1163,7 @@ function buildActions(apps: StudioApp[], socials: SocialAccount[], metrics: AppS
     const name = appDisplayName(app.name);
     if (app.status !== "Ready to sync") actions.push({ title: `${name}: complete credentials`, text: "Add missing Apple access before metrics can sync.", page: "apps", priority: "Critical" });
     if (app.status === "Ready to sync" && !metric) actions.push({ title: `${name}: run first sync`, text: "Apple metrics are not available until the first successful sync.", page: "apps", priority: "High" });
-    if (metric && metric.parserVersion < 5) actions.push({ title: `${name}: refresh Apple sync`, text: "Run the latest sync to include ASO metadata and release state.", page: "apps", priority: "High" });
+    if (metric && metric.parserVersion < CURRENT_PARSER_VERSION) actions.push({ title: `${name}: refresh Apple sync`, text: "Refresh Apple data to apply net proceeds, refunds and USD normalization.", page: "apps", priority: "High" });
     if (metric?.downloads && !metric.revenueRows) actions.push({ title: `${name}: review monetization`, text: "Downloads are present, but Apple revenue is empty for the selected reports.", page: "revenue", priority: "Medium" });
     if (metric?.message.includes("financials pending")) actions.push({ title: `${name}: retry financial reports`, text: "Acquisition synced, but Apple financial reports did not complete.", page: "revenue", priority: "High" });
     if (metric?.aso && metric.aso.metadataScore < 80) actions.push({ title: `${name}: improve ASO metadata`, text: "Title, subtitle, description or keyword coverage is below release quality.", page: "aso", priority: "Medium" });
@@ -1218,6 +1226,8 @@ function periodTrendSignal(current: number, previous: number, hasPreviousPeriod:
 
 function revenueAnalytics(metrics: AppStoreMetric[]) {
   const revenue = sumMetric(metrics, "revenue");
+  const grossRevenue = metrics.reduce((sum, metric) => sum + (metric.grossRevenue ?? metric.revenue), 0);
+  const refunds = metrics.reduce((sum, metric) => sum + (metric.refunds ?? 0), 0);
   const downloads = sumMetric(metrics, "downloads");
   const subscriptions = sumMetric(metrics, "subscriptions");
   const inAppPurchases = sumMetric(metrics, "inAppPurchases");
@@ -1241,7 +1251,7 @@ function revenueAnalytics(metrics: AppStoreMetric[]) {
     monetizedUnits > 0,
     downloads > 0,
   ].filter(Boolean).length;
-  return { averageRevenuePerDownload, averageRevenuePerUser, currency, downloads, financeRows, health, inAppPurchases, monetizationRate, monetizedUnits, revenue, revenueRows, revenueSource, subscriptionShare, subscriptions };
+  return { averageRevenuePerDownload, averageRevenuePerUser, currency, downloads, financeRows, grossRevenue, health, inAppPurchases, monetizationRate, monetizedUnits, refunds, revenue, revenueRows, revenueSource, subscriptionShare, subscriptions };
 }
 
 type MonetizationTrendKey = "proceeds" | "downloads" | "paidUnits" | "arpu" | "conversion";
@@ -1752,11 +1762,11 @@ export default function Home() {
   }, [appStoreMetrics, apps, autoSyncRevision, dateRange, loaded, previousDateRange, syncAppStore, syncingAppId]);
 
   const periodMetrics = useMemo(
-    () => appStoreMetrics.filter((metric) => (metric.dateRange || DEFAULT_DATE_RANGE) === dateRange),
+    () => appStoreMetrics.filter((metric) => metric.parserVersion >= CURRENT_PARSER_VERSION && (metric.dateRange || DEFAULT_DATE_RANGE) === dateRange),
     [appStoreMetrics, dateRange],
   );
   const previousPeriodMetrics = useMemo(
-    () => previousDateRange ? appStoreMetrics.filter((metric) => (metric.dateRange || DEFAULT_DATE_RANGE) === previousDateRange) : [],
+    () => previousDateRange ? appStoreMetrics.filter((metric) => metric.parserVersion >= CURRENT_PARSER_VERSION && (metric.dateRange || DEFAULT_DATE_RANGE) === previousDateRange) : [],
     [appStoreMetrics, previousDateRange],
   );
   const effectivePortfolioScope = (apps.length > 1 && portfolioScope === "overall") || apps.some((app) => app.id === portfolioScope)
@@ -2335,7 +2345,7 @@ export default function Home() {
 
 function revenueDetail(revenueRows: number, revenueSource?: string) {
   if (!revenueRows) return "No revenue found";
-  return revenueSource === "Financial" ? "Net fallback" : "Revenue";
+  return revenueSource === "Financial" ? "Net proceeds after returns · USD" : "Net proceeds after Apple share · USD";
 }
 
 function MiniChart({ points, values, variant = "line", title = "Open chart" }: { points?: TrendPoint[]; values: number[]; variant?: "line" | "area" | "bars"; title?: string }) {
@@ -4042,10 +4052,11 @@ function RevenueSignals({ analytics }: { analytics: ReturnType<typeof revenueAna
       <div className="revenueSignalGrid">
         <div><strong>{formatNumber(analytics.revenueRows)}</strong><span>Revenue rows</span></div>
         <div><strong>{formatNumber(paidUnits)}</strong><span>Paid units</span></div>
+        <div><strong>{formatCurrency(analytics.refunds, analytics.currency)}</strong><span>Refunds & credits</span></div>
         <div><strong>{formatUnitCurrency(analytics.averageRevenuePerDownload, analytics.currency)}</strong><span>Revenue / download</span></div>
         <div><strong>{revenuePerPaidUnit === null ? "—" : formatUnitCurrency(revenuePerPaidUnit, analytics.currency)}</strong><span>Revenue / paid unit</span></div>
       </div>
-      <p className="revenueSignalNote">Source: {source === "Financial" ? "Apple financial reports" : source === "Sales" ? "Apple sales reports" : "No monetization source detected"}. Refunds and subscription lifecycle data will appear once the relevant source is connected.</p>
+      <p className="revenueSignalNote">Source: {source === "Financial" ? "Apple financial reports" : source === "Sales" ? "Apple sales reports" : "No monetization source detected"}. Revenue is developer proceeds after Apple’s share, net of refunds and product-change credits, converted to USD using the historical ECB rate for each report day. Subscription lifecycle details still require RevenueCat.</p>
     </LiquidGlass>
   );
 }
