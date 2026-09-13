@@ -1,17 +1,26 @@
-# Convex connection
+# Convex database
 
-DriftOS is connected to the Convex project **Solis**. Convex currently provides
-the live health query shown on the Integrations page. Existing workspace,
-creator, campaign, social, and revenue data remain in Cloudflare D1; no data was
-migrated or copied.
+DriftOS uses the Convex project **Solis** as its production database. The
+legacy D1 tables were exported, imported to Convex with their original IDs, and
+checked against the source row counts before the production Worker was switched
+over. The compatibility adapter in `db/index.ts` keeps existing server routes
+working while the app moves to native Convex functions incrementally.
+
+The migration snapshot contained 400 rows across 20 tables, including 133
+creator videos, 94 daily app metrics, 59 sync jobs, 56 backend events, 36
+sessions, and 6 social accounts. Convex's internal `migration:counts` query can
+be used to audit those counts. The initial schema is intentionally permissive
+to preserve legacy records; replace `v.any()` validators with field-level
+validators as individual domains are migrated to native functions.
 
 ## Local development
 
 1. Install dependencies with `npm install`.
-2. Run `npx convex dev --once` and select the existing `Solis` project if asked.
-3. Set `VITE_CONVEX_URL` in the ignored `.env.local` to the development
-   deployment URL ending in `.convex.cloud` (the Convex CLI may also write a
-   `NEXT_PUBLIC_CONVEX_URL` for its framework detection).
+2. Run `npx convex dev --once` against the existing **Solis** project.
+3. Set `VITE_CONVEX_URL` to the development deployment URL in ignored
+   `.env.local` and `CONVEX_URL` plus `CONVEX_DEPLOY_KEY` in ignored
+   `.dev.vars`. The deploy key is server-only and must never use a `VITE_`
+   prefix.
 4. Run `npm run dev`.
 
 The browser client only receives the public deployment URL. Never put a Convex
@@ -19,15 +28,15 @@ admin key or deploy key in a `VITE_` variable.
 
 ## Production
 
-Deploy Convex functions to the production deployment with
-`npx convex deploy --typecheck enable`, then build DriftOS with that production
-deployment's URL and publish the Worker:
+The production Worker reads `CONVEX_URL` from `wrangler.toml` and its
+server-only `CONVEX_DEPLOY_KEY` from a Cloudflare Worker secret. Deploy
+Convex functions first, then build and publish the Worker:
 
 ```sh
 VITE_CONVEX_URL=https://<production-deployment>.convex.cloud DRIFTOS_CLOUDFLARE_DEPLOY=1 npm run build
 npx wrangler deploy
 ```
 
-The application root wraps the UI in `ConvexProvider` when `VITE_CONVEX_URL` is
-configured. Add future Convex queries/mutations incrementally; D1 remains the
-source of truth until a deliberate, tested migration is implemented.
+The browser receives only the public Convex URL. Never expose the deploy key
+in client bundles, logs, or committed files. Keep the permission-restricted D1
+export backup outside the repository until the migration retention period ends.

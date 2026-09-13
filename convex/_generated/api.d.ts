@@ -9,6 +9,8 @@
  */
 
 import type * as health from "../health.js";
+import type * as migration from "../migration.js";
+import type * as store from "../store.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +20,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   health: typeof health;
+  migration: typeof migration;
+  store: typeof store;
 }>;
 
 /**
