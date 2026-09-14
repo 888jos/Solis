@@ -327,7 +327,7 @@ export async function POST(request: Request) {
     )).limit(1);
     if (!account) return Response.json({ error: "Social account not found" }, { status: 404 });
     if (account.status === "syncing") return Response.json({ error: "Sync already running" }, { status: 409 });
-    const lastSyncedAt = Number(account.lastSyncedAt || 0) * 1000;
+    const lastSyncedAt = account.lastSyncedAt ? new Date(account.lastSyncedAt).getTime() : 0;
     if (lastSyncedAt && Date.now() - lastSyncedAt < 15 * 60 * 1000) {
       return Response.json({ error: "This account was synced less than 15 minutes ago" }, { status: 429 });
     }

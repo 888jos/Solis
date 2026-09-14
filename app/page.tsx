@@ -32,6 +32,7 @@ import {
   Percent,
   Plug,
   Repeat,
+  RefreshCw,
   Search,
   Send,
   SettingsIcon,
@@ -449,6 +450,43 @@ function videoIsInDateRange(video: CreatorVideo, dateRange: string) {
   const sourceDate = video.publishedAt || video.createdAt;
   const publishedDay = sourceDate ? parseIsoDay(sourceDate.slice(0, 10)) : null;
   return Boolean(range?.start && range.end && publishedDay && publishedDay >= range.start && publishedDay <= range.end);
+}
+
+function dateIsInDateRange(sourceDate: string | number | Date | null | undefined, dateRange: string) {
+  if (dateRange === "all") return true;
+  const range = resolveClientDateRange(dateRange);
+  const day = sourceDate ? parseIsoDay(new Date(sourceDate).toISOString().slice(0, 10)) : null;
+  return Boolean(range && day && day >= range.start && day <= range.end);
+}
+
+type PersistedRevenueRow = { appId: string; currency: string; date: string; downloads: number; grossRevenue: number; inAppPurchases: number; paidUnits: number; proceeds: number; refunds: number; subscriptions: number };
+type PersistedExpenseRow = { appId?: string | null; amount: number; date: string };
+
+function metricsFromPersistedRows(apps: StudioApp[], rows: PersistedRevenueRow[], expenses: PersistedExpenseRow[], dateRange: string, previous: AppStoreMetric[]) {
+  const range = resolveClientDateRange(dateRange);
+  if (!range) return [];
+  return apps.map((app): AppStoreMetric => {
+    const appRows = rows.filter((row) => row.appId === app.id);
+    const rowByDate = new Map(appRows.map((row) => [row.date, row]));
+    const firstStoredDate = appRows.map((row) => row.date).sort()[0];
+    const start = dateRange === "all" ? (firstStoredDate ? parseIsoDay(firstStoredDate)! : range.end) : range.start;
+    const series = [];
+    for (let cursor = new Date(start); cursor <= range.end; cursor = addUtcDays(cursor, 1)) {
+      const date = isoDay(cursor);
+      const row = rowByDate.get(date);
+      const paidUnits = Number(row?.paidUnits || 0);
+      series.push({ date, downloads: Number(row?.downloads || 0), grossRevenue: Number(row?.grossRevenue || 0), inAppPurchases: Number(row?.inAppPurchases || 0), revenue: Number(row?.proceeds || 0), refunds: Number(row?.refunds || 0), subscriptions: Number(row?.subscriptions || 0), units: Number(row?.downloads || 0) + paidUnits });
+    }
+    const latest = previous.find((metric) => metric.appId === app.id && (metric.aso || metric.release));
+    const revenue = appRows.reduce((sum, row) => sum + Number(row.proceeds || 0), 0);
+    const grossRevenue = appRows.reduce((sum, row) => sum + Number(row.grossRevenue || 0), 0);
+    const downloads = appRows.reduce((sum, row) => sum + Number(row.downloads || 0), 0);
+    const subscriptions = appRows.reduce((sum, row) => sum + Number(row.subscriptions || 0), 0);
+    const inAppPurchases = appRows.reduce((sum, row) => sum + Number(row.inAppPurchases || 0), 0);
+    const appExpenses = expenses.filter((row) => row.appId === app.id || (!row.appId && app.id === apps[0]?.id)).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const dates = appRows.map((row) => row.date).sort();
+    return normalizeMetric({ appId: app.id, parserVersion: CURRENT_PARSER_VERSION, appName: app.name, bundleId: app.bundleId, dateRange, periodStartDate: isoDay(range.start), periodEndDate: isoDay(range.end), sku: app.sku || app.bundleId, state: latest?.state || "", syncedAt: new Date().toISOString(), reportStartDate: dates[0] || null, reportEndDate: dates.at(-1) || null, currency: "USD", revenue, grossRevenue, refunds: appRows.reduce((sum, row) => sum + Number(row.refunds || 0), 0), revenueRows: appRows.filter((row) => Number(row.proceeds || 0) !== 0).length, revenueSource: appRows.length ? "Sales" : "None", downloads, units: downloads + subscriptions + inAppPurchases, subscriptions, inAppPurchases, countries: 0, countryBreakdown: latest?.countryBreakdown || [], timeSeries: series, rows: appRows.length, expenses: appExpenses, profit: revenue - appExpenses, aso: latest?.aso, release: latest?.release });
+  });
 }
 const InteractiveGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 const knownApps = {
@@ -1528,11 +1566,9 @@ export default function Home() {
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [creatorVideos, setCreatorVideos] = useState<CreatorVideo[]>([]);
   const [syncingAppId, setSyncingAppId] = useState("");
-  const attemptedAutoSyncIds = useRef(new Set<string>());
-  const autoSyncAttempts = useRef(new Map<string, number>());
-  const [autoSyncRevision, setAutoSyncRevision] = useState(0);
   const [syncError, setSyncError] = useState("");
   const [syncNotice, setSyncNotice] = useState<SyncNotice | null>(null);
+  const [revenueReadRevision, setRevenueReadRevision] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState(DEFAULT_DATE_RANGE);
   const previousDateRange = useMemo(() => previousDateRangeKey(dateRange), [dateRange]);
@@ -1549,7 +1585,6 @@ export default function Home() {
   const emptySocialForm = { platform: "TikTok" as SocialAccount["platform"], handle: "", appId: "", creatorName: "", email: "", dealType: "none" as NonNullable<SocialAccount["dealType"]>, fixedFee: "", cpmRate: "", dealCurrency: "USD", trackingHashtags: "", trackingKeywords: "", trackingMatch: "any" as NonNullable<SocialAccount["trackingMatch"]> };
   const [socialForm, setSocialForm] = useState(emptySocialForm);
   const artworkLookups = useRef(new Set<string>());
-  const generalSocialSyncAttempted = useRef(false);
 
   useLayoutEffect(() => {
     const hashPage = window.location.hash.replace("#", "");
@@ -1694,37 +1729,6 @@ export default function Home() {
   }, [creatorVideos, loaded]);
 
   useEffect(() => {
-    if (!loaded || !socials.length || generalSocialSyncAttempted.current) return;
-    generalSocialSyncAttempted.current = true;
-    setSyncNotice({ kind: "info", title: "Social sync", detail: "Checking the daily Apify refresh…" });
-    void fetch("/api/social-sync", { method: "POST" })
-      .then((response) => response.json())
-      .then(async (payload: { skipped?: boolean; accounts?: Array<{ id: string; platform: string; handle: string }>; nextSyncAt?: string }) => {
-        if (payload.skipped) {
-          setSyncNotice({ kind: "success", title: "Social data is up to date", detail: payload.nextSyncAt ? `Next Apify sync ${new Date(payload.nextSyncAt).toLocaleString()}.` : "Daily sync already completed." });
-          return;
-        }
-        for (const account of payload.accounts ?? []) {
-          await fetch(`/api/social-profile?platform=${encodeURIComponent(account.platform)}&handle=${encodeURIComponent(account.handle)}&accountId=${encodeURIComponent(account.id)}`, { method: "POST" });
-        }
-        const [socialsResponse, videosResponse] = await Promise.all([
-          fetch(`/api/social-accounts?workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}`, { cache: "no-store" }),
-          fetch(`/api/creator-videos?workspaceId=${encodeURIComponent(DEFAULT_WORKSPACE_ID)}`, { cache: "no-store" }),
-        ]);
-        const socialsPayload = await socialsResponse.json() as { data?: { socialAccounts?: SocialAccount[] } };
-        const videosPayload = await videosResponse.json() as { data?: { videos?: BackendCreatorVideo[] } };
-        if (socialsPayload.data?.socialAccounts) setSocials(socialsPayload.data.socialAccounts.map((social) => ({
-          ...social,
-          platform: social.platform.charAt(0).toUpperCase() + social.platform.slice(1).toLowerCase() as SocialAccount["platform"],
-          status: social.status === "ready" ? "Ready for public tracking" : social.status === "no_public_metrics" ? "No public metrics" : social.status === "syncing" ? "Provider pending" : "Not synced",
-        })));
-        if (videosPayload.data?.videos) setCreatorVideos(videosPayload.data.videos.map(creatorVideoFromBackend));
-        setSyncNotice({ kind: "success", title: "Apify sync complete", detail: `${payload.accounts?.length ?? 0} creator handles refreshed.` });
-      })
-      .catch(() => setSyncNotice({ kind: "error", title: "Apify sync failed", detail: "Existing data is still available. Retry the creator sync if needed." }));
-  }, [loaded, socials.length]);
-
-  useEffect(() => {
     if (!syncNotice) return;
     const timer = window.setTimeout(() => setSyncNotice(null), 9000);
     return () => window.clearTimeout(timer);
@@ -1738,7 +1742,10 @@ export default function Home() {
     window.localStorage.setItem(PORTFOLIO_SCOPE_STORAGE, JSON.stringify(validScope));
   }, [apps, loaded, portfolioScope]);
 
-  const syncAppStore = useCallback(async (app: StudioApp, targetDateRange = dateRange) => {
+  const syncAppStore = useCallback(async (app: StudioApp) => {
+    // Apple provider reads are deliberately bounded and only happen after a user click.
+    // Dashboard date filters always read the locally persisted daily rows instead.
+    const targetDateRange = "30d";
     setSyncError("");
     setSyncingAppId(app.id);
     const controller = new AbortController();
@@ -1756,6 +1763,8 @@ export default function Home() {
         throw new Error(`${payload.message ?? "App Store Connect sync failed."}${missing}`);
       }
       setAppStoreMetrics((current) => [normalizeMetric(payload.metrics!), ...current.filter((metric) => !(metric.appId === app.id && metric.dateRange === targetDateRange))]);
+      setRevenueReadRevision((revision) => revision + 1);
+      setSyncNotice({ kind: "success", title: `${appDisplayName(app.name)} synced`, detail: "The latest 30 days were refreshed from Apple. Date filters continue to use stored data." });
       return true;
     } catch (error) {
       const isAbort = error instanceof DOMException && error.name === "AbortError";
@@ -1765,37 +1774,31 @@ export default function Home() {
       window.clearTimeout(timeout);
       setSyncingAppId("");
     }
-  }, [dateRange]);
+  }, []);
 
   useEffect(() => {
-    if (!loaded || syncingAppId) return;
-    const shouldAutoSyncPrevious = dateRange === "today" || dateRange === "yesterday" || dateRange === "7d" || dateRange === "30d";
-    const syncRanges = [dateRange, shouldAutoSyncPrevious ? previousDateRange : ""].filter(Boolean);
-    const candidate = syncRanges.flatMap((range) => apps.map((app) => ({ app, range }))).find(({ app, range }) => {
-      if (app.isDemo) return false;
-      const isComplete = isAppSyncReady(app);
-      const syncKey = `${app.id}:${range}`;
-      const hasCurrentMetrics = appStoreMetrics.some((metric) => metric.appId === app.id && metric.parserVersion >= CURRENT_PARSER_VERSION && metric.dateRange === range && metric.aso);
-      const attempts = autoSyncAttempts.current.get(syncKey) ?? 0;
-      return isComplete && !hasCurrentMetrics && attempts < 3 && !attemptedAutoSyncIds.current.has(syncKey);
+    if (!loaded || !apps.length) return;
+    const controller = new AbortController();
+    const ranges = [dateRange, previousDateRange].filter(Boolean);
+    setSyncError("");
+    void Promise.all(ranges.map(async (rangeKey) => {
+      const range = resolveClientDateRange(rangeKey);
+      if (!range) return { key: rangeKey, rows: [] as PersistedRevenueRow[], expenses: [] as PersistedExpenseRow[] };
+      const response = await fetch(`/api/metrics/revenue?start=${isoDay(range.start)}&end=${isoDay(range.end)}`, { cache: "no-store", signal: controller.signal });
+      const payload = await response.json() as { ok?: boolean; data?: { daily?: PersistedRevenueRow[]; expensesDaily?: PersistedExpenseRow[] } };
+      if (!response.ok || !payload.ok) throw new Error("Stored revenue could not be loaded.");
+      return { key: rangeKey, rows: payload.data?.daily || [], expenses: payload.data?.expensesDaily || [] };
+    })).then((results) => {
+      setAppStoreMetrics((current) => {
+        const replacements = results.flatMap((result) => metricsFromPersistedRows(apps, result.rows, result.expenses, result.key, current));
+        const keys = new Set(replacements.map((metric) => `${metric.appId}:${metric.dateRange}`));
+        return [...replacements, ...current.filter((metric) => !keys.has(`${metric.appId}:${metric.dateRange}`))];
+      });
+    }).catch((error) => {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setSyncError(error instanceof Error ? error.message : "Stored revenue could not be loaded.");
     });
-    if (!candidate) return;
-    const syncKey = `${candidate.app.id}:${candidate.range}`;
-    const attempt = (autoSyncAttempts.current.get(syncKey) ?? 0) + 1;
-    autoSyncAttempts.current.set(syncKey, attempt);
-    attemptedAutoSyncIds.current.add(syncKey);
-    void syncAppStore(candidate.app, candidate.range).then((succeeded) => {
-      if (succeeded) {
-        autoSyncAttempts.current.delete(syncKey);
-        return;
-      }
-      if (attempt >= 3) return;
-      window.setTimeout(() => {
-        attemptedAutoSyncIds.current.delete(syncKey);
-        setAutoSyncRevision((value) => value + 1);
-      }, attempt * 2_500);
-    });
-  }, [appStoreMetrics, apps, autoSyncRevision, dateRange, loaded, previousDateRange, syncAppStore, syncingAppId]);
+    return () => controller.abort();
+  }, [apps, dateRange, loaded, previousDateRange, revenueReadRevision]);
 
   const periodMetrics = useMemo(
     () => appStoreMetrics.filter((metric) => metric.parserVersion >= CURRENT_PARSER_VERSION && (metric.dateRange || DEFAULT_DATE_RANGE) === dateRange),
@@ -2199,10 +2202,10 @@ export default function Home() {
     if (activePage === "monetization") return <MonetizationPage apps={scopedApps} metrics={currentMetrics} isSyncing={Boolean(syncingAppId)} setActivePage={openPage} />;
     if (activePage === "acquisition") return <AnalyticsPage kind="acquisition" apps={scopedApps} metrics={currentMetrics} previousMetrics={previousMetrics} previousPeriodAvailable={Boolean(previousDateRange)} syncingAppId={syncingAppId} syncError={syncError} setActivePage={openPage} />;
     if (activePage === "aso") return <AsoPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
-    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId) && dateIsInDateRange(creative.createdAt, dateRange))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={periodCreatorVideos} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
-    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "quality") return <QualityPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -3388,7 +3391,7 @@ function AsoPage({ apps, metrics, setActivePage }: { apps: StudioApp[]; metrics:
           <button type="button" className="asoPrimaryButton" onClick={() => { setDraftKeywords(keywordQuery); setKeywordModalOpen(true); }}>Add Keywords <span>+</span></button>
           <button type="button" className="asoSuggestionButton" onClick={() => setSuggestionModalOpen(true)}>{Math.max(2, Math.min(9, suggestions.length))} Suggestions</button>
           <button type="button" className="asoIconButton" aria-label="Open app setup" onClick={() => setActivePage("apps")}>⌑</button>
-          <button type="button" className="asoFilterButton" onClick={refreshVisibleKeywords}>Last 7 days⌄</button>
+          <span className="asoFilterButton" title="ASO rankings show the latest stored snapshot">Current snapshot</span>
           <button type="button" className="asoIconButton" aria-label="More">•••</button>
           <form className="asoSearchForm" onSubmit={(event) => { event.preventDefault(); inspectKeyword(keywordQuery); }}>
             <input className="asoSearch" value={keywordQuery} onChange={(event) => setKeywordQuery(event.target.value)} placeholder="Search keyword" aria-label="Search ASO keywords" />
@@ -3511,22 +3514,11 @@ function AsoRankingModal({ keyword, country, results, openRankedApp, onClose }: 
 }
 
 function AsoTrendModal({ keyword, onClose }: { keyword: string; onClose: () => void }) {
-  const points = [102, 238, 110, 93];
-  const path = "M390 108 L432 268 L488 126 L550 96";
   return (
     <AsoModal className="asoTrendDialog" onClose={onClose}>
       <h2>Data since &quot;{keyword}&quot; was added</h2>
-      <p>Keyword ranking is updated every 24 hours when the app is open.</p>
-      <label>Time Frame <select><option>Last 7 days</option><option>Last 30 days</option></select></label>
-      <svg className="asoLargeTrend" viewBox="0 0 640 300" role="img">
-        <title>{keyword} ranking trend</title>
-        {[50, 100, 150, 200].map((line, index) => <g key={`trend-grid-${line}`}><line x1="20" x2="620" y1={line + 20} y2={line + 20} /><text x="625" y={line + 25}>{(index + 1) * 50}</text></g>)}
-        <path className="area" d={`${path} L550 270 L390 270 Z`} />
-        <path className="line" d={path} />
-        {points.map((point, index) => <circle cx={390 + index * 54} cy={point} r="5" key={`trend-point-${point}-${index}`} />)}
-        <text x="210" y="282">18 Aug</text><text x="390" y="282">20 Aug</text><text x="560" y="282">22 Aug</text>
-      </svg>
-      <div className="asoModalFooter"><button type="button">⇧ Share</button><button type="button" onClick={onClose}>Done</button></div>
+      <p>Historical ranking snapshots have not been collected yet. The table shows the latest stored ranking only; no synthetic trend is displayed.</p>
+      <div className="asoModalFooter"><button type="button" onClick={onClose}>Done</button></div>
     </AsoModal>
   );
 }
@@ -4745,15 +4737,17 @@ function socialMetricText(value: number, loading: boolean, suffix = "") {
 
 const SOCIAL_LOOKUP_TIMEOUT_MS = 120_000;
 
-function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
+function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; dateRange: string; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
   const [platformFilter, setPlatformFilter] = useState("all");
   const [creatorFilter, setCreatorFilter] = useState("all");
+  const [bulkSyncing, setBulkSyncing] = useState(false);
+  const [manualSyncMessage, setManualSyncMessage] = useState("");
 
   async function syncSocial(social: SocialAccount) {
-    if (activeLookups.has(social.id)) return;
+    if (activeLookups.has(social.id)) return false;
     setActiveLookups((current) => new Set(current).add(social.id));
     setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "Provider pending" } : row));
     const controller = new AbortController();
@@ -4767,12 +4761,30 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
       setSocials((current) => current.map((row) => row.id === social.id ? synced : row));
       const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
       setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== social.id)]);
+      return true;
     } catch {
       setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: social.status } : row));
+      return false;
     } finally {
       window.clearTimeout(timer);
       setActiveLookups((current) => { const next = new Set(current); next.delete(social.id); return next; });
     }
+  }
+
+  async function syncAllSocials() {
+    if (bulkSyncing) return;
+    const accounts = socials.filter((social) => social.active !== false);
+    setBulkSyncing(true);
+    setManualSyncMessage(`Syncing 0 / ${accounts.length} creators…`);
+    let completed = 0;
+    let succeeded = 0;
+    for (const social of accounts) {
+      if (await syncSocial(social)) succeeded += 1;
+      completed += 1;
+      setManualSyncMessage(`Syncing ${completed} / ${accounts.length} creators…`);
+    }
+    setBulkSyncing(false);
+    setManualSyncMessage(`${succeeded} / ${accounts.length} creators synced. Data will not refresh again until you click Sync.`);
   }
 
   async function removeSocial(social: SocialAccount) {
@@ -4791,13 +4803,23 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
   const visibleVideos = videos.filter((video) => visibleSocials.some((social) => social.id === video.socialAccountId));
   const totals = videoTotals(visibleVideos);
   const selectedHandle = visibleSocials.find((social) => social.id === selectedHandleId) ?? visibleSocials[0];
-  const dailyTrend = Array.from(visibleVideos.reduce((daily, video) => {
+  const dailyStats = visibleVideos.reduce((daily, video) => {
     const day = (video.publishedAt || video.createdAt || "").slice(0, 10) || "Unknown";
-    const current = daily.get(day) ?? 0;
-    const value = selectedMetric === "videos" ? 1 : selectedMetric === "views" ? video.views : selectedMetric === "likes" ? video.likes : selectedMetric === "comments" ? video.comments : selectedMetric === "shares" ? video.shares : selectedMetric === "favorites" ? video.favorites : selectedMetric === "avgViews" ? video.views : 0;
-    daily.set(day, current + value);
+    const current = daily.get(day) ?? { videos: 0, views: 0, likes: 0, comments: 0, shares: 0, favorites: 0 };
+    daily.set(day, { videos: current.videos + 1, views: current.views + video.views, likes: current.likes + video.likes, comments: current.comments + video.comments, shares: current.shares + video.shares, favorites: current.favorites + video.favorites });
     return daily;
-  }, new Map<string, number>()).entries()).sort(([a], [b]) => a.localeCompare(b)).map(([day, value]) => ({ label: day === "Unknown" ? day : day.slice(5), value }));
+  }, new Map<string, { videos: number; views: number; likes: number; comments: number; shares: number; favorites: number }>());
+  const trendRange = resolveClientDateRange(dateRange);
+  const firstVideoDay = visibleVideos.map((video) => (video.publishedAt || video.createdAt || "").slice(0, 10)).filter(Boolean).sort()[0];
+  const trendStart = dateRange === "all" && firstVideoDay ? parseIsoDay(firstVideoDay)! : trendRange?.start;
+  const dailyTrend = [] as Array<{ label: string; value: number }>;
+  if (trendStart && trendRange?.end) for (let cursor = new Date(trendStart); cursor <= trendRange.end; cursor = addUtcDays(cursor, 1)) {
+    const day = isoDay(cursor);
+    const stats = dailyStats.get(day) ?? { videos: 0, views: 0, likes: 0, comments: 0, shares: 0, favorites: 0 };
+    const interactions = stats.likes + stats.comments + stats.shares + stats.favorites;
+    const value = selectedMetric === "avgViews" ? (stats.videos ? stats.views / stats.videos : 0) : selectedMetric === "engagement" ? (stats.views ? interactions / stats.views * 100 : 0) : stats[selectedMetric];
+    dailyTrend.push({ label: day.slice(5), value });
+  }
   const hasMetrics = totals.videos > 0 || totals.views > 0 || totals.likes > 0 || totals.comments > 0 || totals.shares > 0 || totals.favorites > 0 || totals.engagement > 0;
   const isLoading = activeLookups.size > 0 || socials.some(isSocialLoading);
   const loadingCount = Math.max(activeLookups.size, socials.filter(isSocialLoading).length);
@@ -4835,8 +4857,10 @@ function SocialTrackingPage({ apps, socials, videos, setSocials, setCreatorVideo
       <div className="socialFilterBar" aria-label="Social tracking filters">
         <label><span>Platform</span><select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}><option value="all">All platforms</option><option>TikTok</option><option>Instagram</option><option>YouTube</option></select></label>
         <label><span>Creator</span><select value={creatorFilter} onChange={(event) => setCreatorFilter(event.target.value)}><option value="all">All creators</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.creatorName || social.handle}</option>)}</select></label>
+        <button className="socialSyncAllButton" type="button" onClick={() => void syncAllSocials()} disabled={bulkSyncing} title="Synchronize every active creator now" aria-label="Synchronize every active creator now"><RefreshCw size={18} className={bulkSyncing ? "isSpinning" : ""}/><span>{bulkSyncing ? "Syncing…" : "Sync all"}</span></button>
         <div className="filterSummary"><strong>{formatNumber(visibleSocials.length)}</strong><span>creators selected</span></div>
       </div>
+      {manualSyncMessage ? <p className="socialManualSyncStatus" role="status">{manualSyncMessage}</p> : null}
       {hasMetrics ? (
         <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend · daily`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos published in period · filters are local`} points={dailyTrend.length ? dailyTrend : [{ label: "Today", value: 0 }]} variant="number" currency="USD" />
       ) : isLoading ? (
@@ -4983,7 +5007,7 @@ function creatorDealLabel(social: SocialAccount) {
   return "No deal";
 }
 
-function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
+function Creators({ apps, socials, videos, dateRange, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; dateRange: string; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
   const [operations, setOperations] = useState<CreatorOperationProfile[]>([]);
   const [operationCampaigns, setOperationCampaigns] = useState<Array<Record<string, unknown>>>([]);
@@ -5025,13 +5049,15 @@ function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFilte
   const selectedProfile = selectedCreator ? operationFor(selectedCreator) : undefined;
 
   const reloadOperations = useCallback(async () => {
-    const response = await fetch("/api/creator-operations", { cache: "no-store" });
+    const range = resolveClientDateRange(dateRange);
+    const query = range ? `?start=${isoDay(range.start)}&end=${isoDay(range.end)}` : "";
+    const response = await fetch(`/api/creator-operations${query}`, { cache: "no-store" });
     const payload = await response.json() as { ok?: boolean; data?: { creators?: CreatorOperationProfile[]; campaigns?: Array<Record<string, unknown>> } };
     if (response.ok && payload.ok) {
       setOperations(payload.data?.creators || []);
       setOperationCampaigns(payload.data?.campaigns || []);
     }
-  }, []);
+  }, [dateRange]);
   useEffect(() => {
     const timer = window.setTimeout(() => void reloadOperations(), 0);
     return () => window.clearTimeout(timer);
@@ -5132,8 +5158,8 @@ function Creators({ apps, socials, videos, setSocials, setCreatorVideos, isFilte
             <span>App</span>
             <span>Status</span>
             <span>Deal</span>
-            <span>30d Views</span>
-            <span>Videos 30d</span>
+            <span>Period Views</span>
+            <span>Period Videos</span>
             <span>Avg Views</span>
             <span>Est. Payout</span>
             <span>Due</span>
@@ -5228,7 +5254,7 @@ function CreatorProfilePanel({ creator, profile, campaigns, app, videos, onClose
     <div className="creatorQuickActions"><button className="ghostButton" onClick={onEdit}>Edit creator</button><button className="ghostButton" onClick={addNote}>Add note</button><button className="ghostButton" onClick={addActivity}>Add activity</button><button className="ghostButton" onClick={setNextAction}>Next action</button><button className="ghostButton" disabled={busy} onClick={() => void action({ action: "status", status: profile?.status === "Paused" ? "Active" : "Paused" })}>{profile?.status === "Paused" ? "Resume" : "Pause"}</button></div>
     {profile?.nextActionText ? <button className="creatorNextAction" type="button" onClick={setNextAction}><small>Next action</small><strong>{profile.nextActionText}</strong><span>{profile.nextActionAt ? new Date(profile.nextActionAt).toLocaleDateString() : "No due date"}</span></button> : null}
     <nav className="creatorTabs">{["Overview", "Accounts", "Videos", "Campaigns", "Payments", "Activity"].map((name) => <button className={tab === name ? "isActive" : ""} onClick={() => setTab(name)} key={name}>{name}</button>)}</nav>
-    {tab === "Overview" ? <div className="creatorTabBody"><div className="creatorKpiGrid">{[["30d Views", formatNumber(totals.views30d)], ["Avg / Video", formatNumber(totals.avgViews30d)], ["Median / Video", formatNumber(totals.medianViews30d)], ["Videos 30d", formatNumber(totals.videos30d)], ["Effective CPM", totals.views30d && totals.estimatedPayout ? formatUnitCurrency(totals.estimatedPayout / totals.views30d * 1000, currency) : "—"], ["Amount Due", totals.amountDue ? formatCurrency(totals.amountDue, currency) : "—"], ["Total Paid", totals.lifetimePaid ? formatCurrency(totals.lifetimePaid, currency) : "—"]].map(([label, value]) => <span key={label}><strong>{value}</strong><small>{label}</small></span>)}</div>
+    {tab === "Overview" ? <div className="creatorTabBody"><div className="creatorKpiGrid">{[["Period Views", formatNumber(totals.views30d)], ["Avg / Video", formatNumber(totals.avgViews30d)], ["Median / Video", formatNumber(totals.medianViews30d)], ["Period Videos", formatNumber(totals.videos30d)], ["Effective CPM", totals.views30d && totals.estimatedPayout ? formatUnitCurrency(totals.estimatedPayout / totals.views30d * 1000, currency) : "—"], ["Amount Due", totals.amountDue ? formatCurrency(totals.amountDue, currency) : "—"], ["Total Paid", totals.lifetimePaid ? formatCurrency(totals.lifetimePaid, currency) : "—"]].map(([label, value]) => <span key={label}><strong>{value}</strong><small>{label}</small></span>)}</div>
       <div className="creatorOverviewGrid"><section className="creatorOpsCard"><div className="panelHeader"><div><p className="caption">Deal</p><h3>{dealLabel}</h3></div><button className="compactButton ghostButton" onClick={() => setTab("Payments")}>Manage</button></div>{profile?.deal ? <div className="creatorDetailList"><span><small>Cap / video</small><strong>{profile.deal.maxPayoutPerVideo ? formatCurrency(Number(profile.deal.maxPayoutPerVideo), currency) : "No cap"}</strong></span><span><small>Eligibility</small><strong>{String(profile.deal.eligibilityWindowDays || 30)} days</strong></span><span><small>Minimum</small><strong>{formatCurrency(Number(profile.deal.minimumPayout || 50), currency)}</strong></span><span><small>Rights</small><strong>{profile.deal.usageRightsMonths ? `${profile.deal.usageRightsMonths} months` : "—"}</strong></span></div> : <p className="settingsEmpty">No deal. Configure terms from Payments.</p>}</section>
       <section className="creatorOpsCard"><div className="panelHeader"><div><p className="caption">Audience</p><h3>{profile?.audience ? `${formatNumber(Number(profile.audience.followers || 0))} followers` : "Missing demographics"}</h3></div><button className="compactButton ghostButton" onClick={addAudience}>{profile?.audience ? "Update" : "Add"}</button></div>{profile?.audience ? <div className="creatorDetailList"><span><small>Tier 1</small><strong>{profile.audience.tier1Percentage ? `${profile.audience.tier1Percentage}%` : "—"}</strong></span><span><small>Language</small><strong>{String(profile.audience.dominantLanguage || "—")}</strong></span><span><small>Niche</small><strong>{String(profile.audience.niche || "—")}</strong></span><span><small>Verified</small><strong>{profile.audience.capturedAt ? new Date(profile.audience.capturedAt as string).toLocaleDateString() : "—"}</strong></span></div> : <p className="settingsEmpty">Add a verified audience snapshot before approving a deal.</p>}</section></div>
       {profile?.alerts?.length ? <section className="creatorAlerts"><p className="caption">Alerts</p>{profile.alerts.map((alert) => <div key={String(alert.id)}><BadgeAlert size={17}/><span><strong>{String(alert.title)}</strong><small>{String(alert.body || "")}</small></span></div>)}</section> : null}</div> : null}

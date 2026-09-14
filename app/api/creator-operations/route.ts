@@ -17,7 +17,10 @@ const dateMs = (value: unknown) => value ? new Date(value as string | number | D
 export async function GET(request: Request) {
   try {
     const session = await getOrCreateLocalSession();
-    const workspaceId = new URL(request.url).searchParams.get("workspaceId") || session.workspaceId;
+    const searchParams = new URL(request.url).searchParams;
+    const workspaceId = searchParams.get("workspaceId") || session.workspaceId;
+    const periodStart = searchParams.get("start");
+    const periodEnd = searchParams.get("end");
     const db = await getDb();
     const [creatorRows, accounts, videos, deals, audience, assignments, campaignRows, payoutRows, activities, notes, alertRows, snapshots] = await Promise.all([
       db.select().from(creators).where(eq(creators.workspaceId, workspaceId)),
@@ -33,12 +36,13 @@ export async function GET(request: Request) {
       db.select().from(alerts).where(eq(alerts.workspaceId, workspaceId)),
       db.select().from(videoMetricSnapshots).where(eq(videoMetricSnapshots.workspaceId, workspaceId)),
     ]);
-    const since30d = Date.now() - 30 * day;
+    const since30d = periodStart ? dateMs(`${periodStart}T00:00:00Z`) : Date.now() - 30 * day;
+    const periodEndMs = periodEnd ? dateMs(`${periodEnd}T23:59:59.999Z`) : Date.now();
     const profiles = creatorRows.map((creator: any) => {
       const creatorAccounts = accounts.filter((account: any) => account.creatorId === creator.id || (!account.creatorId && account.platform === creator.platform && account.handle === creator.handle));
       const accountIds = new Set(creatorAccounts.map((account: any) => account.id));
       const creatorContent = videos.filter((video: any) => video.creatorId === creator.id || accountIds.has(video.socialAccountId));
-      const recent = creatorContent.filter((video: any) => dateMs(video.publishedAt || video.createdAt) >= since30d && video.eligibilityStatus !== "excluded");
+      const recent = creatorContent.filter((video: any) => { const published = dateMs(video.publishedAt || video.createdAt); return published >= since30d && published <= periodEndMs && video.eligibilityStatus !== "excluded"; });
       const recentViews = recent.map((video: any) => number(video.views));
       const views30d = recentViews.reduce((sum: number, value: number) => sum + value, 0);
       const activeDeal = deals.find((deal: any) => deal.creatorId === creator.id && deal.active) || null;

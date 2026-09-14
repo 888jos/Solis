@@ -85,7 +85,12 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.match(page, /customRangeKey/);
   assert.match(page, /applyCustomDateRange/);
   assert.match(page, /MAX_CUSTOM_RANGE_DAYS = 3650/);
-  assert.match(page, /autoSyncAttempts/);
+  assert.doesNotMatch(page, /autoSyncAttempts|attemptedAutoSyncIds|generalSocialSyncAttempted/);
+  assert.match(page, /const targetDateRange = "30d"/);
+  assert.match(page, /metricsFromPersistedRows/);
+  assert.match(page, /api\/metrics\/revenue\?start=/);
+  assert.match(page, /className="socialSyncAllButton"/);
+  assert.match(page, /Data will not refresh again until you click Sync/);
   assert.match(page, /AnalyticsSkeleton/);
   assert.match(page, /aria-busy="true"/);
   assert.match(page, /option value="today">Today/);

@@ -54,3 +54,26 @@ export const backfill = internalMutation({
     return { accounts: accounts.length, creatorsCreated, accountsLinked, videosLinked, snapshotsCreated };
   },
 });
+
+export const repairStaleSyncJobs = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const jobs = await ctx.db.query("sync_jobs").collect();
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    let repaired = 0;
+    for (const job of jobs) {
+      const createdAt = new Date(job.createdAt || 0).getTime();
+      if ((job.status === "running" || (job.provider === "apify" && job.status === "queued")) && createdAt < cutoff) {
+        await ctx.db.patch(job._id, {
+          error: job.provider === "apify" ? "Automatic social sync was disabled; use the manual Sync button." : "The client stopped waiting before this job completed.",
+          finishedAt: Date.now(),
+          message: job.provider === "apify" ? "Manual social sync required." : "Stale sync closed automatically.",
+          status: "retryable",
+          updatedAt: Date.now(),
+        });
+        repaired += 1;
+      }
+    }
+    return { repaired };
+  },
+});

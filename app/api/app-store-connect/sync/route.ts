@@ -949,7 +949,7 @@ function resolveDateRange(dateRange: string): DatePeriod {
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
   const presets: Record<string, { count: number; end: Date }> = {
-    today: { count: 1, end: yesterday },
+    today: { count: 1, end: today },
     yesterday: { count: 1, end: yesterday },
     "7d": { count: 7, end: yesterday },
     "30d": { count: 30, end: yesterday },
@@ -971,7 +971,7 @@ function resolveDateRange(dateRange: string): DatePeriod {
     const start = parseIsoDate(startDate);
     const end = parseIsoDate(endDate);
     if (start > end) throw new Error("Custom period start date must be before its end date.");
-    if (end > yesterday) throw new Error("Apple reports are available through yesterday.");
+    if (end > today) throw new Error("The selected period cannot end in the future.");
     count = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
     if (count > MAX_CUSTOM_RANGE_DAYS) throw new Error(`Custom periods can cover up to ${MAX_CUSTOM_RANGE_DAYS} days.`);
     key = `custom:${startDate}:${endDate}`;

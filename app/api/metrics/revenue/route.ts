@@ -32,12 +32,14 @@ export async function GET(request: Request) {
     const db = await getDb();
     const metricRows = await db
       .select({
+        appId: dailyAppMetrics.appId,
         currency: dailyAppMetrics.currency,
         date: dailyAppMetrics.date,
         grossRevenue: dailyAppMetrics.grossRevenue,
         proceeds: dailyAppMetrics.proceeds,
         downloads: dailyAppMetrics.installs,
         paidUnits: dailyAppMetrics.paidUnits,
+        subscribers: dailyAppMetrics.subscribers,
         trials: dailyAppMetrics.trials,
         cancellations: dailyAppMetrics.cancellations,
         refunds: dailyAppMetrics.refunds,
@@ -48,6 +50,7 @@ export async function GET(request: Request) {
 
     const expenseRows = await db
       .select({
+        appId: manualExpenses.appId,
         amount: manualExpenses.amount,
         currency: manualExpenses.currency,
         date: manualExpenses.spentAt,
@@ -79,6 +82,19 @@ export async function GET(request: Request) {
     const arpu = downloads > 0 ? grossRevenue / downloads : 0;
 
     return ok({
+      daily: metricRows.map((row) => ({
+        appId: row.appId,
+        currency: "USD",
+        date: row.date,
+        downloads: Number(row.downloads || 0),
+        grossRevenue: toUsd(row.grossRevenue, row.currency, row.date),
+        paidUnits: Number(row.paidUnits || 0),
+        proceeds: toUsd(row.proceeds, row.currency, row.date),
+        refunds: toUsd(row.refunds, row.currency, row.date),
+        inAppPurchases: Number(row.paidUnits || 0) - Number(row.subscribers || 0),
+        subscriptions: Number(row.subscribers || 0),
+      })),
+      expensesDaily: expenseRows.map((row) => ({ appId: row.appId, amount: toUsd(row.amount, row.currency, row.date), date: row.date })),
       totals: {
         grossRevenue,
         proceeds,
