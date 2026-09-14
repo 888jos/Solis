@@ -91,6 +91,7 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.match(page, /api\/metrics\/revenue\?start=/);
   assert.match(page, /className="socialSyncAllButton"/);
   assert.match(page, /Data will not refresh again until you click Sync/);
+  assert.match(page, /Social sync complete/);
   assert.match(page, /AnalyticsSkeleton/);
   assert.match(page, /aria-busy="true"/);
   assert.match(page, /option value="today">Today/);

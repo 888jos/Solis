@@ -2204,7 +2204,7 @@ export default function Home() {
     if (activePage === "aso") return <AsoPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId) && dateIsInDateRange(creative.createdAt, dateRange))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={periodCreatorVideos} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
-    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} onSyncNotice={setSyncNotice} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
     if (activePage === "releases") return <ReleasesPage apps={scopedApps} socials={scopedSocials} metrics={currentMetrics} setActivePage={openPage} />;
@@ -4737,7 +4737,7 @@ function socialMetricText(value: number, loading: boolean, suffix = "") {
 
 const SOCIAL_LOOKUP_TIMEOUT_MS = 120_000;
 
-function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setCreatorVideos, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; dateRange: string; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; isFiltered?: boolean }) {
+function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setCreatorVideos, onSyncNotice, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; dateRange: string; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; onSyncNotice: (notice: SyncNotice | null) => void; isFiltered?: boolean }) {
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
@@ -4746,8 +4746,9 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
   const [bulkSyncing, setBulkSyncing] = useState(false);
   const [manualSyncMessage, setManualSyncMessage] = useState("");
 
-  async function syncSocial(social: SocialAccount) {
+  async function syncSocial(social: SocialAccount, quiet = false) {
     if (activeLookups.has(social.id)) return false;
+    if (!quiet) onSyncNotice({ kind: "info", title: `Syncing ${social.creatorName || social.handle}`, detail: "Refreshing this creator from the provider…" });
     setActiveLookups((current) => new Set(current).add(social.id));
     setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "Provider pending" } : row));
     const controller = new AbortController();
@@ -4761,9 +4762,11 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
       setSocials((current) => current.map((row) => row.id === social.id ? synced : row));
       const nextVideos = (profile.videos ?? []).map((video) => creatorVideoFromSocialProfile(video, synced));
       setCreatorVideos((current) => [...nextVideos, ...current.filter((video) => video.socialAccountId !== social.id)]);
+      if (!quiet) onSyncNotice({ kind: "success", title: `${social.creatorName || social.handle} synced`, detail: `${nextVideos.length} tracked videos refreshed.` });
       return true;
-    } catch {
+    } catch (error) {
       setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: social.status } : row));
+      if (!quiet) onSyncNotice({ kind: "error", title: `${social.creatorName || social.handle} sync failed`, detail: error instanceof Error ? error.message : "The existing stored data is unchanged." });
       return false;
     } finally {
       window.clearTimeout(timer);
@@ -4776,15 +4779,17 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
     const accounts = socials.filter((social) => social.active !== false);
     setBulkSyncing(true);
     setManualSyncMessage(`Syncing 0 / ${accounts.length} creators…`);
+    onSyncNotice({ kind: "info", title: "Social sync started", detail: `${accounts.length} active creators will be refreshed once.` });
     let completed = 0;
     let succeeded = 0;
     for (const social of accounts) {
-      if (await syncSocial(social)) succeeded += 1;
+      if (await syncSocial(social, true)) succeeded += 1;
       completed += 1;
       setManualSyncMessage(`Syncing ${completed} / ${accounts.length} creators…`);
     }
     setBulkSyncing(false);
     setManualSyncMessage(`${succeeded} / ${accounts.length} creators synced. Data will not refresh again until you click Sync.`);
+    onSyncNotice({ kind: succeeded === accounts.length ? "success" : "error", title: succeeded === accounts.length ? "Social sync complete" : "Social sync partially complete", detail: `${succeeded} / ${accounts.length} active creators refreshed. No automatic refresh is scheduled.` });
   }
 
   async function removeSocial(social: SocialAccount) {
