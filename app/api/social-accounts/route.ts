@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { socialAccounts } from "@/db/schema";
+import { creators, socialAccounts } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { fail, normalizeHandle, now, ok, readJson } from "@/server/backend/http";
 import { ensureWorkspace } from "@/server/backend/workspaces";
@@ -65,16 +65,33 @@ export async function POST(request: Request) {
       .where(and(eq(socialAccounts.workspaceId, workspaceId), eq(socialAccounts.platform, platform), eq(socialAccounts.handle, handle)))
       .limit(1);
 
-    if (existing) return ok({ socialAccount: existing, duplicate: true });
+    if (existing) {
+      if (!existing.creatorId) {
+        const [creator] = await db.select().from(creators).where(and(eq(creators.workspaceId, workspaceId), eq(creators.platform, platform), eq(creators.handle, handle))).limit(1);
+        const creatorId = creator?.id || crypto.randomUUID();
+        if (!creator) await db.insert(creators).values({ id: creatorId, workspaceId, name: existing.creatorName || handle, handle, platform, email: existing.email, primaryAppId: existing.appId, status: "Active", createdAt: now(), updatedAt: now() });
+        await db.update(socialAccounts).set({ creatorId, updatedAt: now() }).where(eq(socialAccounts.id, existing.id));
+        return ok({ socialAccount: { ...existing, creatorId }, duplicate: true });
+      }
+      return ok({ socialAccount: existing, duplicate: true });
+    }
 
     const createdAt = now();
+    const creatorId = crypto.randomUUID();
+    await db.insert(creators).values({
+      id: creatorId, workspaceId, name: body?.creatorName?.trim() || handle, handle, platform,
+      email: body?.email?.trim() || null, primaryAppId: appId, status: "Active", createdAt, updatedAt: createdAt,
+    });
     const row = {
       id: crypto.randomUUID(),
       workspaceId,
       appId,
+      creatorId,
       platform,
       handle,
       trackingMode: body?.trackingMode?.trim() || "public_handle",
+      active: true,
+      trackedSince: createdAt,
       creatorName: body?.creatorName?.trim() || null,
       email: body?.email?.trim() || null,
       dealType: body?.dealType?.trim().toLowerCase() || "none",

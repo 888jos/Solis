@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { creatorVideos, creators, socialAccounts } from "@/db/schema";
+import { creatorVideos, creators, socialAccounts, videoMetricSnapshots } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { now, normalizeHandle } from "@/server/backend/http";
 import { fetchSocialProfile, type SocialProfileMetrics } from "@/server/backend/social-providers";
@@ -451,11 +451,9 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
   )).limit(1);
   if (!socialAccount) return;
 
-  const [existingCreator] = await db.select().from(creators).where(and(
-    eq(creators.workspaceId, session.workspaceId),
-    eq(creators.platform, normalizedPlatform),
-    eq(creators.handle, normalizedHandle),
-  )).limit(1);
+  const [creatorByAccount] = socialAccount.creatorId ? await db.select().from(creators).where(eq(creators.id, socialAccount.creatorId)).limit(1) : [];
+  const [creatorByHandle] = creatorByAccount ? [] : await db.select().from(creators).where(and(eq(creators.workspaceId, session.workspaceId), eq(creators.platform, normalizedPlatform), eq(creators.handle, normalizedHandle))).limit(1);
+  const existingCreator = creatorByAccount || creatorByHandle;
   const creatorId = existingCreator?.id ?? `creator-${stableKey([session.workspaceId, normalizedPlatform, normalizedHandle])}`;
   const creatorValues = {
     workspaceId: session.workspaceId,
@@ -463,7 +461,8 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
     handle: normalizedHandle,
     platform: normalizedPlatform,
     email: socialAccount.email || null,
-    status: profile.videoMetricsReady ? "tracked" : "source_limited",
+    primaryAppId: socialAccount.appId,
+    status: profile.videoMetricsReady ? "Active" : "Lead",
     updatedAt: timestamp,
   };
   if (existingCreator) {
@@ -475,12 +474,13 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
       createdAt: timestamp,
     });
   }
+  if (socialAccount.creatorId !== creatorId) await db.update(socialAccounts).set({ creatorId, updatedAt: timestamp }).where(eq(socialAccounts.id, accountId));
 
-  const existingVideos = await db.select({ id: creatorVideos.id }).from(creatorVideos).where(and(
+  const existingVideos = await db.select().from(creatorVideos).where(and(
     eq(creatorVideos.workspaceId, session.workspaceId),
     eq(creatorVideos.socialAccountId, accountId),
   ));
-  const existingVideoIds = new Set(existingVideos.map((video) => video.id));
+  const existingVideoById = new Map(existingVideos.map((video) => [video.id, video]));
 
   for (const video of profile.videos ?? []) {
     const remoteVideoId = String(video.id || video.url || crypto.randomUUID());
@@ -492,26 +492,39 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
       campaignId: null,
       appId: socialAccount.appId,
       platform: normalizedPlatform,
+      externalVideoId: remoteVideoId,
       url: video.url || compactVideoUrl(normalizedPlatform, normalizedHandle, remoteVideoId),
       title: video.title || null,
       thumbnailUrl: video.thumbnailUrl || null,
       publishedAt: video.publishedAt || null,
+      trackingWindowEndsAt: video.publishedAt ? new Date(new Date(video.publishedAt).getTime() + 30 * 86_400_000) : null,
       cost: 0,
       views: Math.round(video.views ?? 0),
       likes: Math.round(video.likes ?? 0),
       comments: Math.round(video.comments ?? 0),
       shares: Math.round(video.shares ?? 0),
       favorites: Math.round(video.favorites ?? 0),
+      engagementRate: video.views ? (((video.likes ?? 0) + (video.comments ?? 0) + (video.shares ?? 0) + (video.favorites ?? 0)) / video.views) * 100 : 0,
       attributedInstalls: 0,
       updatedAt: timestamp,
     };
-    if (existingVideoIds.has(videoId)) {
+    const previous = existingVideoById.get(videoId);
+    if (previous) {
       await db.update(creatorVideos).set(videoValues).where(eq(creatorVideos.id, videoId));
     } else {
       await db.insert(creatorVideos).values({
         id: videoId,
         ...videoValues,
         createdAt: timestamp,
+      });
+    }
+    const metricDelta = Math.abs((videoValues.views || 0) - (previous?.views || 0)) + Math.abs((videoValues.likes || 0) - (previous?.likes || 0));
+    const elapsed = previous?.updatedAt ? timestamp.getTime() - new Date(previous.updatedAt).getTime() : Infinity;
+    if (!previous || metricDelta > 0 || elapsed >= 6 * 60 * 60 * 1000) {
+      await db.insert(videoMetricSnapshots).values({
+        id: crypto.randomUUID(), workspaceId: session.workspaceId, videoId, capturedAt: timestamp,
+        views: videoValues.views, likes: videoValues.likes, comments: videoValues.comments, shares: videoValues.shares, favorites: videoValues.favorites,
+        createdAt: timestamp, updatedAt: timestamp,
       });
     }
   }

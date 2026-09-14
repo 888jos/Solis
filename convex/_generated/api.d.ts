@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as creatorMigration from "../creatorMigration.js";
 import type * as health from "../health.js";
 import type * as migration from "../migration.js";
 import type * as store from "../store.js";
@@ -19,6 +20,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  creatorMigration: typeof creatorMigration;
   health: typeof health;
   migration: typeof migration;
   store: typeof store;

@@ -3,11 +3,11 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 const names = [
-  "app_store_credentials", "apps", "aso_keyword_snapshots", "aso_keywords",
-  "backend_events", "campaigns", "creatives", "creator_videos", "creators",
+  "alerts", "app_store_credentials", "apps", "aso_keyword_snapshots", "aso_keywords",
+  "backend_events", "campaign_creator_assignments", "campaigns", "creatives", "creator_activity", "creator_audience_snapshots", "creator_notes", "creator_videos", "creators", "deal_terms",
   "daily_app_metrics", "daily_briefs", "daily_social_metrics",
-  "integration_connections", "manual_expenses", "sessions", "social_accounts",
-  "sync_jobs", "users", "workspace_memberships", "workspaces",
+  "integration_connections", "manual_expenses", "payouts", "sessions", "social_accounts",
+  "sync_jobs", "users", "video_metric_snapshots", "workspace_memberships", "workspaces",
 ] as const;
 const tableName = v.string();
 const filters = v.array(v.object({ field: v.string(), op: v.string(), value: v.any() }));
@@ -17,23 +17,31 @@ function assertTable(name: string): asserts name is (typeof names)[number] {
 }
 
 const indexedFields: Partial<Record<(typeof names)[number], Record<string, string>>> = {
+  alerts: { workspaceId: "by_workspace", creatorId: "by_creator" },
   app_store_credentials: { appId: "by_app" },
   apps: { workspaceId: "by_workspace" },
   aso_keyword_snapshots: { workspaceId: "by_workspace", keywordId: "by_keyword_date" },
   aso_keywords: { workspaceId: "by_workspace", appId: "by_app_country_keyword" },
   backend_events: { workspaceId: "by_workspace_created", syncJobId: "by_sync_job" },
   campaigns: { workspaceId: "by_workspace" },
+  campaign_creator_assignments: { workspaceId: "by_workspace", creatorId: "by_creator", campaignId: "by_campaign" },
   creatives: { workspaceId: "by_workspace", campaignId: "by_campaign" },
   creator_videos: { workspaceId: "by_workspace", socialAccountId: "by_social_account", creatorId: "by_creator", campaignId: "by_campaign" },
+  creator_activity: { workspaceId: "by_workspace", creatorId: "by_creator" },
+  creator_audience_snapshots: { workspaceId: "by_workspace", creatorId: "by_creator" },
+  creator_notes: { workspaceId: "by_workspace", creatorId: "by_creator" },
   creators: { workspaceId: "by_workspace" },
+  deal_terms: { workspaceId: "by_workspace", creatorId: "by_creator", campaignId: "by_campaign" },
   daily_app_metrics: { workspaceId: "by_workspace", appId: "by_app_date" },
   daily_briefs: { workspaceId: "by_workspace_date" },
   daily_social_metrics: { workspaceId: "by_workspace", socialAccountId: "by_account_date" },
   integration_connections: { workspaceId: "by_workspace" },
   manual_expenses: { workspaceId: "by_workspace_date" },
+  payouts: { workspaceId: "by_workspace", creatorId: "by_creator", videoId: "by_video" },
   sessions: { workspaceId: "by_workspace", userId: "by_user" },
   social_accounts: { workspaceId: "by_workspace", appId: "by_app" },
   sync_jobs: { workspaceId: "by_workspace_status" },
+  video_metric_snapshots: { workspaceId: "by_workspace", videoId: "by_video" },
   users: { email: "by_email" },
   workspace_memberships: { workspaceId: "by_workspace_user", userId: "by_user" },
   workspaces: { id: "by_legacy_id", slug: "by_slug" },

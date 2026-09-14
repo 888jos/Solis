@@ -7,6 +7,7 @@ import { fail, now, ok, readJson } from "@/server/backend/http";
 type RouteContext = { params: Promise<{ id: string }> };
 
 type SocialAccountPatch = {
+  active?: boolean;
   creatorName?: string;
   cpmRate?: number;
   dealCurrency?: string;
@@ -37,6 +38,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const body = await readJson<SocialAccountPatch>(request);
     const db = await getDb();
     await db.update(socialAccounts).set({
+      active: body?.active ?? true,
       creatorName: body?.creatorName?.trim() || null,
       cpmRate: Number.isFinite(Number(body?.cpmRate)) ? Math.max(0, Number(body?.cpmRate)) : 0,
       dealCurrency: body?.dealCurrency?.trim().toUpperCase() || "USD",
@@ -50,9 +52,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     }).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId)));
     const currentVideos = await db.select({ id: creatorVideos.id, title: creatorVideos.title }).from(creatorVideos).where(and(eq(creatorVideos.socialAccountId, id), eq(creatorVideos.workspaceId, session.workspaceId)));
     for (const video of currentVideos) {
-      if (!videoMatchesRules(video.title || "", body?.trackingHashtags?.trim() || "", body?.trackingKeywords?.trim() || "", body?.trackingMatch === "all" ? "all" : "any")) {
-        await db.delete(creatorVideos).where(eq(creatorVideos.id, video.id));
-      }
+      const eligible = videoMatchesRules(video.title || "", body?.trackingHashtags?.trim() || "", body?.trackingKeywords?.trim() || "", body?.trackingMatch === "all" ? "all" : "any");
+      await db.update(creatorVideos).set({ eligibilityStatus: eligible ? "tracking" : "excluded", updatedAt: now() }).where(eq(creatorVideos.id, video.id));
     }
     const [socialAccount] = await db.select().from(socialAccounts).where(and(eq(socialAccounts.id, id), eq(socialAccounts.workspaceId, session.workspaceId))).limit(1);
     if (!socialAccount) return fail(404, "social_account_not_found", "Creator was not found.");

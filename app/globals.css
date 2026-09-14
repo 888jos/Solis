@@ -7997,30 +7997,20 @@ h2 {
 
 .creatorSheetTable {
   width: 100%;
-  max-width: calc(100vw - 500px);
-  overflow-x: scroll !important;
-  overscroll-behavior-x: contain;
-  padding: 0 0 14px;
-  scrollbar-gutter: stable;
+  max-width: 100%;
+  overflow: visible !important;
+  padding: 0;
 }
 
 .creatorSheetHead,
 .creatorSheetRow {
   grid-template-columns:
-    minmax(190px, 1.2fr)
-    minmax(190px, 1fr)
-    minmax(120px, 0.82fr)
-    minmax(96px, 0.62fr)
-    minmax(200px, 1.1fr)
-    minmax(220px, 1.15fr)
-    minmax(112px, 0.7fr)
-    repeat(9, minmax(96px, 0.68fr))
-    minmax(92px, 0.56fr)
-    minmax(92px, 0.56fr)
-    minmax(110px, 0.64fr)
-    minmax(92px, 0.52fr) !important;
-  width: 2620px;
-  min-width: 2620px;
+    minmax(180px, 1.45fr) minmax(110px, .9fr) minmax(88px, .7fr)
+    minmax(110px, .85fr) repeat(3, minmax(78px, .65fr))
+    minmax(98px, .75fr) minmax(80px, .62fr) minmax(92px, .72fr)
+    minmax(150px, 1.15fr) !important;
+  width: 100%;
+  min-width: 0;
 }
 
 .creatorSheetRow {
@@ -8044,10 +8034,15 @@ h2 {
 }
 
 .creatorIdentity {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
   align-content: center;
 }
+
+.creatorIdentity > span:last-child { display: grid; gap: 4px; min-width: 0; }
+.creatorAvatar { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(215,173,92,.14); border: 1px solid rgba(215,173,92,.32); color: #f3c76d; font-weight: 700; }
+.creatorAvatar.large { width: 54px; height: 54px; font-size: 20px; }
 
 .creatorIdentity strong {
   color: #fffaf2;
@@ -8080,7 +8075,7 @@ h2 {
 }
 
 .creatorProfilePanel {
-  width: min(520px, 100vw);
+  width: min(980px, calc(100vw - 260px));
   height: 100%;
   overflow-y: auto;
   padding: 28px;
@@ -8088,6 +8083,52 @@ h2 {
   background: #111113;
   box-shadow: -20px 0 60px rgba(0, 0, 0, .36);
 }
+
+.creatorDetailIdentity, .creatorQuickActions, .creatorBadges, .creatorTabs { display: flex; align-items: center; gap: 10px; }
+.creatorDetailIdentity { align-items: flex-start; }
+.creatorBadges { margin-top: 10px; flex-wrap: wrap; }
+.creatorBadges b { padding: 5px 8px; border: 1px solid var(--viral-border); border-radius: 999px; font-size: 11px; color: #d8d1c6; }
+.creatorQuickActions { margin: 22px 0 12px; flex-wrap: wrap; }
+.creatorNextAction { width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(215,173,92,.3); border-radius: 10px; background: rgba(215,173,92,.06); color: #fffaf2; text-align: left; }
+.creatorNextAction small, .creatorNextAction span { color: var(--viral-muted); }
+.creatorTabs { margin-top: 18px; overflow-x: auto; border-bottom: 1px solid var(--viral-border); }
+.creatorTabs button { border: 0; border-bottom: 2px solid transparent; padding: 12px 10px; background: transparent; color: var(--viral-muted); cursor: pointer; white-space: nowrap; }
+.creatorTabs button.isActive { border-bottom-color: var(--orange-2); color: #fffaf2; }
+.creatorTabBody { display: grid; gap: 16px; padding: 20px 0; }
+.creatorKpiGrid, .creatorPaymentSummary { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.creatorKpiGrid > span, .creatorPaymentSummary > span { display: grid; gap: 6px; padding: 13px; border: 1px solid var(--viral-border); border-radius: 9px; background: #080809; }
+.creatorKpiGrid strong, .creatorPaymentSummary strong { font-size: 18px; }
+.creatorKpiGrid small, .creatorPaymentSummary small { color: var(--viral-muted); }
+.creatorOverviewGrid, .creatorAccountGrid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.creatorOpsCard, .creatorAlerts { padding: 16px; border: 1px solid var(--viral-border); border-radius: 11px; background: #09090a; }
+.creatorOpsCard h3 { margin: 4px 0 14px; }
+.creatorDetailList { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.creatorDetailList span { display: grid; gap: 4px; padding: 10px; border-radius: 8px; background: #050506; }
+.creatorDetailList small { color: var(--viral-muted); }
+.creatorAlerts > div, .creatorTimeline > div { display: flex; gap: 10px; padding: 11px 0; border-top: 1px solid var(--viral-border); }
+.creatorAlerts span, .creatorTimeline span { display: grid; gap: 4px; }
+.creatorAlerts small, .creatorTimeline small, .creatorTimeline time { color: var(--viral-muted); font-size: 12px; }
+.creatorVideoList { display: grid; }
+.creatorVideoList article { display: grid; grid-template-columns: 56px minmax(180px,1fr) repeat(3,minmax(72px,.4fr)) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--viral-border); }
+.creatorVideoList article[role="button"] { cursor: pointer; padding-inline: 10px; border-radius: 8px; }
+.creatorVideoList article[role="button"]:hover { background: rgba(255,255,255,.025); }
+.creatorVideoList article.isSelected { background: rgba(215,173,92,.07); box-shadow: inset 2px 0 0 var(--orange-2); }
+.creatorVideoList article img, .creatorVideoList article i { width: 56px; height: 70px; border-radius: 8px; object-fit: cover; background: #060607; display: grid; place-items: center; }
+.creatorVideoList article > div, .creatorVideoList article > span { display: grid; gap: 4px; }
+.creatorVideoList article small { color: var(--viral-muted); }
+.creatorCardActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.creatorGrowthCard { display: grid; grid-template-columns: minmax(150px,.35fr) 1fr; gap: 18px; align-items: center; padding: 14px 16px; border: 1px solid var(--viral-border); border-radius: 11px; background: #080809; }
+.creatorGrowthCard > div, .creatorGrowthCard span { display: grid; gap: 5px; }
+.creatorGrowthCard small { color: var(--viral-muted); }
+.creatorGrowthCard svg { width: 100%; height: 110px; overflow: visible; }
+.creatorGrowthCard path { fill: none; stroke: var(--orange-2); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.creatorGrowthCard circle { fill: #fff5df; stroke: var(--orange-2); stroke-width: 1.5; }
+.creatorDealForm { display: grid; grid-template-columns: 1fr repeat(3,minmax(110px,.7fr)) auto; gap: 8px; padding: 16px; border: 1px solid var(--viral-border); border-radius: 11px; }
+.creatorDealForm h3 { grid-column: 1 / -1; margin: 0 0 6px; }
+.creatorDealForm input, .creatorDealForm select { min-width: 0; border: 1px solid var(--viral-border); border-radius: 8px; background: #050506; color: #fff; padding: 10px; }
+.creatorPayoutList > div { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--viral-border); }
+.creatorPayoutList span { display: grid; gap: 4px; }
+.creatorPayoutList small { color: var(--viral-muted); }
 
 .creatorProfileHeader,
 .creatorProfileFooter {
@@ -8136,6 +8177,12 @@ h2 {
 @media (max-width: 760px) {
   .creatorProfilePanel { padding: 20px; }
   .creatorProfileStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1180px) {
+  .creatorProfilePanel { width: min(900px, 100vw); }
+  .creatorKpiGrid, .creatorPaymentSummary { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .creatorSheetHead, .creatorSheetRow { grid-template-columns: minmax(170px,1.4fr) minmax(100px,.8fr) minmax(84px,.65fr) minmax(100px,.8fr) repeat(3,minmax(74px,.6fr)) minmax(100px,.8fr) minmax(74px,.6fr) minmax(90px,.7fr) minmax(130px,1fr) !important; font-size: 12px; }
 }
 
 .creatorIdentity small,

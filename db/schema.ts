@@ -135,9 +135,14 @@ export const socialAccounts = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull().references(() => workspaces.id),
     appId: text("app_id").notNull().references(() => apps.id),
+    creatorId: text("creator_id"),
     platform: text("platform").notNull(),
     handle: text("handle").notNull(),
     trackingMode: text("tracking_mode").notNull().default("public_handle"),
+    profileUrl: text("profile_url"),
+    externalSourceId: text("external_source_id"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    trackedSince: integer("tracked_since", { mode: "timestamp" }),
     creatorName: text("creator_name"),
     email: text("email"),
     dealType: text("deal_type").notNull().default("none"),
@@ -289,16 +294,72 @@ export const creators = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull().references(() => workspaces.id),
     name: text("name").notNull(),
+    profileImageUrl: text("profile_image_url"),
     handle: text("handle"),
     platform: text("platform"),
     email: text("email"),
-    status: text("status").notNull().default("prospect"),
+    country: text("country"),
+    language: text("language"),
+    timezone: text("timezone"),
+    instagramContact: text("instagram_contact"),
+    whatsapp: text("whatsapp"),
+    primaryAppId: text("primary_app_id").references(() => apps.id),
+    status: text("status").notNull().default("Lead"),
+    onboardingDate: text("onboarding_date"),
+    agreementDate: text("agreement_date"),
+    lastContactAt: integer("last_contact_at", { mode: "timestamp" }),
+    nextActionAt: integer("next_action_at", { mode: "timestamp" }),
+    nextActionText: text("next_action_text"),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("creators_workspace_handle_unique").on(table.workspaceId, table.platform, table.handle),
   ],
 );
+
+export const creatorAudienceSnapshots = sqliteTable("creator_audience_snapshots", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), creatorId: text("creator_id").notNull(),
+  socialAccountId: text("social_account_id"), capturedAt: integer("captured_at", { mode: "timestamp" }).notNull(), followers: integer("followers").notNull().default(0),
+  genderMalePct: real("gender_male_pct"), genderFemalePct: real("gender_female_pct"), genderOtherPct: real("gender_other_pct"),
+  age13_17: real("age_13_17"), age18_24: real("age_18_24"), age25_34: real("age_25_34"), age35_44: real("age_35_44"), age45_54: real("age_45_54"), age55Plus: real("age_55_plus"),
+  topCountriesJson: text("top_countries_json").notNull().default("[]"), tier1Percentage: real("tier1_percentage"), dominantLanguage: text("dominant_language"), niche: text("niche"), audienceNotes: text("audience_notes"), ...timestamps,
+}, (table) => [index("creator_audience_creator_idx").on(table.creatorId, table.capturedAt)]);
+
+export const dealTerms = sqliteTable("deal_terms", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), creatorId: text("creator_id").notNull(), campaignId: text("campaign_id"),
+  type: text("type").notNull(), currency: text("currency").notNull().default("USD"), cpm: real("cpm").notNull().default(0), maxPayoutPerVideo: real("max_payout_per_video"),
+  baseFeePerVideo: real("base_fee_per_video").notNull().default(0), monthlyFixedFee: real("monthly_fixed_fee").notNull().default(0), targetVideos: integer("target_videos").notNull().default(0), minimumPayout: real("minimum_payout").notNull().default(50),
+  eligibilityWindowDays: integer("eligibility_window_days").notNull().default(30), payoutFrequency: text("payout_frequency").notNull().default("monthly"), usageRightsMonths: integer("usage_rights_months"),
+  organicUsageRights: integer("organic_usage_rights", { mode: "boolean" }).notNull().default(false), paidAdsUsageRights: integer("paid_ads_usage_rights", { mode: "boolean" }).notNull().default(false),
+  allowedPlatformsJson: text("allowed_platforms_json").notNull().default("[]"), requiredHashtag: text("required_hashtag"), startDate: text("start_date").notNull(), endDate: text("end_date"), active: integer("active", { mode: "boolean" }).notNull().default(true), ...timestamps,
+}, (table) => [index("deal_terms_creator_idx").on(table.creatorId), index("deal_terms_campaign_idx").on(table.campaignId)]);
+
+export const campaignCreatorAssignments = sqliteTable("campaign_creator_assignments", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), campaignId: text("campaign_id").notNull(), creatorId: text("creator_id").notNull(), dealTermsId: text("deal_terms_id"),
+  status: text("status").notNull().default("invited"), targetVideos: integer("target_videos").notNull().default(0), postedVideos: integer("posted_videos").notNull().default(0), totalViews: integer("total_views").notNull().default(0),
+  estimatedPayout: real("estimated_payout").notNull().default(0), finalPayout: real("final_payout").notNull().default(0), progressStatus: text("progress_status").notNull().default("on_track"), joinedAt: integer("joined_at", { mode: "timestamp" }), completedAt: integer("completed_at", { mode: "timestamp" }), ...timestamps,
+}, (table) => [index("campaign_assignments_creator_idx").on(table.creatorId), index("campaign_assignments_campaign_idx").on(table.campaignId)]);
+
+export const videoMetricSnapshots = sqliteTable("video_metric_snapshots", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), videoId: text("video_id").notNull(), capturedAt: integer("captured_at", { mode: "timestamp" }).notNull(), views: integer("views").notNull().default(0), likes: integer("likes").notNull().default(0), comments: integer("comments").notNull().default(0), shares: integer("shares").notNull().default(0), favorites: integer("favorites").notNull().default(0), ...timestamps,
+}, (table) => [index("video_snapshots_video_idx").on(table.videoId, table.capturedAt)]);
+
+export const payouts = sqliteTable("payouts", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), creatorId: text("creator_id").notNull(), campaignId: text("campaign_id"), videoId: text("video_id"), dealTermsId: text("deal_terms_id").notNull(),
+  type: text("type").notNull().default("estimated"), currency: text("currency").notNull().default("USD"), eligibleViews: integer("eligible_views").notNull().default(0), cpmApplied: real("cpm_applied").notNull().default(0), baseFeeApplied: real("base_fee_applied").notNull().default(0), capApplied: integer("cap_applied", { mode: "boolean" }).notNull().default(false), grossAmount: real("gross_amount").notNull().default(0), finalAmount: real("final_amount"), eligibilityDate: text("eligibility_date"), payoutCycle: text("payout_cycle"), paymentMethod: text("payment_method"), paidAt: integer("paid_at", { mode: "timestamp" }), transactionReference: text("transaction_reference"), notes: text("notes"), ...timestamps,
+}, (table) => [index("payouts_creator_status_idx").on(table.creatorId, table.type), index("payouts_video_idx").on(table.videoId)]);
+
+export const creatorActivity = sqliteTable("creator_activity", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), creatorId: text("creator_id").notNull(), type: text("type").notNull(), title: text("title").notNull(), body: text("body"), occurredAt: integer("occurred_at", { mode: "timestamp" }).notNull(), createdBy: text("created_by"), ...timestamps,
+}, (table) => [index("creator_activity_creator_idx").on(table.creatorId, table.occurredAt)]);
+
+export const creatorNotes = sqliteTable("creator_notes", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), creatorId: text("creator_id").notNull(), body: text("body").notNull(), pinned: integer("pinned", { mode: "boolean" }).notNull().default(false), ...timestamps,
+}, (table) => [index("creator_notes_creator_idx").on(table.creatorId)]);
+
+export const alerts = sqliteTable("alerts", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull(), creatorId: text("creator_id"), videoId: text("video_id"), campaignId: text("campaign_id"), type: text("type").notNull(), severity: text("severity").notNull().default("info"), title: text("title").notNull(), body: text("body"), readAt: integer("read_at", { mode: "timestamp" }), resolvedAt: integer("resolved_at", { mode: "timestamp" }), ...timestamps,
+}, (table) => [index("alerts_workspace_resolved_idx").on(table.workspaceId, table.resolvedAt), index("alerts_creator_idx").on(table.creatorId)]);
 
 export const campaigns = sqliteTable(
   "campaigns",
@@ -332,10 +393,15 @@ export const creatorVideos = sqliteTable(
     campaignId: text("campaign_id").references(() => campaigns.id),
     appId: text("app_id").references(() => apps.id),
     platform: text("platform").notNull(),
+    externalVideoId: text("external_video_id"),
     url: text("url"),
     title: text("title"),
     thumbnailUrl: text("thumbnail_url"),
     publishedAt: text("published_at"),
+    hook: text("hook"), angle: text("angle"), format: text("format"),
+    eligibleViews: integer("eligible_views"), viewsAt30Days: integer("views_at_30_days"),
+    engagementRate: real("engagement_rate"), eligibilityStatus: text("eligibility_status").notNull().default("tracking"),
+    winner: integer("winner", { mode: "boolean" }).notNull().default(false), trackingWindowEndsAt: integer("tracking_window_ends_at", { mode: "timestamp" }),
     cost: real("cost").notNull().default(0),
     views: integer("views").notNull().default(0),
     likes: integer("likes").notNull().default(0),
