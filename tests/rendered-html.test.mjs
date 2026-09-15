@@ -88,7 +88,10 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.doesNotMatch(page, /autoSyncAttempts|attemptedAutoSyncIds|generalSocialSyncAttempted/);
   assert.match(page, /const targetDateRange = `custom:\$\{isoDateOffset\(-45\)\}:\$\{isoDateOffset\(-1\)\}`/);
   assert.match(page, /metricsFromPersistedRows/);
+  assert.match(page, /metricsFromCachedSeries/);
   assert.match(page, /api\/metrics\/revenue\?start=/);
+  assert.match(page, /Database unavailable\. Showing the latest Apple data cached/);
+  assert.match(page, /Your Apple data has not been replaced by zero/);
   assert.match(page, /className="socialSyncAllButton"/);
   assert.match(page, /Data will not refresh again until you click Sync/);
   assert.match(page, /Social sync complete/);

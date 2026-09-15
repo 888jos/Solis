@@ -493,6 +493,63 @@ function metricsFromPersistedRows(apps: StudioApp[], rows: PersistedRevenueRow[]
     return normalizeMetric({ appId: app.id, parserVersion: CURRENT_PARSER_VERSION, appName: app.name, bundleId: app.bundleId, dateRange, periodStartDate: isoDay(range.start), periodEndDate: isoDay(range.end), sku: app.sku || app.bundleId, state: latest?.state || "", syncedAt: new Date().toISOString(), reportStartDate: dates[0] || null, reportEndDate: dates.at(-1) || null, currency: "USD", revenue, grossRevenue, refunds: appRows.reduce((sum, row) => sum + Number(row.refunds || 0), 0), revenueRows: appRows.filter((row) => Number(row.proceeds || 0) !== 0).length, revenueSource: appRows.length ? "Sales" : "None", downloads, units: downloads + subscriptions + inAppPurchases, subscriptions, inAppPurchases, countries: 0, countryBreakdown: latest?.countryBreakdown || [], timeSeries: series, rows: appRows.length, expenses: appExpenses, profit: revenue - appExpenses, aso: latest?.aso, release: latest?.release });
   });
 }
+
+function metricsFromCachedSeries(apps: StudioApp[], previous: AppStoreMetric[], dateRange: string) {
+  const range = resolveClientDateRange(dateRange);
+  if (!range) return [];
+  return apps.flatMap((app): AppStoreMetric[] => {
+    const candidates = previous
+      .filter((metric) => metric.appId === app.id && metric.timeSeries?.length && (
+        metric.rows > 0
+        || metric.revenueRows > 0
+        || metric.revenue !== 0
+        || metric.downloads !== 0
+        || metric.subscriptions !== 0
+        || metric.inAppPurchases !== 0
+      ))
+      .sort((a, b) => new Date(a.syncedAt || 0).getTime() - new Date(b.syncedAt || 0).getTime());
+    const pointsByDate = new Map<string, AppStoreMetric["timeSeries"][number]>();
+    for (const candidate of candidates) for (const point of candidate.timeSeries) {
+      const pointDate = parseIsoDay(point.date);
+      if (pointDate && pointDate >= range.start && pointDate <= range.end) pointsByDate.set(point.date, point);
+    }
+    const timeSeries = [...pointsByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    if (!timeSeries.length) return [];
+    const source = candidates.at(-1)!;
+    const revenue = timeSeries.reduce((sum, point) => sum + Number(point.revenue || 0), 0);
+    const downloads = timeSeries.reduce((sum, point) => sum + Number(point.downloads || 0), 0);
+    const subscriptions = timeSeries.reduce((sum, point) => sum + Number(point.subscriptions || 0), 0);
+    const inAppPurchases = timeSeries.reduce((sum, point) => sum + Number(point.inAppPurchases || 0), 0);
+    const expenses = source.dateRange === dateRange ? Number(source.expenses || 0) : 0;
+    return [normalizeMetric({
+      ...source,
+      appId: app.id,
+      appName: app.name,
+      bundleId: app.bundleId,
+      dateRange,
+      periodStartDate: isoDay(range.start),
+      periodEndDate: isoDay(range.end),
+      parserVersion: CURRENT_PARSER_VERSION,
+      reportStartDate: timeSeries[0]?.date || null,
+      reportEndDate: timeSeries.at(-1)?.date || null,
+      revenue,
+      grossRevenue: timeSeries.reduce((sum, point) => sum + Number(point.grossRevenue || 0), 0),
+      refunds: timeSeries.reduce((sum, point) => sum + Number(point.refunds || 0), 0),
+      revenueRows: timeSeries.filter((point) => Number(point.revenue || 0) !== 0).length,
+      revenueSource: source.revenueSource || "Sales",
+      downloads,
+      subscriptions,
+      inAppPurchases,
+      units: downloads + subscriptions + inAppPurchases,
+      timeSeries,
+      rows: timeSeries.length,
+      expenses,
+      profit: revenue - expenses,
+      status: "synced",
+      message: "Cached Apple metrics · database temporarily unavailable",
+    })];
+  });
+}
 const InteractiveGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 const knownApps = {
   cocorise: {
@@ -1645,11 +1702,13 @@ export default function Home() {
             fetch(`/api/creatives?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" }),
           ]);
           const videosResponse = await fetch(`/api/creator-videos?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" });
-          const appsPayload = await appsResponse.json() as { ok?: boolean; data?: { apps?: BackendApp[] } };
-          const socialsPayload = await socialsResponse.json() as { ok?: boolean; data?: { socialAccounts?: SocialAccount[] } };
-          const campaignsPayload = await campaignsResponse.json() as { ok?: boolean; data?: { campaigns?: BackendCampaign[] } };
-          const creativesPayload = await creativesResponse.json() as { ok?: boolean; data?: { creatives?: BackendCreative[] } };
-          const videosPayload = await videosResponse.json() as { ok?: boolean; data?: { videos?: BackendCreatorVideo[] } };
+          const appsPayload = await appsResponse.json() as { ok?: boolean; data?: { apps?: BackendApp[] }; error?: { message?: string } };
+          const socialsPayload = await socialsResponse.json() as { ok?: boolean; data?: { socialAccounts?: SocialAccount[] }; error?: { message?: string } };
+          const campaignsPayload = await campaignsResponse.json() as { ok?: boolean; data?: { campaigns?: BackendCampaign[] }; error?: { message?: string } };
+          const creativesPayload = await creativesResponse.json() as { ok?: boolean; data?: { creatives?: BackendCreative[] }; error?: { message?: string } };
+          const videosPayload = await videosResponse.json() as { ok?: boolean; data?: { videos?: BackendCreatorVideo[] }; error?: { message?: string } };
+          const failedPayload = [appsPayload, socialsPayload, campaignsPayload, creativesPayload, videosPayload].find((payload) => !payload.ok);
+          if (failedPayload) throw new Error(failedPayload.error?.message || "The workspace database is unavailable.");
           const backendApps = appsPayload.data?.apps?.map(appFromBackend) ?? [];
           const backendSocials = socialsPayload.data?.socialAccounts?.map((social) => ({
             ...social,
@@ -1661,9 +1720,10 @@ export default function Home() {
           if (campaignsPayload.ok) resolvedCampaigns = (campaignsPayload.data?.campaigns ?? []).filter((campaign) => campaign.status !== "deleted").map(campaignFromBackend);
           if (creativesPayload.ok) resolvedCreatives = (creativesPayload.data?.creatives ?? []).filter((creative) => creative.status !== "deleted").map(creativeFromBackend);
           if (videosPayload.ok) resolvedCreatorVideos = (videosPayload.data?.videos ?? []).map(creatorVideoFromBackend);
-        } catch {
+        } catch (error) {
           resolvedApps = storedApps;
           resolvedSocials = storedSocials;
+          setSyncError(error instanceof Error ? `Database unavailable. Showing the latest data cached in this browser. ${error.message}` : "Database unavailable. Showing the latest cached data.");
         }
 
         const storedCampaigns = resolvedCampaigns.filter((campaign) => resolvedApps.some((app) => app.id === campaign.appId));
@@ -1797,8 +1857,8 @@ export default function Home() {
       const range = resolveClientDateRange(rangeKey);
       if (!range) return { key: rangeKey, rows: [] as PersistedRevenueRow[], expenses: [] as PersistedExpenseRow[] };
       const response = await fetch(`/api/metrics/revenue?start=${isoDay(range.start)}&end=${isoDay(range.end)}`, { cache: "no-store", signal: controller.signal });
-      const payload = await response.json() as { ok?: boolean; data?: { daily?: PersistedRevenueRow[]; expensesDaily?: PersistedExpenseRow[] } };
-      if (!response.ok || !payload.ok) throw new Error("Stored revenue could not be loaded.");
+      const payload = await response.json() as { ok?: boolean; data?: { daily?: PersistedRevenueRow[]; expensesDaily?: PersistedExpenseRow[] }; error?: { message?: string } };
+      if (!response.ok || !payload.ok) throw new Error(payload.error?.message || "Stored revenue could not be loaded.");
       return { key: rangeKey, rows: payload.data?.daily || [], expenses: payload.data?.expensesDaily || [] };
     })).then((results) => {
       setAppStoreMetrics((current) => {
@@ -1806,8 +1866,16 @@ export default function Home() {
         const keys = new Set(replacements.map((metric) => `${metric.appId}:${metric.dateRange}`));
         return [...replacements, ...current.filter((metric) => !keys.has(`${metric.appId}:${metric.dateRange}`))];
       });
+      setSyncError("");
     }).catch((error) => {
-      if (!(error instanceof DOMException && error.name === "AbortError")) setSyncError(error instanceof Error ? error.message : "Stored revenue could not be loaded.");
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setAppStoreMetrics((current) => {
+        const replacements = [dateRange, previousDateRange].filter(Boolean).flatMap((rangeKey) => metricsFromCachedSeries(apps, current, rangeKey));
+        if (!replacements.length) return current;
+        const keys = new Set(replacements.map((metric) => `${metric.appId}:${metric.dateRange}`));
+        return [...replacements, ...current.filter((metric) => !keys.has(`${metric.appId}:${metric.dateRange}`))];
+      });
+      setSyncError(error instanceof Error ? `Database unavailable. Showing the latest Apple data cached in this browser when available. ${error.message}` : "Database unavailable. Showing cached Apple data when available.");
     });
     return () => controller.abort();
   }, [apps, dateRange, loaded, previousDateRange, revenueReadRevision]);
@@ -2732,13 +2800,14 @@ function AnalyticsPage({ kind, apps, metrics, previousMetrics, previousPeriodAva
 
   if (!metrics.length) {
     if (syncingApp) return <AnalyticsSkeleton />;
-    if (readyApps.length && syncError) return <LiquidGlass className="panel emptyPanel syncStatePanel"><h2>No data loaded for this period</h2><button className="ghostButton" type="button" onClick={() => setActivePage("apps")}>Open Apps</button></LiquidGlass>;
+    if (readyApps.length && syncError) return <><InlineError text={syncError} /><LiquidGlass className="panel emptyPanel syncStatePanel"><h2>Revenue data is temporarily unavailable</h2><p>The dashboard will recover automatically when the database is available again. Your Apple data has not been replaced by zero.</p></LiquidGlass></>;
     if (readyApps.length) return <AnalyticsSkeleton />;
     return <LiquidGlass className="panel emptyPanel syncStatePanel"><h2>Connect an app</h2><button className="ghostButton" type="button" onClick={() => setActivePage("apps")}>Open Apps</button></LiquidGlass>;
   }
 
   return (
     <>
+      {syncError ? <InlineError text={syncError} /> : null}
       <section className="moduleMatrix">
         <Module label="Revenue" title="Revenue" value={formatCurrency(revenue, currency)} text={revenueDetail(sumMetric(metrics, "revenueRows"), metrics.find((metric) => metric.revenueRows)?.revenueSource)} chartValues={revenueTrend} hideChart={kind === "acquisition"} hideTrend={kind === "acquisition"} trendLoading={trendLoading} trendSignalOverride={revenueSignal} page="revenue" setActivePage={setActivePage} />
         <Module label="Acquisition" title="Downloads" value={formatNumber(downloads)} text={`${metrics.length} synced apps.`} chartValues={downloadsTrend} hideChart={kind === "acquisition"} hideTrend={kind === "acquisition"} trendLoading={trendLoading} trendSignalOverride={downloadsSignal} page="acquisition" setActivePage={setActivePage} />
