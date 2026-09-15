@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { alerts, campaignCreatorAssignments, campaigns, creatorActivity, creatorAudienceSnapshots, creatorNotes, creators, creatorVideos, dealTerms, payouts, socialAccounts, videoMetricSnapshots } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
@@ -46,7 +46,14 @@ export async function GET(request: Request) {
       const recentViews = recent.map((video: any) => number(video.views));
       const views30d = recentViews.reduce((sum: number, value: number) => sum + value, 0);
       const activeDeal = deals.find((deal: any) => deal.creatorId === creator.id && deal.active) || null;
-      const estimate = activeDeal ? recent.reduce((sum: number, video: any) => sum + calculateVideoPayout(activeDeal, number(video.eligibleViews ?? video.views)).finalAmount, 0) : 0;
+      const dealContent = activeDeal ? creatorContent.filter((video: any) => {
+        if (video.eligibilityStatus === "excluded") return false;
+        const published = dateMs(video.publishedAt || video.createdAt);
+        const starts = dateMs(`${activeDeal.startDate}T00:00:00Z`);
+        const ends = activeDeal.endDate ? dateMs(`${activeDeal.endDate}T23:59:59.999Z`) : Number.POSITIVE_INFINITY;
+        return published >= starts && published <= ends;
+      }) : [];
+      const estimate = activeDeal ? activeDeal.type === "fixed_monthly" ? number(activeDeal.monthlyFixedFee) : dealContent.reduce((sum: number, video: any) => sum + calculateVideoPayout(activeDeal, number(video.eligibleViews ?? video.views)).finalAmount, 0) : 0;
       const creatorPayouts = payoutRows.filter((row: any) => row.creatorId === creator.id);
       const due = creatorPayouts.filter((row: any) => row.type === "due").reduce((sum: number, row: any) => sum + number(row.finalAmount ?? row.grossAmount), 0);
       const paid = creatorPayouts.filter((row: any) => row.type === "paid").reduce((sum: number, row: any) => sum + number(row.finalAmount ?? row.grossAmount), 0);
@@ -61,7 +68,15 @@ export async function GET(request: Request) {
       ].filter(Boolean);
       return {
         ...creator, accounts: creatorAccounts, videos: creatorContent, deal: activeDeal, audience: latestAudience,
-        assignments: assignments.filter((row: any) => row.creatorId === creator.id).map((row: any) => ({ ...row, progressStatus: campaignProgress(row.targetVideos, row.postedVideos, campaignRows.find((campaign: any) => campaign.id === row.campaignId)?.startsAt, campaignRows.find((campaign: any) => campaign.id === row.campaignId)?.endsAt) })),
+        assignments: assignments.filter((row: any) => row.creatorId === creator.id).map((row: any) => {
+          const campaign = campaignRows.find((item: any) => item.id === row.campaignId);
+          const assignmentVideos = creatorContent.filter((video: any) => video.campaignId === row.campaignId && video.eligibilityStatus !== "excluded");
+          const postedVideos = assignmentVideos.filter((video: any) => Boolean(video.publishedAt) || String(video.status).toLowerCase() === "posted").length;
+          const totalViews = assignmentVideos.reduce((sum: number, video: any) => sum + number(video.views), 0);
+          const assignmentDeal = deals.find((deal: any) => deal.id === row.dealTermsId) || activeDeal;
+          const estimatedPayout = assignmentDeal ? assignmentDeal.type === "fixed_monthly" ? number(assignmentDeal.monthlyFixedFee) : assignmentVideos.reduce((sum: number, video: any) => sum + calculateVideoPayout(assignmentDeal, number(video.eligibleViews ?? video.views)).finalAmount, 0) : 0;
+          return { ...row, postedVideos, totalViews, estimatedPayout, progressStatus: campaignProgress(row.targetVideos, postedVideos, campaign?.startsAt, campaign?.endsAt) };
+        }),
         payouts: creatorPayouts, activity: activities.filter((row: any) => row.creatorId === creator.id).sort((a: any, b: any) => dateMs(b.occurredAt) - dateMs(a.occurredAt)), notes: notes.filter((row: any) => row.creatorId === creator.id),
         alerts: [...alertRows.filter((row: any) => row.creatorId === creator.id && !row.resolvedAt), ...computedAlerts],
         snapshots: snapshots.filter((row: any) => creatorContent.some((video: any) => video.id === row.videoId)),
@@ -81,46 +96,59 @@ export async function POST(request: Request) {
     const creatorId = text(body?.creatorId);
     if (!body?.action || !creatorId) return fail(400, "creator_action_invalid", "action and creatorId are required.");
     const db = await getDb();
+    const [creator] = await db.select({ id: creators.id }).from(creators).where(and(eq(creators.id, creatorId), eq(creators.workspaceId, session.workspaceId))).limit(1);
+    if (!creator) return fail(404, "creator_not_found", "Creator was not found in this workspace.");
     const timestamp = now();
     const base = { id: crypto.randomUUID(), workspaceId: session.workspaceId, creatorId, createdAt: timestamp, updatedAt: timestamp };
     if (body.action === "note") await db.insert(creatorNotes).values({ ...base, body: text(body.body) || "Note", pinned: Boolean(body.pinned) });
     else if (body.action === "activity") {
       await db.insert(creatorActivity).values({ ...base, type: text(body.type) || "note", title: text(body.title) || "Activity", body: text(body.body), occurredAt: timestamp, createdBy: "DriftOS operator" });
-      await db.update(creators).set({ lastContactAt: timestamp, updatedAt: timestamp }).where(eq(creators.id, creatorId));
-    } else if (body.action === "next_action") await db.update(creators).set({ nextActionText: text(body.nextActionText), nextActionAt: text(body.nextActionAt) ? new Date(String(body.nextActionAt)) : null, updatedAt: timestamp }).where(eq(creators.id, creatorId));
-    else if (body.action === "status") await db.update(creators).set({ status: text(body.status) || "Active", updatedAt: timestamp }).where(eq(creators.id, creatorId));
+      await db.update(creators).set({ lastContactAt: timestamp, updatedAt: timestamp }).where(and(eq(creators.id, creatorId), eq(creators.workspaceId, session.workspaceId)));
+    } else if (body.action === "next_action") await db.update(creators).set({ nextActionText: text(body.nextActionText), nextActionAt: text(body.nextActionAt) ? new Date(String(body.nextActionAt)) : null, updatedAt: timestamp }).where(and(eq(creators.id, creatorId), eq(creators.workspaceId, session.workspaceId)));
+    else if (body.action === "status") await db.update(creators).set({ status: text(body.status) || "Active", updatedAt: timestamp }).where(and(eq(creators.id, creatorId), eq(creators.workspaceId, session.workspaceId)));
     else if (body.action === "deal") {
-      const current = await db.select().from(dealTerms).where(and(eq(dealTerms.creatorId, creatorId), eq(dealTerms.active, true)));
-      for (const deal of current) await db.update(dealTerms).set({ active: false, updatedAt: timestamp }).where(eq(dealTerms.id, deal.id));
+      const current = await db.select().from(dealTerms).where(and(eq(dealTerms.workspaceId, session.workspaceId), eq(dealTerms.creatorId, creatorId), eq(dealTerms.active, true)));
+      for (const deal of current) await db.update(dealTerms).set({ active: false, updatedAt: timestamp }).where(and(eq(dealTerms.id, deal.id), eq(dealTerms.workspaceId, session.workspaceId)));
       await db.insert(dealTerms).values({ ...base, campaignId: text(body.campaignId), type: text(body.type) || "cpm", currency: text(body.currency) || "USD", cpm: number(body.cpm), maxPayoutPerVideo: body.maxPayoutPerVideo == null ? null : number(body.maxPayoutPerVideo), baseFeePerVideo: number(body.baseFeePerVideo), monthlyFixedFee: number(body.monthlyFixedFee), targetVideos: number(body.targetVideos), minimumPayout: number(body.minimumPayout) || 50, eligibilityWindowDays: number(body.eligibilityWindowDays) || 30, payoutFrequency: "monthly", usageRightsMonths: body.usageRightsMonths == null ? null : number(body.usageRightsMonths), organicUsageRights: Boolean(body.organicUsageRights), paidAdsUsageRights: Boolean(body.paidAdsUsageRights), allowedPlatformsJson: JSON.stringify(body.allowedPlatforms || []), requiredHashtag: text(body.requiredHashtag), startDate: text(body.startDate) || new Date().toISOString().slice(0, 10), endDate: text(body.endDate), active: true });
     } else if (body.action === "audience") await db.insert(creatorAudienceSnapshots).values({ ...base, socialAccountId: text(body.socialAccountId), capturedAt: timestamp, followers: number(body.followers), genderMalePct: body.genderMalePct == null ? null : number(body.genderMalePct), genderFemalePct: body.genderFemalePct == null ? null : number(body.genderFemalePct), genderOtherPct: body.genderOtherPct == null ? null : number(body.genderOtherPct), age13_17: number(body.age13_17), age18_24: number(body.age18_24), age25_34: number(body.age25_34), age35_44: number(body.age35_44), age45_54: number(body.age45_54), age55Plus: number(body.age55Plus), topCountriesJson: JSON.stringify(body.topCountries || []), tier1Percentage: body.tier1Percentage == null ? null : number(body.tier1Percentage), dominantLanguage: text(body.dominantLanguage), niche: text(body.niche), audienceNotes: text(body.audienceNotes) });
     else if (body.action === "assignment") {
       const campaignId = text(body.campaignId);
       if (!campaignId) return fail(400, "campaign_required", "campaignId is required.");
-      const [existing] = await db.select().from(campaignCreatorAssignments).where(and(eq(campaignCreatorAssignments.creatorId, creatorId), eq(campaignCreatorAssignments.campaignId, campaignId))).limit(1);
+      const [campaign] = await db.select({ id: campaigns.id }).from(campaigns).where(and(eq(campaigns.id, campaignId), eq(campaigns.workspaceId, session.workspaceId))).limit(1);
+      if (!campaign) return fail(404, "campaign_not_found", "Campaign was not found in this workspace.");
+      const [existing] = await db.select().from(campaignCreatorAssignments).where(and(eq(campaignCreatorAssignments.workspaceId, session.workspaceId), eq(campaignCreatorAssignments.creatorId, creatorId), eq(campaignCreatorAssignments.campaignId, campaignId))).limit(1);
       const values = { status: text(body.status) || "confirmed", targetVideos: number(body.targetVideos), postedVideos: number(body.postedVideos), totalViews: number(body.totalViews), estimatedPayout: number(body.estimatedPayout), finalPayout: number(body.finalPayout), progressStatus: "on_track", joinedAt: existing?.joinedAt || timestamp, updatedAt: timestamp };
-      if (existing) await db.update(campaignCreatorAssignments).set(values).where(eq(campaignCreatorAssignments.id, existing.id));
+      if (existing) await db.update(campaignCreatorAssignments).set(values).where(and(eq(campaignCreatorAssignments.id, existing.id), eq(campaignCreatorAssignments.workspaceId, session.workspaceId)));
       else await db.insert(campaignCreatorAssignments).values({ ...base, ...values, campaignId, dealTermsId: text(body.dealTermsId), completedAt: null });
     }
     else if (body.action === "recalculate_payouts") {
-      const [deal] = await db.select().from(dealTerms).where(and(eq(dealTerms.creatorId, creatorId), eq(dealTerms.active, true))).limit(1);
+      const [deal] = await db.select().from(dealTerms).where(and(eq(dealTerms.workspaceId, session.workspaceId), eq(dealTerms.creatorId, creatorId), eq(dealTerms.active, true))).limit(1);
       if (!deal) return ok({ saved: true, payouts: 0 });
-      const content = await db.select().from(creatorVideos).where(eq(creatorVideos.creatorId, creatorId));
+      if (deal.type === "fixed_monthly") {
+        const payoutCycle = new Date().toISOString().slice(0, 7);
+        const [existing] = await db.select().from(payouts).where(and(eq(payouts.workspaceId, session.workspaceId), eq(payouts.creatorId, creatorId), eq(payouts.dealTermsId, deal.id), eq(payouts.payoutCycle, payoutCycle), isNull(payouts.videoId))).limit(1);
+        const amount = Math.max(0, number(deal.monthlyFixedFee));
+        const values = { type: monthlyPayoutDecision(amount, number(deal.minimumPayout) || 50) === "due" ? "due" : "locked", currency: deal.currency, eligibleViews: 0, cpmApplied: 0, baseFeeApplied: amount, capApplied: false, grossAmount: amount, finalAmount: amount, eligibilityDate: new Date().toISOString().slice(0, 10), payoutCycle, updatedAt: timestamp };
+        if (existing) await db.update(payouts).set(values).where(and(eq(payouts.id, existing.id), eq(payouts.workspaceId, session.workspaceId)));
+        else await db.insert(payouts).values({ ...base, ...values, videoId: null, campaignId: deal.campaignId, dealTermsId: deal.id, paymentMethod: null, paidAt: null, transactionReference: null, notes: "Monthly fixed fee" });
+        return ok({ saved: true, payouts: 1 });
+      }
+      const content = await db.select().from(creatorVideos).where(and(eq(creatorVideos.workspaceId, session.workspaceId), eq(creatorVideos.creatorId, creatorId)));
       let lockedBalance = 0;
       const lockedIds: string[] = [];
       for (const video of content.filter((row: any) => row.eligibilityStatus !== "excluded")) {
         const calculation = calculateVideoPayout(deal, number(video.eligibleViews ?? video.views));
         const state = payoutState(video.trackingWindowEndsAt);
-        const [existing] = await db.select().from(payouts).where(and(eq(payouts.videoId, video.id), eq(payouts.dealTermsId, deal.id))).limit(1);
+        const [existing] = await db.select().from(payouts).where(and(eq(payouts.workspaceId, session.workspaceId), eq(payouts.videoId, video.id), eq(payouts.dealTermsId, deal.id))).limit(1);
         const values = { type: state, currency: deal.currency, eligibleViews: number(video.eligibleViews ?? video.views), cpmApplied: number(deal.cpm), baseFeeApplied: calculation.baseFee, capApplied: calculation.capApplied, grossAmount: calculation.rawAmount, finalAmount: calculation.finalAmount, eligibilityDate: video.trackingWindowEndsAt ? new Date(video.trackingWindowEndsAt).toISOString().slice(0, 10) : null, payoutCycle: new Date().toISOString().slice(0, 7), updatedAt: timestamp };
         const payoutId = existing?.id || crypto.randomUUID();
-        if (existing) await db.update(payouts).set(values).where(eq(payouts.id, existing.id));
+        if (existing) await db.update(payouts).set(values).where(and(eq(payouts.id, existing.id), eq(payouts.workspaceId, session.workspaceId)));
         else await db.insert(payouts).values({ ...base, id: payoutId, ...values, videoId: video.id, campaignId: video.campaignId, dealTermsId: deal.id, paymentMethod: null, paidAt: null, transactionReference: null, notes: null });
         if (state === "locked") { lockedBalance += calculation.finalAmount; lockedIds.push(payoutId); }
       }
-      if (monthlyPayoutDecision(lockedBalance, number(deal.minimumPayout) || 50) === "due") for (const id of lockedIds) await db.update(payouts).set({ type: "due", updatedAt: timestamp }).where(eq(payouts.id, id));
+      if (monthlyPayoutDecision(lockedBalance, number(deal.minimumPayout) || 50) === "due") for (const id of lockedIds) await db.update(payouts).set({ type: "due", updatedAt: timestamp }).where(and(eq(payouts.id, id), eq(payouts.workspaceId, session.workspaceId)));
     }
-    else if (body.action === "payout_status") await db.update(payouts).set({ type: text(body.status) || "locked", paidAt: body.status === "paid" ? timestamp : null, transactionReference: text(body.transactionReference), updatedAt: timestamp }).where(and(eq(payouts.id, String(body.payoutId)), eq(payouts.creatorId, creatorId)));
+    else if (body.action === "payout_status") await db.update(payouts).set({ type: text(body.status) || "locked", paidAt: body.status === "paid" ? timestamp : null, transactionReference: text(body.transactionReference), updatedAt: timestamp }).where(and(eq(payouts.workspaceId, session.workspaceId), eq(payouts.id, String(body.payoutId)), eq(payouts.creatorId, creatorId)));
     else return fail(400, "creator_action_unknown", "Unsupported creator action.");
     return ok({ saved: true });
   } catch (error) {

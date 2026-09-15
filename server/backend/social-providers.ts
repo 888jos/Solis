@@ -30,7 +30,13 @@ export type SocialVideo = {
 type ApifyItem = Record<string, unknown>;
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const SOCIAL_VIDEO_LIMIT = 1_000_000;
+const DEFAULT_SOCIAL_VIDEO_LIMIT = 30;
+const MAX_SOCIAL_VIDEO_LIMIT = 1_000;
+
+function safeVideoLimit(value?: number) {
+  if (!Number.isFinite(value)) return DEFAULT_SOCIAL_VIDEO_LIMIT;
+  return Math.min(MAX_SOCIAL_VIDEO_LIMIT, Math.max(1, Math.floor(Number(value))));
+}
 
 function cleanBareHandle(value: string) {
   return value.trim().replace(/^@+/, "").replace(/[^a-zA-Z0-9._-]/g, "");
@@ -122,10 +128,10 @@ function normalizeVideos(items: ApifyItem[]): SocialVideo[] {
     .filter((video) => video.views || video.likes || video.comments || video.shares || video.favorites);
 }
 
-function recentVideos(items: ApifyItem[]) {
+function recentVideos(items: ApifyItem[], limit: number) {
   return normalizeVideos(items)
     .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime())
-    .slice(0, SOCIAL_VIDEO_LIMIT);
+    .slice(0, limit);
 }
 
 function summarizeVideos(videos: SocialVideo[], source: string, profile?: ApifyItem): SocialProfileMetrics {
@@ -137,7 +143,7 @@ function summarizeVideos(videos: SocialVideo[], source: string, profile?: ApifyI
   const favorites = videos.reduce((sum, video) => sum + (video.favorites ?? 0), 0);
   const followers = firstMetric(profile ?? {}, ["followerCount", "followersCount", "followers", "fans"]);
   const avgViews = posts && views ? views / posts : 0;
-  const engagementRate = views ? (likes / views) * 100 : 0;
+  const engagementRate = views ? ((likes + comments + shares + favorites) / views) * 100 : 0;
   const videoMetricsReady = Boolean(posts || views || likes || comments || shares || favorites);
 
   return {
@@ -182,14 +188,15 @@ async function callApifyActor(actorId: string, input: Record<string, unknown>, t
   return Array.isArray(payload) ? payload as ApifyItem[] : [];
 }
 
-async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics | null> {
+async function fetchTikTokViaApify(handle: string, requestedLimit?: number): Promise<SocialProfileMetrics | null> {
   const actor = await runtimeEnv("APIFY_TIKTOK_ACTOR") || "clockworks/tiktok-scraper";
   const bareHandle = cleanBareHandle(handle);
+  const limit = safeVideoLimit(requestedLimit);
   const items = await callApifyActor(actor, {
     profiles: [bareHandle],
     profileScrapeSections: ["videos"],
     profileSorting: "latest",
-    resultsPerPage: SOCIAL_VIDEO_LIMIT,
+    resultsPerPage: limit,
     excludePinnedPosts: false,
     shouldDownloadCovers: false,
     shouldDownloadSlideshowImages: false,
@@ -197,28 +204,29 @@ async function fetchTikTokViaApify(handle: string): Promise<SocialProfileMetrics
     shouldDownloadVideos: false,
   });
   if (!items.length) return null;
-  return summarizeVideos(recentVideos(items), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
+  return summarizeVideos(recentVideos(items, limit), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
 }
 
-async function fetchInstagramViaApify(handle: string): Promise<SocialProfileMetrics | null> {
+async function fetchInstagramViaApify(handle: string, requestedLimit?: number): Promise<SocialProfileMetrics | null> {
   const actor = await runtimeEnv("APIFY_INSTAGRAM_ACTOR") || "apify/instagram-scraper";
   const bareHandle = cleanBareHandle(handle);
+  const limit = safeVideoLimit(requestedLimit);
   const items = await callApifyActor(actor, {
     directUrls: [`https://www.instagram.com/${bareHandle}/`],
-    resultsLimit: SOCIAL_VIDEO_LIMIT,
+    resultsLimit: limit,
     resultsType: "posts",
   });
   if (!items.length) return null;
-  return summarizeVideos(recentVideos(items), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
+  return summarizeVideos(recentVideos(items, limit), `Apify ${actor}`, items.find((item) => !isVideoItem(item)));
 }
 
-export async function fetchSocialProfile(platform: string, handle: string, fallback: () => Promise<SocialProfileMetrics>) {
+export async function fetchSocialProfile(platform: string, handle: string, fallback: () => Promise<SocialProfileMetrics>, requestedLimit?: number) {
   const normalizedPlatform = platform.trim().toLowerCase();
   try {
     const apifyResult = normalizedPlatform === "tiktok"
-      ? await fetchTikTokViaApify(handle)
+      ? await fetchTikTokViaApify(handle, requestedLimit)
       : normalizedPlatform === "instagram"
-        ? await fetchInstagramViaApify(handle)
+        ? await fetchInstagramViaApify(handle, requestedLimit)
         : null;
     if (apifyResult?.videoMetricsReady) return apifyResult;
   } catch {

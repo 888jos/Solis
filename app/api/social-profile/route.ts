@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { creatorVideos, creators, socialAccounts, videoMetricSnapshots } from "@/db/schema";
+import { creatorVideos, creators, dailySocialMetrics, socialAccounts, videoMetricSnapshots } from "@/db/schema";
 import { getOrCreateLocalSession } from "@/server/backend/auth";
 import { now, normalizeHandle } from "@/server/backend/http";
 import { fetchSocialProfile, type SocialProfileMetrics } from "@/server/backend/social-providers";
@@ -314,6 +314,7 @@ export async function POST(request: Request) {
   const platform = url.searchParams.get("platform") ?? "";
   const handle = cleanHandle(url.searchParams.get("handle") ?? "");
   const accountId = url.searchParams.get("accountId") ?? "";
+  const requestedLimit = Math.min(1_000, Math.max(1, Number.parseInt(url.searchParams.get("limit") || "30", 10) || 30));
 
   if (!handle) return Response.json({ error: "Missing handle" }, { status: 400 });
   if (!accountId) return Response.json({ error: "Missing accountId" }, { status: 400 });
@@ -342,7 +343,7 @@ export async function POST(request: Request) {
         status: "No public metrics",
         videoMetricsReady: false,
       });
-    const profile = await fetchSocialProfile(platform, handle, fallback);
+    const profile = await fetchSocialProfile(platform, handle, fallback, requestedLimit);
     const filteredProfile = accountId ? await applyAccountTrackingRules(accountId, profile) : profile;
     if (accountId) await persistSocialProfile(accountId, platform, handle, filteredProfile);
     return Response.json(filteredProfile);
@@ -403,7 +404,7 @@ async function applyAccountTrackingRules(accountId: string, profile: SocialProfi
     ...profile,
     avgViews: videos.length ? views / videos.length : 0,
     comments,
-    engagementRate: views ? (likes / views) * 100 : 0,
+    engagementRate: views ? ((likes + comments + shares + favorites) / views) * 100 : 0,
     favorites,
     likes,
     posts: videos.length,
@@ -450,6 +451,31 @@ async function persistSocialProfile(accountId: string, platform: string, handle:
     eq(socialAccounts.handle, normalizedHandle),
   )).limit(1);
   if (!socialAccount) return;
+
+  const snapshotDate = new Date().toISOString().slice(0, 10);
+  const snapshotSource = "provider_snapshot";
+  const [dailySnapshot] = await db.select().from(dailySocialMetrics).where(and(
+    eq(dailySocialMetrics.socialAccountId, accountId),
+    eq(dailySocialMetrics.date, snapshotDate),
+    eq(dailySocialMetrics.source, snapshotSource),
+  )).limit(1);
+  const dailyValues = {
+    workspaceId: session.workspaceId,
+    socialAccountId: accountId,
+    date: snapshotDate,
+    source: snapshotSource,
+    posts: Math.round(profile.posts ?? 0),
+    views: Math.round(profile.views ?? 0),
+    likes: Math.round(profile.likes ?? 0),
+    comments: Math.round(profile.comments ?? 0),
+    shares: Math.round(profile.shares ?? 0),
+    favorites: Math.round(profile.favorites ?? 0),
+    attributedInstalls: 0,
+    engagementRate: profile.engagementRate ?? 0,
+    updatedAt: timestamp,
+  };
+  if (dailySnapshot) await db.update(dailySocialMetrics).set(dailyValues).where(eq(dailySocialMetrics.id, dailySnapshot.id));
+  else await db.insert(dailySocialMetrics).values({ id: crypto.randomUUID(), createdAt: timestamp, ...dailyValues });
 
   const [creatorByAccount] = socialAccount.creatorId ? await db.select().from(creators).where(eq(creators.id, socialAccount.creatorId)).limit(1) : [];
   const [creatorByHandle] = creatorByAccount ? [] : await db.select().from(creators).where(and(eq(creators.workspaceId, session.workspaceId), eq(creators.platform, normalizedPlatform), eq(creators.handle, normalizedHandle))).limit(1);

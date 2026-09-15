@@ -18,6 +18,7 @@ export async function GET(request: Request) {
 
     const metricConditions = [
       eq(dailyAppMetrics.workspaceId, workspaceId),
+      eq(dailyAppMetrics.countryCode, "WW"),
       appId ? eq(dailyAppMetrics.appId, appId) : undefined,
       start ? gte(dailyAppMetrics.date, start) : undefined,
       end ? lte(dailyAppMetrics.date, end) : undefined,
@@ -91,8 +92,8 @@ export async function GET(request: Request) {
         paidUnits: Number(row.paidUnits || 0),
         proceeds: toUsd(row.proceeds, row.currency, row.date),
         refunds: toUsd(row.refunds, row.currency, row.date),
-        inAppPurchases: Number(row.paidUnits || 0) - Number(row.subscribers || 0),
-        subscriptions: Number(row.subscribers || 0),
+        inAppPurchases: Math.max(0, Number(row.paidUnits || 0) - Math.max(0, Number(row.subscribers || 0))),
+        subscriptions: Math.max(0, Number(row.subscribers || 0)),
       })),
       expensesDaily: expenseRows.map((row) => ({ appId: row.appId, amount: toUsd(row.amount, row.currency, row.date), date: row.date })),
       totals: {

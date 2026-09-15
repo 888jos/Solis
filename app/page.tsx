@@ -218,6 +218,7 @@ type Campaign = {
 type Creative = {
   id: string;
   appId: string;
+  campaignId?: string | null;
   socialId: string;
   title: string;
   url: string;
@@ -230,6 +231,9 @@ type Creative = {
   comments?: number;
   shares?: number;
   favorites?: number;
+  installs?: number;
+  revenue?: number;
+  spend?: number;
   createdAt: string;
   thumbnailUrl?: string;
 };
@@ -461,6 +465,7 @@ function dateIsInDateRange(sourceDate: string | number | Date | null | undefined
 
 type PersistedRevenueRow = { appId: string; currency: string; date: string; downloads: number; grossRevenue: number; inAppPurchases: number; paidUnits: number; proceeds: number; refunds: number; subscriptions: number };
 type PersistedExpenseRow = { appId?: string | null; amount: number; date: string };
+type PersistedSocialMetricRow = { socialAccountId: string; date: string; posts: number; views: number; likes: number; comments: number; shares: number; favorites: number; engagementRate: number };
 
 function metricsFromPersistedRows(apps: StudioApp[], rows: PersistedRevenueRow[], expenses: PersistedExpenseRow[], dateRange: string, previous: AppStoreMetric[]) {
   const range = resolveClientDateRange(dateRange);
@@ -578,6 +583,7 @@ type BackendCampaign = {
 type BackendCreative = {
   angle?: string | null;
   appId: string | null;
+  campaignId?: string | null;
   comments?: number | null;
   createdAt: string | number | Date;
   favorites?: number | null;
@@ -585,11 +591,14 @@ type BackendCreative = {
   hook?: string | null;
   id: string;
   impressions: number;
+  installs?: number | null;
   likes?: number | null;
   name: string;
+  revenue?: number | null;
   shares?: number | null;
   socialAccountId?: string | null;
   status: string;
+  spend?: number | null;
   url: string | null;
 };
 
@@ -902,15 +911,19 @@ function creativeFromBackend(row: BackendCreative): Creative {
     id: row.id,
     angle: normalizeCreativeAngle(row.angle),
     appId: row.appId || "",
+    campaignId: row.campaignId || null,
     comments: row.comments ?? 0,
     createdAt: isoFromDb(row.createdAt),
     favorites: row.favorites ?? 0,
     format: normalizeCreativeFormat(row.format),
     hook: row.hook || "",
     likes: row.likes ?? 0,
+    installs: row.installs ?? 0,
+    revenue: row.revenue ?? 0,
     shares: row.shares ?? 0,
     socialId: row.socialAccountId || "",
     status: normalizeCreativeStatus(row.status),
+    spend: row.spend ?? 0,
     title: row.name,
     url: row.url || "",
     views: row.impressions,
@@ -1745,7 +1758,7 @@ export default function Home() {
   const syncAppStore = useCallback(async (app: StudioApp) => {
     // Apple provider reads are deliberately bounded and only happen after a user click.
     // Dashboard date filters always read the locally persisted daily rows instead.
-    const targetDateRange = "30d";
+    const targetDateRange = `custom:${isoDateOffset(-45)}:${isoDateOffset(-1)}`;
     setSyncError("");
     setSyncingAppId(app.id);
     const controller = new AbortController();
@@ -1764,7 +1777,7 @@ export default function Home() {
       }
       setAppStoreMetrics((current) => [normalizeMetric(payload.metrics!), ...current.filter((metric) => !(metric.appId === app.id && metric.dateRange === targetDateRange))]);
       setRevenueReadRevision((revision) => revision + 1);
-      setSyncNotice({ kind: "success", title: `${appDisplayName(app.name)} synced`, detail: "The latest 30 days were refreshed from Apple. Date filters continue to use stored data." });
+      setSyncNotice({ kind: "success", title: `${appDisplayName(app.name)} synced`, detail: "The latest 45 completed days were refreshed from Apple, including late refunds and product changes. Date filters continue to use stored data." });
       return true;
     } catch (error) {
       const isAbort = error instanceof DOMException && error.name === "AbortError";
@@ -1780,7 +1793,6 @@ export default function Home() {
     if (!loaded || !apps.length) return;
     const controller = new AbortController();
     const ranges = [dateRange, previousDateRange].filter(Boolean);
-    setSyncError("");
     void Promise.all(ranges.map(async (rangeKey) => {
       const range = resolveClientDateRange(rangeKey);
       if (!range) return { key: rangeKey, rows: [] as PersistedRevenueRow[], expenses: [] as PersistedExpenseRow[] };
@@ -2012,6 +2024,9 @@ export default function Home() {
   async function addSocial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!socialForm.handle.trim() || !selectedAppId) return;
+    const requested = window.prompt("How many of this creator's newest videos should be imported? (1–1000)", "30");
+    if (requested === null) return;
+    const requestedVideoCount = Math.min(1_000, Math.max(1, Number.parseInt(requested, 10) || 30));
     const handle = normalizeHandle(socialForm.handle);
     if (!handle) return;
     const draftSocial: SocialAccount = { id: `${socialForm.platform}-${handle}-${Date.now()}`, handle, platform: socialForm.platform, appId: selectedAppId, creatorName: socialForm.creatorName.trim() || handle.replace(/^@/, ""), email: socialForm.email.trim(), dealType: socialForm.dealType, fixedFee: Number(socialForm.fixedFee) || 0, cpmRate: Number(socialForm.cpmRate) || 0, dealCurrency: socialForm.dealCurrency, trackingHashtags: socialForm.trackingHashtags, trackingKeywords: socialForm.trackingKeywords, trackingMatch: socialForm.trackingMatch, status: "Not synced", createdAt: new Date().toISOString() };
@@ -2039,7 +2054,7 @@ export default function Home() {
         };
         setSocials((current) => [...current.filter((row) => row.id !== draftSocial.id && row.id !== saved.id), syncingSocial]);
         setSyncNotice({ kind: "info", title: `${syncingSocial.creatorName || syncingSocial.handle} saved`, detail: "Creator sync in progress…" });
-        const syncResponse = await fetch(`/api/social-profile?platform=${encodeURIComponent(syncingSocial.platform)}&handle=${encodeURIComponent(syncingSocial.handle)}&accountId=${encodeURIComponent(syncingSocial.id)}`, { method: "POST" });
+        const syncResponse = await fetch(`/api/social-profile?platform=${encodeURIComponent(syncingSocial.platform)}&handle=${encodeURIComponent(syncingSocial.handle)}&accountId=${encodeURIComponent(syncingSocial.id)}&limit=${requestedVideoCount}`, { method: "POST" });
         const profile = await syncResponse.json() as Partial<SocialAccount> & { error?: string; videos?: SocialProfileVideo[]; videoMetricsReady?: boolean };
         if (!syncResponse.ok) throw new Error(profile.error || `Could not sync ${syncingSocial.handle}`);
         const synced = { ...syncingSocial, ...profile, status: profile.videoMetricsReady ? "Ready for public tracking" as const : "No public metrics" as const };
@@ -2202,8 +2217,8 @@ export default function Home() {
     if (activePage === "monetization") return <MonetizationPage apps={scopedApps} metrics={currentMetrics} isSyncing={Boolean(syncingAppId)} setActivePage={openPage} />;
     if (activePage === "acquisition") return <AnalyticsPage kind="acquisition" apps={scopedApps} metrics={currentMetrics} previousMetrics={previousMetrics} previousPeriodAvailable={Boolean(previousDateRange)} syncingAppId={syncingAppId} syncError={syncError} setActivePage={openPage} />;
     if (activePage === "aso") return <AsoPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
-    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId) && dateIsInDateRange(creative.createdAt, dateRange))} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
-    if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} socials={visibleSocials} videos={periodCreatorVideos} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
+    if (activePage === "creatives") return <CreativePage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId) && dateIsInDateRange(creative.createdAt, dateRange))} campaigns={campaigns} setCreatives={setCreatives} isFiltered={Boolean(normalizedSearch)} />;
+    if (activePage === "campaigns") return <CampaignsPage apps={scopedApps} metrics={currentMetrics} videos={periodCreatorVideos} creatives={creatives.filter((creative) => scopedApps.some((app) => app.id === creative.appId) && dateIsInDateRange(creative.createdAt, dateRange))} campaigns={campaigns.filter((campaign) => scopedApps.some((app) => app.id === campaign.appId))} setCampaigns={setCampaigns} setActivePage={openPage} />;
     if (activePage === "social") return <SocialTrackingPage apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} onSyncNotice={setSyncNotice} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "creators") return <Creators apps={scopedApps} socials={visibleSocials} videos={periodCreatorVideos} dateRange={dateRange} setSocials={setSocials} setCreatorVideos={setCreatorVideos} isFiltered={Boolean(normalizedSearch)} />;
     if (activePage === "product") return <ProductPage apps={scopedApps} metrics={currentMetrics} setActivePage={openPage} />;
@@ -2294,7 +2309,7 @@ export default function Home() {
         <LiquidGlass as="header" className="topHeader">
           <div className="topActions">
             <div className="dateRangePicker">
-              <label className="rangeControl"><CalendarRange size={22} strokeWidth={2} /><select value={dateRange.startsWith("custom:") ? "custom" : dateRange} onChange={(event) => selectDateRange(event.target.value)} aria-label="Date range"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">1 Week</option><option value="30d">Last 30 Days</option><option value="90d">Last 90 Days</option><option value="180d">Last 180 Days</option><option value="365d">Last 365 Days</option><option value="all">All Time</option><option value="custom">{dateRange.startsWith("custom:") ? customRangeLabel(customStartDate, customEndDate) : "Custom"}</option></select></label>
+              <label className="rangeControl"><CalendarRange size={22} strokeWidth={2} /><select value={dateRange.startsWith("custom:") ? "custom" : dateRange} onChange={(event) => selectDateRange(event.target.value)} aria-label="Date range"><option value="today">Today (Apple may be delayed)</option><option value="yesterday">Yesterday</option><option value="7d">1 Week</option><option value="30d">Last 30 Days</option><option value="90d">Last 90 Days</option><option value="180d">Last 180 Days</option><option value="365d">Last 365 Days</option><option value="all">All Time</option><option value="custom">{dateRange.startsWith("custom:") ? customRangeLabel(customStartDate, customEndDate) : "Custom"}</option></select></label>
               {customRangeOpen ? <div className="customDatePopover" role="dialog" aria-label="Custom date range"><label>From<input type="date" value={customStartDate} max={customEndDate || isoDateOffset(0)} onChange={(event) => setCustomStartDate(event.target.value)} /></label><label>To<input type="date" value={customEndDate} min={customStartDate} max={isoDateOffset(0)} onChange={(event) => setCustomEndDate(event.target.value)} /></label>{dateRangeError ? <small>{dateRangeError}</small> : null}<div><button type="button" onClick={() => setCustomRangeOpen(false)}>Cancel</button><button className="applyDateButton" type="button" onClick={applyCustomDateRange}>Apply</button></div></div> : null}
             </div>
             {activePage === "social" ? <button className="primaryTopButton" type="button" onClick={() => setSocialFormOpen(true)}><AtSign size={20} strokeWidth={2} />Add @</button> : null}
@@ -3535,16 +3550,21 @@ function highlightKeyword(text: string, keyword: string) {
   return <>{text.slice(0, index)}<mark>{text.slice(index, index + normalized.length)}</mark>{text.slice(index + normalized.length)}</>;
 }
 
-function campaignMetricForApp(metrics: AppStoreMetric[], appId: string) {
-  return metrics.filter((metric) => metric.appId === appId).reduce((total, metric) => ({
-    currency: metric.currency || total.currency,
-    downloads: total.downloads + metric.downloads,
-    revenue: total.revenue + metric.revenue,
-    subscriptions: total.subscriptions + metric.subscriptions,
-  }), { currency: "USD", downloads: 0, revenue: 0, subscriptions: 0 });
+function campaignAttribution(campaign: Campaign, creatives: Creative[], videos: CreatorVideo[], metrics: AppStoreMetric[]) {
+  const linkedCreatives = creatives.filter((creative) => creative.campaignId === campaign.id);
+  const linkedVideos = videos.filter((video) => video.campaignId === campaign.id);
+  const creatorIds = new Set([...linkedCreatives.map((creative) => creative.socialId).filter(Boolean), ...linkedVideos.map((video) => video.socialAccountId).filter((value): value is string => Boolean(value))]);
+  return {
+    creatorCount: creatorIds.size,
+    currency: metrics.find((metric) => metric.appId === campaign.appId)?.currency || "USD",
+    downloads: linkedCreatives.reduce((sum, creative) => sum + (creative.installs ?? 0), 0) + linkedVideos.reduce((sum, video) => sum + (video.attributedInstalls ?? 0), 0),
+    hasAttribution: linkedCreatives.length > 0 || linkedVideos.length > 0,
+    revenue: linkedCreatives.reduce((sum, creative) => sum + (creative.revenue ?? 0), 0),
+    views: linkedCreatives.reduce((sum, creative) => sum + (creative.views ?? 0), 0) + linkedVideos.reduce((sum, video) => sum + video.views, 0),
+  };
 }
 
-function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns, setActivePage }: { apps: StudioApp[]; metrics: AppStoreMetric[]; socials: SocialAccount[]; videos: CreatorVideo[]; campaigns: Campaign[]; setCampaigns: React.Dispatch<React.SetStateAction<Campaign[]>>; setActivePage: (page: PageKey) => void }) {
+function CampaignsPage({ apps, metrics, videos, creatives, campaigns, setCampaigns, setActivePage }: { apps: StudioApp[]; metrics: AppStoreMetric[]; videos: CreatorVideo[]; creatives: Creative[]; campaigns: Campaign[]; setCampaigns: React.Dispatch<React.SetStateAction<Campaign[]>>; setActivePage: (page: PageKey) => void }) {
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns[0]?.id ?? "");
   const [draft, setDraft] = useState({
     appId: apps[0]?.id ?? "",
@@ -3558,10 +3578,12 @@ function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns
     status: "Draft" as Campaign["status"],
   });
   const currency = metrics[0]?.currency || "USD";
+  const campaignTotals = campaigns.map((campaign) => campaignAttribution(campaign, creatives, videos, metrics));
   const totalSpend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
-  const totalRevenue = campaigns.reduce((sum, campaign) => sum + campaignMetricForApp(metrics, campaign.appId).revenue, 0);
-  const totalDownloads = campaigns.reduce((sum, campaign) => sum + campaignMetricForApp(metrics, campaign.appId).downloads, 0);
-  const totalCreatorViews = videos.reduce((sum, video) => sum + video.views, 0);
+  const totalRevenue = campaignTotals.reduce((sum, value) => sum + value.revenue, 0);
+  const totalDownloads = campaignTotals.reduce((sum, value) => sum + value.downloads, 0);
+  const totalCreatorViews = campaignTotals.reduce((sum, value) => sum + value.views, 0);
+  const hasAttributedRevenue = campaignTotals.some((value) => value.hasAttribution);
   const totalProfit = totalRevenue - totalSpend;
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0];
 
@@ -3606,13 +3628,13 @@ function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns
         method: "POST",
       });
       const payload = await response.json() as { ok?: boolean; data?: { campaign?: BackendCampaign } };
-      if (response.ok && payload.ok && payload.data?.campaign) {
-        const savedCampaign = campaignFromBackend(payload.data.campaign);
-        setCampaigns((rows) => rows.map((row) => row.id === nextCampaign.id ? savedCampaign : row));
-        setSelectedCampaignId(savedCampaign.id);
-      }
+      if (!response.ok || !payload.ok || !payload.data?.campaign) throw new Error("Campaign could not be saved.");
+      const savedCampaign = campaignFromBackend(payload.data.campaign);
+      setCampaigns((rows) => rows.map((row) => row.id === nextCampaign.id ? savedCampaign : row));
+      setSelectedCampaignId(savedCampaign.id);
     } catch {
-      // Keep the optimistic row locally if the backend is temporarily unavailable.
+      setCampaigns((rows) => rows.filter((row) => row.id !== nextCampaign.id));
+      setSelectedCampaignId("");
     }
   }
 
@@ -3634,7 +3656,7 @@ function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns
         <LiquidGlass className="panel moduleCard">
           <span className="cardAccentRail" aria-hidden="true" />
           <h2>Profit</h2>
-          <strong>{formatCurrency(totalProfit, currency)}</strong>
+          <strong>{hasAttributedRevenue ? formatCurrency(totalProfit, currency) : "—"}</strong>
         </LiquidGlass>
         <LiquidGlass className="panel moduleCard">
           <span className="cardAccentRail" aria-hidden="true" />
@@ -3672,14 +3694,11 @@ function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns
               <div className="tableRow tableHead campaignHead"><span>Campaign</span><span>App</span><span>Channel</span><span>Status</span><span>Goal</span><span>Spend</span><span>Revenue</span><span>Profit</span><span>ROAS</span><span>Downloads</span><span>CPI</span><span>Creator views</span><span>Hybrid CPM</span><span>Creators</span><span>Dates</span><span>Manage</span></div>
               {campaigns.map((campaign) => {
                 const app = apps.find((row) => row.id === campaign.appId);
-                const metric = campaignMetricForApp(metrics, campaign.appId);
-                const linkedCreators = socials.filter((social) => social.appId === campaign.appId);
-                const campaignVideos = videos.filter((video) => video.campaignId === campaign.id || (!video.campaignId && video.appId === campaign.appId));
-                const creatorViews = campaignVideos.reduce((sum, video) => sum + video.views, 0);
-                const profit = metric.revenue - campaign.spend;
-                const roas = campaign.spend && metric.revenue ? metric.revenue / campaign.spend : 0;
-                const cpi = campaign.spend && metric.downloads ? campaign.spend / metric.downloads : 0;
-                const hybridCpm = campaign.spend && creatorViews ? (campaign.spend / creatorViews) * 1000 : 0;
+                const attribution = campaignAttribution(campaign, creatives, videos, metrics);
+                const profit = attribution.revenue - campaign.spend;
+                const roas = campaign.spend && attribution.revenue ? attribution.revenue / campaign.spend : 0;
+                const cpi = campaign.spend && attribution.downloads ? campaign.spend / attribution.downloads : 0;
+                const hybridCpm = campaign.spend && attribution.views ? (campaign.spend / attribution.views) * 1000 : 0;
                 return (
                   <div className={selectedCampaign?.id === campaign.id ? "tableRow campaignRow isSelected" : "tableRow campaignRow"} role="button" tabIndex={0} onClick={() => setSelectedCampaignId(campaign.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedCampaignId(campaign.id); }} key={campaign.id}>
                     <span><strong>{campaign.name}</strong><small>{campaign.notes || campaign.goal}</small></span>
@@ -3687,15 +3706,15 @@ function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns
                     <span>{campaign.channel}</span>
                     <span><b className={campaign.status === "Live" || campaign.status === "Completed" ? "statusOk" : "statusDraft"}>{campaign.status}</b></span>
                     <span>{campaign.goal}</span>
-                    <span>{campaign.spend ? formatCurrency(campaign.spend, metric.currency) : "—"}</span>
-                    <span>{metric.revenue ? formatCurrency(metric.revenue, metric.currency) : "—"}</span>
-                    <span className={profit >= 0 ? "statusOk" : "statusBad"}>{formatCurrency(profit, metric.currency)}</span>
+                    <span>{campaign.spend ? formatCurrency(campaign.spend, attribution.currency) : "—"}</span>
+                    <span>{attribution.hasAttribution ? formatCurrency(attribution.revenue, attribution.currency) : "—"}</span>
+                    <span className={attribution.hasAttribution ? (profit >= 0 ? "statusOk" : "statusBad") : undefined}>{attribution.hasAttribution ? formatCurrency(profit, attribution.currency) : "—"}</span>
                     <span>{roas ? `${roas.toFixed(1)}x` : "—"}</span>
-                    <span>{metric.downloads ? formatNumber(metric.downloads) : "—"}</span>
-                    <span>{cpi ? formatUnitCurrency(cpi, metric.currency) : "—"}</span>
-                    <span>{creatorViews ? formatNumber(creatorViews) : "—"}</span>
-                    <span>{hybridCpm ? formatUnitCurrency(hybridCpm, metric.currency) : "—"}</span>
-                    <span>{linkedCreators.length ? formatNumber(linkedCreators.length) : "—"}</span>
+                    <span>{attribution.downloads ? formatNumber(attribution.downloads) : "—"}</span>
+                    <span>{cpi ? formatUnitCurrency(cpi, attribution.currency) : "—"}</span>
+                    <span>{attribution.views ? formatNumber(attribution.views) : "—"}</span>
+                    <span>{hybridCpm ? formatUnitCurrency(hybridCpm, attribution.currency) : "—"}</span>
+                    <span>{attribution.creatorCount ? formatNumber(attribution.creatorCount) : "—"}</span>
                     <span><small>{campaign.startDate} → {campaign.endDate}</small></span>
                     <span><button className="ghostButton dangerButton" type="button" onClick={(event) => { event.stopPropagation(); void fetch(`/api/campaigns/${encodeURIComponent(campaign.id)}`, { method: "DELETE" }).catch(() => null); setCampaigns((rows) => rows.filter((row) => row.id !== campaign.id)); }}>Delete</button></span>
                   </div>
@@ -3705,32 +3724,29 @@ function CampaignsPage({ apps, metrics, socials, videos, campaigns, setCampaigns
           ) : <EmptyPanel title="No campaigns yet" text="Create one campaign to start tracking spend, revenue, profit and creator coverage." />}
         </LiquidGlass>
 
-        <CampaignDetail campaign={selectedCampaign} apps={apps} metrics={metrics} socials={socials} videos={videos} setActivePage={setActivePage} />
+        <CampaignDetail campaign={selectedCampaign} apps={apps} metrics={metrics} videos={videos} creatives={creatives} setActivePage={setActivePage} />
       </section>
     </section>
   );
 }
 
-function CampaignDetail({ campaign, apps, metrics, socials, videos, setActivePage }: { campaign?: Campaign; apps: StudioApp[]; metrics: AppStoreMetric[]; socials: SocialAccount[]; videos: CreatorVideo[]; setActivePage: (page: PageKey) => void }) {
+function CampaignDetail({ campaign, apps, metrics, creatives, setActivePage, videos }: { campaign?: Campaign; apps: StudioApp[]; metrics: AppStoreMetric[]; creatives: Creative[]; videos: CreatorVideo[]; setActivePage: (page: PageKey) => void }) {
   if (!campaign) return <LiquidGlass className="panel dataPanel campaignDetail"><h2>Select a campaign</h2></LiquidGlass>;
   const app = apps.find((row) => row.id === campaign.appId);
-  const metric = campaignMetricForApp(metrics, campaign.appId);
-  const creators = socials.filter((social) => social.appId === campaign.appId);
-  const campaignVideos = videos.filter((video) => video.campaignId === campaign.id || (!video.campaignId && video.appId === campaign.appId));
-  const views = campaignVideos.reduce((sum, video) => sum + video.views, 0) || creators.reduce((sum, social) => sum + socialMetricValue(social, "views"), 0);
-  const hybridCpm = campaign.spend && views ? (campaign.spend / views) * 1000 : 0;
-  const profit = metric.revenue - campaign.spend;
+  const attribution = campaignAttribution(campaign, creatives, videos, metrics);
+  const hybridCpm = campaign.spend && attribution.views ? (campaign.spend / attribution.views) * 1000 : 0;
+  const profit = attribution.revenue - campaign.spend;
   return (
     <LiquidGlass className="panel dataPanel campaignDetail">
       <div className="panelHeader"><div><p className="caption">{campaign.channel}</p><h2>{campaign.name}</h2></div><span className="pill">{campaign.status}</span></div>
       <div className="campaignDetailStats">
         <span><strong>{app ? appDisplayName(app.name) : "Unmapped"}</strong><small>App</small></span>
-        <span><strong>{formatCurrency(campaign.spend, metric.currency)}</strong><small>Spend</small></span>
-        <span><strong>{metric.revenue ? formatCurrency(metric.revenue, metric.currency) : "—"}</strong><small>Revenue</small></span>
-        <span><strong>{formatCurrency(profit, metric.currency)}</strong><small>Profit</small></span>
-        <span><strong>{metric.downloads ? formatNumber(metric.downloads) : "—"}</strong><small>Downloads</small></span>
-        <span><strong>{views ? formatNumber(views) : "—"}</strong><small>Creator views</small></span>
-        <span><strong>{hybridCpm ? formatUnitCurrency(hybridCpm, metric.currency) : "—"}</strong><small>Hybrid CPM</small></span>
+        <span><strong>{formatCurrency(campaign.spend, attribution.currency)}</strong><small>Spend</small></span>
+        <span><strong>{attribution.hasAttribution ? formatCurrency(attribution.revenue, attribution.currency) : "—"}</strong><small>Attributed revenue</small></span>
+        <span><strong>{attribution.hasAttribution ? formatCurrency(profit, attribution.currency) : "—"}</strong><small>Attributed profit</small></span>
+        <span><strong>{attribution.downloads ? formatNumber(attribution.downloads) : "—"}</strong><small>Attributed downloads</small></span>
+        <span><strong>{attribution.views ? formatNumber(attribution.views) : "—"}</strong><small>Creator views</small></span>
+        <span><strong>{hybridCpm ? formatUnitCurrency(hybridCpm, attribution.currency) : "—"}</strong><small>Hybrid CPM</small></span>
       </div>
       <div className="campaignActions">
         <button className="ghostButton" type="button" onClick={() => setActivePage("creators")}>Creators</button>
@@ -3757,15 +3773,18 @@ function creativeFromVideo(video: CreatorVideo, socials: SocialAccount[]): Creat
     id: `tracked-${video.id}`,
     angle: "UGC",
     appId: video.appId,
+    campaignId: video.campaignId,
     comments: video.comments,
     createdAt: video.createdAt,
     favorites: video.favorites,
     format: video.platform.toLowerCase() === "instagram" ? "UGC" : "Talking head",
     hook: video.title || "",
     likes: video.likes,
+    installs: video.attributedInstalls,
     shares: video.shares,
     socialId: video.socialAccountId || "",
     status: video.views > 0 ? "Posted" : "Idea",
+    spend: video.cost,
     title: video.title || `${social?.handle ?? video.platform} video`,
     thumbnailUrl: video.thumbnailUrl || undefined,
     url: video.url || "",
@@ -3773,19 +3792,23 @@ function creativeFromVideo(video: CreatorVideo, socials: SocialAccount[]): Creat
   };
 }
 
-function CreativePage({ apps, socials, videos, creatives, setCreatives, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; creatives: Creative[]; setCreatives: React.Dispatch<React.SetStateAction<Creative[]>>; isFiltered?: boolean }) {
+function CreativePage({ apps, socials, videos, creatives, campaigns, setCreatives, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; creatives: Creative[]; campaigns: Campaign[]; setCreatives: React.Dispatch<React.SetStateAction<Creative[]>>; isFiltered?: boolean }) {
   const [selectedCreativeId, setSelectedCreativeId] = useState(creatives[0]?.id ?? "");
   const [draft, setDraft] = useState({
     angle: "Demo" as Creative["angle"],
     appId: apps[0]?.id ?? "",
+    campaignId: "",
     comments: "",
     favorites: "",
     format: "UGC" as Creative["format"],
     hook: "",
+    installs: "",
     likes: "",
+    revenue: "",
     shares: "",
     socialId: socials[0]?.id ?? "",
     status: "Idea" as Creative["status"],
+    spend: "",
     title: "",
     url: "",
     views: "",
@@ -3812,36 +3835,44 @@ function CreativePage({ apps, socials, videos, creatives, setCreatives, isFilter
       id,
       angle: draft.angle,
       appId,
+      campaignId: draft.campaignId || null,
       comments: parseOptionalMetric(draft.comments),
       createdAt: new Date().toISOString(),
       favorites: parseOptionalMetric(draft.favorites),
       format: draft.format,
       hook: draft.hook.trim(),
+      installs: parseOptionalMetric(draft.installs),
       likes: parseOptionalMetric(draft.likes),
+      revenue: parseOptionalMetric(draft.revenue),
       shares: parseOptionalMetric(draft.shares),
       socialId: draft.socialId,
       status: draft.status,
+      spend: parseOptionalMetric(draft.spend),
       title: draft.title.trim(),
       url: draft.url.trim(),
       views: parseOptionalMetric(draft.views),
     };
     setCreatives((rows) => [nextCreative, ...rows]);
     setSelectedCreativeId(nextCreative.id);
-    setDraft((current) => ({ ...current, comments: "", favorites: "", hook: "", likes: "", shares: "", title: "", url: "", views: "" }));
+    setDraft((current) => ({ ...current, comments: "", favorites: "", hook: "", installs: "", likes: "", revenue: "", shares: "", spend: "", title: "", url: "", views: "" }));
     try {
       const response = await fetch("/api/creatives", {
         body: JSON.stringify({
           appId: nextCreative.appId,
+          campaignId: nextCreative.campaignId || undefined,
           comments: nextCreative.comments ?? 0,
           favorites: nextCreative.favorites ?? 0,
           format: nextCreative.format,
           hook: nextCreative.hook,
           id: nextCreative.id,
           impressions: nextCreative.views ?? 0,
+          installs: nextCreative.installs ?? 0,
           likes: nextCreative.likes ?? 0,
           name: nextCreative.title,
+          revenue: nextCreative.revenue ?? 0,
           shares: nextCreative.shares ?? 0,
           socialAccountId: nextCreative.socialId,
+          spend: nextCreative.spend ?? 0,
           status: nextCreative.status,
           url: nextCreative.url,
           workspaceId: DEFAULT_WORKSPACE_ID,
@@ -3850,13 +3881,13 @@ function CreativePage({ apps, socials, videos, creatives, setCreatives, isFilter
         method: "POST",
       });
       const payload = await response.json() as { ok?: boolean; data?: { creative?: BackendCreative } };
-      if (response.ok && payload.ok && payload.data?.creative) {
-        const savedCreative = creativeFromBackend(payload.data.creative);
-        setCreatives((rows) => rows.map((row) => row.id === nextCreative.id ? savedCreative : row));
-        setSelectedCreativeId(savedCreative.id);
-      }
+      if (!response.ok || !payload.ok || !payload.data?.creative) throw new Error("Creative could not be saved.");
+      const savedCreative = creativeFromBackend(payload.data.creative);
+      setCreatives((rows) => rows.map((row) => row.id === nextCreative.id ? savedCreative : row));
+      setSelectedCreativeId(savedCreative.id);
     } catch {
-      // Keep the optimistic row locally if the backend is temporarily unavailable.
+      setCreatives((rows) => rows.filter((row) => row.id !== nextCreative.id));
+      setSelectedCreativeId("");
     }
   }
 
@@ -3877,6 +3908,7 @@ function CreativePage({ apps, socials, videos, creatives, setCreatives, isFilter
           <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Creative title" />
           <select value={draft.appId} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
           <select value={draft.socialId} onChange={(event) => setDraft((current) => ({ ...current, socialId: event.target.value }))}><option value="">No creator</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.handle}</option>)}</select>
+          <select value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">No campaign</option>{campaigns.filter((campaign) => campaign.appId === draft.appId).map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select>
           <select value={draft.angle} onChange={(event) => setDraft((current) => ({ ...current, angle: event.target.value as Creative["angle"] }))}><option>Pain</option><option>Benefit</option><option>Proof</option><option>Demo</option><option>Offer</option><option>UGC</option></select>
           <select value={draft.format} onChange={(event) => setDraft((current) => ({ ...current, format: event.target.value as Creative["format"] }))}><option>Talking head</option><option>Screen recording</option><option>UGC</option><option>Meme</option><option>Static</option><option>Other</option></select>
           <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Creative["status"] }))}><option>Idea</option><option>Scripted</option><option>Posted</option><option>Winner</option><option>Fatigue</option><option>Archived</option></select>
@@ -3887,6 +3919,9 @@ function CreativePage({ apps, socials, videos, creatives, setCreatives, isFilter
           <input type="number" min="0" value={draft.comments} onChange={(event) => setDraft((current) => ({ ...current, comments: event.target.value }))} placeholder="Comments" />
           <input type="number" min="0" value={draft.shares} onChange={(event) => setDraft((current) => ({ ...current, shares: event.target.value }))} placeholder="Shares" />
           <input type="number" min="0" value={draft.favorites} onChange={(event) => setDraft((current) => ({ ...current, favorites: event.target.value }))} placeholder="Favorites" />
+          <input type="number" min="0" value={draft.installs} onChange={(event) => setDraft((current) => ({ ...current, installs: event.target.value }))} placeholder="Attributed installs" />
+          <input type="number" min="0" step="0.01" value={draft.revenue} onChange={(event) => setDraft((current) => ({ ...current, revenue: event.target.value }))} placeholder="Attributed revenue" />
+          <input type="number" min="0" step="0.01" value={draft.spend} onChange={(event) => setDraft((current) => ({ ...current, spend: event.target.value }))} placeholder="Creative spend" />
         </div>
         <button className="primaryButton" type="submit">Add creative</button>
       </LiquidGlass>
@@ -4713,7 +4748,7 @@ function socialTotals(socials: SocialAccount[]) {
   const comments = socials.reduce((sum, social) => sum + socialMetricValue(social, "comments"), 0);
   const shares = socials.reduce((sum, social) => sum + socialMetricValue(social, "shares"), 0);
   const favorites = socials.reduce((sum, social) => sum + socialMetricValue(social, "favorites"), 0);
-  const engagement = views ? (likes / views) * 100 : 0;
+  const engagement = views ? ((likes + comments + shares + favorites) / views) * 100 : 0;
   return { avgViews, comments, engagement, favorites, likes, shares, videos, views };
 }
 
@@ -4745,17 +4780,37 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
   const [creatorFilter, setCreatorFilter] = useState("all");
   const [bulkSyncing, setBulkSyncing] = useState(false);
   const [manualSyncMessage, setManualSyncMessage] = useState("");
+  const [dailySnapshots, setDailySnapshots] = useState<PersistedSocialMetricRow[]>([]);
 
-  async function syncSocial(social: SocialAccount, quiet = false) {
+  useEffect(() => {
+    const range = resolveClientDateRange(dateRange);
+    const end = range?.end ? isoDay(range.end) : isoDateOffset(0);
+    const controller = new AbortController();
+    void fetch(`/api/metrics/social?end=${encodeURIComponent(end)}`, { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Social history unavailable")))
+      .then((payload: { data?: { metrics?: PersistedSocialMetricRow[] } }) => setDailySnapshots(payload.data?.metrics ?? []))
+      .catch(() => { if (!controller.signal.aborted) setDailySnapshots([]); });
+    return () => controller.abort();
+  }, [dateRange, socials]);
+
+  async function syncSocial(social: SocialAccount, quiet = false, requestedLimit?: number) {
     if (activeLookups.has(social.id)) return false;
+    const prompted = requestedLimit ?? (quiet ? 30 : Number.parseInt(window.prompt(`How many newest videos should be refreshed for ${social.creatorName || social.handle}? (1–1000)`, "30") || "0", 10));
+    if (!quiet && !prompted) return false;
+    const limit = Math.min(1_000, Math.max(1, prompted || 30));
     if (!quiet) onSyncNotice({ kind: "info", title: `Syncing ${social.creatorName || social.handle}`, detail: "Refreshing this creator from the provider…" });
     setActiveLookups((current) => new Set(current).add(social.id));
     setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: "Provider pending" } : row));
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), SOCIAL_LOOKUP_TIMEOUT_MS);
     try {
-      const response = await fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}`, { method: "POST", signal: controller.signal });
+      const response = await fetch(`/api/social-profile?platform=${encodeURIComponent(social.platform)}&handle=${encodeURIComponent(social.handle)}&accountId=${encodeURIComponent(social.id)}&limit=${limit}`, { method: "POST", signal: controller.signal });
       const profile = await response.json() as Partial<SocialAccount> & { error?: string; videoMetricsReady?: boolean; videos?: SocialProfileVideo[] };
+      if (response.status === 429) {
+        setSocials((current) => current.map((row) => row.id === social.id ? { ...row, status: social.status } : row));
+        if (!quiet) onSyncNotice({ kind: "success", title: `${social.creatorName || social.handle} is current`, detail: "This creator was already refreshed less than 15 minutes ago." });
+        return true;
+      }
       if (!response.ok) throw new Error(profile.error || "Social sync failed");
       const nextStatus = profile.videoMetricsReady ? "Ready for public tracking" : "No public metrics";
       const synced = { ...social, ...profile, status: nextStatus as SocialAccount["status"] };
@@ -4777,13 +4832,16 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
   async function syncAllSocials() {
     if (bulkSyncing) return;
     const accounts = socials.filter((social) => social.active !== false);
+    const requested = window.prompt("How many newest videos should be refreshed per creator? (1–1000)", "30");
+    if (requested === null) return;
+    const requestedLimit = Math.min(1_000, Math.max(1, Number.parseInt(requested, 10) || 30));
     setBulkSyncing(true);
     setManualSyncMessage(`Syncing 0 / ${accounts.length} creators…`);
     onSyncNotice({ kind: "info", title: "Social sync started", detail: `${accounts.length} active creators will be refreshed once.` });
     let completed = 0;
     let succeeded = 0;
     for (const social of accounts) {
-      if (await syncSocial(social, true)) succeeded += 1;
+      if (await syncSocial(social, true, requestedLimit)) succeeded += 1;
       completed += 1;
       setManualSyncMessage(`Syncing ${completed} / ${accounts.length} creators…`);
     }
@@ -4808,12 +4866,36 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
   const visibleVideos = videos.filter((video) => visibleSocials.some((social) => social.id === video.socialAccountId));
   const totals = videoTotals(visibleVideos);
   const selectedHandle = visibleSocials.find((social) => social.id === selectedHandleId) ?? visibleSocials[0];
-  const dailyStats = visibleVideos.reduce((daily, video) => {
+  const publicationStats = visibleVideos.reduce((daily, video) => {
     const day = (video.publishedAt || video.createdAt || "").slice(0, 10) || "Unknown";
     const current = daily.get(day) ?? { videos: 0, views: 0, likes: 0, comments: 0, shares: 0, favorites: 0 };
     daily.set(day, { videos: current.videos + 1, views: current.views + video.views, likes: current.likes + video.likes, comments: current.comments + video.comments, shares: current.shares + video.shares, favorites: current.favorites + video.favorites });
     return daily;
   }, new Map<string, { videos: number; views: number; likes: number; comments: number; shares: number; favorites: number }>());
+  const selectedAccountIds = new Set(visibleSocials.map((social) => social.id));
+  const selectedSnapshots = dailySnapshots.filter((row) => selectedAccountIds.has(row.socialAccountId));
+  const snapshotDates = [...new Set(selectedSnapshots.map((row) => row.date))].sort();
+  const hasGrowthSnapshots = snapshotDates.length >= 2;
+  const growthStats = new Map<string, { videos: number; views: number; likes: number; comments: number; shares: number; favorites: number }>();
+  const snapshotsByAccount = new Map<string, PersistedSocialMetricRow[]>();
+  for (const snapshot of selectedSnapshots) snapshotsByAccount.set(snapshot.socialAccountId, [...(snapshotsByAccount.get(snapshot.socialAccountId) ?? []), snapshot]);
+  for (const rows of snapshotsByAccount.values()) {
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    for (let index = 1; index < rows.length; index += 1) {
+      const current = rows[index];
+      const previous = rows[index - 1];
+      const existing = growthStats.get(current.date) ?? { videos: 0, views: 0, likes: 0, comments: 0, shares: 0, favorites: 0 };
+      growthStats.set(current.date, {
+        videos: existing.videos + Math.max(0, current.posts - previous.posts),
+        views: existing.views + Math.max(0, current.views - previous.views),
+        likes: existing.likes + Math.max(0, current.likes - previous.likes),
+        comments: existing.comments + Math.max(0, current.comments - previous.comments),
+        shares: existing.shares + Math.max(0, current.shares - previous.shares),
+        favorites: existing.favorites + Math.max(0, current.favorites - previous.favorites),
+      });
+    }
+  }
+  const dailyStats = hasGrowthSnapshots ? growthStats : publicationStats;
   const trendRange = resolveClientDateRange(dateRange);
   const firstVideoDay = visibleVideos.map((video) => (video.publishedAt || video.createdAt || "").slice(0, 10)).filter(Boolean).sort()[0];
   const trendStart = dateRange === "all" && firstVideoDay ? parseIsoDay(firstVideoDay)! : trendRange?.start;
@@ -4867,7 +4949,7 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
       </div>
       {manualSyncMessage ? <p className="socialManualSyncStatus" role="status">{manualSyncMessage}</p> : null}
       {hasMetrics ? (
-        <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend · daily`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={`${formatNumber(totals.videos)} videos published in period · filters are local`} points={dailyTrend.length ? dailyTrend : [{ label: "Today", value: 0 }]} variant="number" currency="USD" />
+        <TrendPanel title={`${metricCards.find((card) => card.key === selectedMetric)?.title ?? "Social"} trend · ${hasGrowthSnapshots ? "daily growth" : "publication baseline"}`} value={socialMetricText(videoTotalMetric(totals, selectedMetric), isLoading, selectedMetric === "engagement" ? "%" : "")} detail={hasGrowthSnapshots ? "Daily gains calculated between manual sync snapshots" : `${formatNumber(totals.videos)} videos published in period · a second manual sync will start daily growth`} points={dailyTrend.length ? dailyTrend : [{ label: "Today", value: 0 }]} variant="number" currency="USD" />
       ) : isLoading ? (
         <SocialDataSkeleton count={loadingCount} />
       ) : (
@@ -4949,7 +5031,7 @@ function videoTotals(videos: CreatorVideo[]) {
   const comments = videos.reduce((sum, video) => sum + video.comments, 0);
   const shares = videos.reduce((sum, video) => sum + video.shares, 0);
   const favorites = videos.reduce((sum, video) => sum + video.favorites, 0);
-  const engagement = views ? (likes / views) * 100 : 0;
+  const engagement = views ? ((likes + comments + shares + favorites) / views) * 100 : 0;
   return { avgViews: videos.length && views ? views / videos.length : 0, comments, engagement, favorites, likes, shares, videos: videos.length, views };
 }
 
@@ -5283,9 +5365,9 @@ function CreatorVideoGrowth({ videoId, snapshots }: { videoId: string | null; sn
 function CreatorPayments({ creator, profile, currency, onAction }: { creator: SocialAccount; profile?: CreatorOperationProfile; currency: string; onAction: (payload: Record<string, unknown>) => Promise<void> }) {
   const [dealType, setDealType] = useState(String(profile?.deal?.type || "cpm"));
   const [cpm, setCpm] = useState(String(profile?.deal?.cpm || creator.cpmRate || ""));
-  const [baseFee, setBaseFee] = useState(String(profile?.deal?.baseFeePerVideo || creator.fixedFee || ""));
+      const [baseFee, setBaseFee] = useState(String(profile?.deal?.type === "fixed_monthly" ? profile.deal.monthlyFixedFee || "" : profile?.deal?.baseFeePerVideo || creator.fixedFee || ""));
   const [cap, setCap] = useState(String(profile?.deal?.maxPayoutPerVideo || "500"));
-  return <div className="creatorTabBody"><div className="creatorPaymentSummary">{[["Estimated", profile?.aggregates.estimatedPayout || 0], ["Locked", profile?.payouts.filter((row) => row.type === "locked").reduce((sum,row) => sum + Number(row.finalAmount || row.grossAmount || 0), 0) || 0], ["Due now", profile?.aggregates.amountDue || 0], ["Paid lifetime", profile?.aggregates.lifetimePaid || 0]].map(([label,value]) => <span key={String(label)}><strong>{Number(value) ? formatCurrency(Number(value), currency) : "—"}</strong><small>{label}</small></span>)}</div><form className="creatorDealForm" onSubmit={(event) => { event.preventDefault(); void onAction({ action: "deal", type: dealType, currency, cpm: Number(cpm), baseFeePerVideo: Number(baseFee), maxPayoutPerVideo: cap ? Number(cap) : null, minimumPayout: 50, eligibilityWindowDays: 30, startDate: new Date().toISOString().slice(0,10) }); }}><h3>Deal terms</h3><select value={dealType} onChange={(event) => setDealType(event.target.value)}><option value="cpm">CPM</option><option value="fixed_per_video">Fixed / video</option><option value="fixed_monthly">Fixed monthly</option><option value="hybrid">Hybrid</option></select><input type="number" min="0" step="0.01" placeholder="CPM" value={cpm} onChange={(event) => setCpm(event.target.value)}/><input type="number" min="0" step="0.01" placeholder="Base fee / video" value={baseFee} onChange={(event) => setBaseFee(event.target.value)}/><input type="number" min="0" step="0.01" placeholder="Cap / video" value={cap} onChange={(event) => setCap(event.target.value)}/><button className="primaryButton">Save deal</button></form><div className="creatorPayoutList">{profile?.payouts.length ? profile.payouts.map((row) => <div key={String(row.id)}><span><strong>{String(row.type).toUpperCase()}</strong><small>{String(row.payoutCycle || row.eligibilityDate || "")}</small></span><span><strong>{formatCurrency(Number(row.finalAmount || row.grossAmount || 0), String(row.currency || currency))}</strong><small>{formatNumber(Number(row.eligibleViews || 0))} eligible views</small></span>{row.type === "due" ? <button className="ghostButton" onClick={() => void onAction({ action: "payout_status", payoutId: row.id, status: "paid" })}>Mark paid</button> : null}</div>) : <p className="settingsEmpty">No finalized payout entries yet. Estimates are calculated from tracked views.</p>}</div></div>;
+      return <div className="creatorTabBody"><div className="creatorPaymentSummary">{[["Estimated", profile?.aggregates.estimatedPayout || 0], ["Locked", profile?.payouts.filter((row) => row.type === "locked").reduce((sum,row) => sum + Number(row.finalAmount || row.grossAmount || 0), 0) || 0], ["Due now", profile?.aggregates.amountDue || 0], ["Paid lifetime", profile?.aggregates.lifetimePaid || 0]].map(([label,value]) => <span key={String(label)}><strong>{Number(value) ? formatCurrency(Number(value), currency) : "—"}</strong><small>{label}</small></span>)}</div><form className="creatorDealForm" onSubmit={(event) => { event.preventDefault(); void onAction({ action: "deal", type: dealType, currency, cpm: Number(cpm), baseFeePerVideo: dealType === "fixed_monthly" ? 0 : Number(baseFee), monthlyFixedFee: dealType === "fixed_monthly" ? Number(baseFee) : 0, maxPayoutPerVideo: cap ? Number(cap) : null, minimumPayout: 50, eligibilityWindowDays: 30, startDate: new Date().toISOString().slice(0,10) }); }}><h3>Deal terms</h3><select value={dealType} onChange={(event) => setDealType(event.target.value)}><option value="cpm">CPM</option><option value="fixed_per_video">Fixed / video</option><option value="fixed_monthly">Fixed monthly</option><option value="hybrid">Hybrid</option></select><input type="number" min="0" step="0.01" placeholder="CPM" value={cpm} onChange={(event) => setCpm(event.target.value)}/><input type="number" min="0" step="0.01" placeholder={dealType === "fixed_monthly" ? "Monthly fee" : "Base fee / video"} value={baseFee} onChange={(event) => setBaseFee(event.target.value)}/><input type="number" min="0" step="0.01" placeholder="Cap / video" value={cap} onChange={(event) => setCap(event.target.value)}/><button className="primaryButton">Save deal</button></form><div className="creatorPayoutList">{profile?.payouts.length ? profile.payouts.map((row) => <div key={String(row.id)}><span><strong>{String(row.type).toUpperCase()}</strong><small>{String(row.payoutCycle || row.eligibilityDate || "")}</small></span><span><strong>{formatCurrency(Number(row.finalAmount || row.grossAmount || 0), String(row.currency || currency))}</strong><small>{formatNumber(Number(row.eligibleViews || 0))} eligible views</small></span>{row.type === "due" ? <button className="ghostButton" onClick={() => void onAction({ action: "payout_status", payoutId: row.id, status: "paid" })}>Mark paid</button> : null}</div>) : <p className="settingsEmpty">No finalized payout entries yet. Estimates are calculated from tracked views.</p>}</div></div>;
 }
 
 function EmptyPanel({ title, text }: { title: string; text: string }) {
