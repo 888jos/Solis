@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ElementType, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, CSSProperties, ElementType, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import type { GlobeMethods } from "react-globe.gl";
@@ -4844,6 +4844,7 @@ const SOCIAL_LOOKUP_TIMEOUT_MS = 120_000;
 function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setCreatorVideos, onSyncNotice, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; dateRange: string; setSocials: React.Dispatch<React.SetStateAction<SocialAccount[]>>; setCreatorVideos: React.Dispatch<React.SetStateAction<CreatorVideo[]>>; onSyncNotice: (notice: SyncNotice | null) => void; isFiltered?: boolean }) {
   const [selectedMetric, setSelectedMetric] = useState<SocialMetricKey>("views");
   const [selectedHandleId, setSelectedHandleId] = useState<string | null>(null);
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [activeLookups, setActiveLookups] = useState<Set<string>>(() => new Set());
   const [platformFilter, setPlatformFilter] = useState("all");
   const [creatorFilter, setCreatorFilter] = useState("all");
@@ -4935,6 +4936,7 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
   const visibleVideos = videos.filter((video) => visibleSocials.some((social) => social.id === video.socialAccountId));
   const totals = videoTotals(visibleVideos);
   const selectedHandle = visibleSocials.find((social) => social.id === selectedHandleId) ?? visibleSocials[0];
+  const selectedVideo = visibleVideos.find((video) => video.id === selectedVideoId) ?? null;
   const publicationStats = visibleVideos.reduce((daily, video) => {
     const day = (video.publishedAt || video.createdAt || "").slice(0, 10) || "Unknown";
     const current = daily.get(day) ?? { videos: 0, views: 0, likes: 0, comments: 0, shares: 0, favorites: 0 };
@@ -5024,12 +5026,90 @@ function SocialTrackingPage({ apps, socials, videos, dateRange, setSocials, setC
       ) : (
         <LiquidGlass className="panel dataPanel socialDataNotice"><h2>No public video metrics</h2><span>{formatNumber(socials.length)} handles mapped</span><button className="ghostButton" type="button" disabled title="TikTok public pages do not always expose video stats without auth.">Source limited</button></LiquidGlass>
       )}
+      <SocialPerformanceWorkspace socials={visibleSocials} videos={visibleVideos} onSelectVideo={setSelectedVideoId} />
       <section className="socialGrid">
         <SocialTable apps={apps} socials={visibleSocials} videos={visibleVideos} isFiltered={isFiltered || visibleSocials.length !== socials.length} onSelect={setSelectedHandleId} selectedId={selectedHandle?.id} onSync={syncSocial} onRemove={removeSocial} syncingIds={activeLookups} />
-        <SocialHandleCard apps={apps} social={selectedHandle} videos={visibleVideos.filter((video) => video.socialAccountId === selectedHandle?.id)} />
+        <SocialHandleCard apps={apps} social={selectedHandle} videos={visibleVideos.filter((video) => video.socialAccountId === selectedHandle?.id)} onSelectVideo={setSelectedVideoId} />
       </section>
+      {selectedVideo ? <SocialVideoDetail video={selectedVideo} social={socials.find((row) => row.id === selectedVideo.socialAccountId)} onClose={() => setSelectedVideoId(null)} /> : null}
     </section>
   );
+}
+
+function SocialPerformanceWorkspace({ socials, videos, onSelectVideo }: { socials: SocialAccount[]; videos: CreatorVideo[]; onSelectVideo: (id: string) => void }) {
+  const refreshTimes = socials.map((social) => social.lastSyncedAt ? new Date(social.lastSyncedAt).getTime() : 0).filter(Number.isFinite).filter(Boolean);
+  const lastRefresh = refreshTimes.length ? Math.max(...refreshTimes) : 0;
+  const todayKey = isoDateOffset(0);
+  const refreshedToday = refreshTimes.filter((value) => new Date(value).toISOString().slice(0, 10) === todayKey).length;
+  const accountsWithVideos = new Set(videos.map((video) => video.socialAccountId).filter(Boolean)).size;
+  const activityDays = Array.from({ length: 84 }, (_, index) => {
+    const key = isoDateOffset(-(83 - index));
+    return { key, count: videos.filter((video) => (video.publishedAt || video.createdAt || "").slice(0, 10) === key).length };
+  });
+  const maximumActivity = Math.max(1, ...activityDays.map((day) => day.count));
+  const averages = new Map(socials.map((social) => {
+    const accountVideos = videos.filter((video) => video.socialAccountId === social.id);
+    return [social.id, accountVideos.length ? accountVideos.reduce((sum, video) => sum + video.views, 0) / accountVideos.length : 0];
+  }));
+  const rankedVideos = [...videos].sort((left, right) => {
+    const leftAverage = averages.get(left.socialAccountId || "") || left.views || 1;
+    const rightAverage = averages.get(right.socialAccountId || "") || right.views || 1;
+    return right.views / rightAverage - left.views / leftAverage;
+  }).slice(0, 6);
+
+  return <section className="socialPerformanceWorkspace" aria-label="Social performance workspace">
+    <LiquidGlass className="panel socialTrackingCoverage">
+      <div className="panelHeader"><div><p className="caption">Tracking control</p><h2>Coverage & refresh</h2></div><span className="pill">Manual sync only</span></div>
+      <div className="socialCoverageStats">
+        <span><strong>{formatNumber(videos.length)}</strong><small>tracked videos</small></span>
+        <span><strong>{formatNumber(socials.length)}</strong><small>active accounts</small></span>
+        <span><strong>{socials.length ? `${Math.round(accountsWithVideos / socials.length * 100)}%` : "—"}</strong><small>accounts with data</small></span>
+        <span><strong>{formatNumber(refreshedToday)}</strong><small>refreshed today</small></span>
+      </div>
+      <div className="socialRefreshPolicy"><RefreshCw size={16}/><span><strong>{lastRefresh ? `Last refresh ${new Date(lastRefresh).toLocaleString()}` : "No completed refresh"}</strong><small>Solis never refreshes social data in the background. Use Sync or Sync all when you want fresh provider data.</small></span></div>
+    </LiquidGlass>
+    <LiquidGlass className="panel socialPostActivity">
+      <div className="panelHeader"><div><p className="caption">Publishing rhythm</p><h2>Post activity</h2></div><span className="pill">12 weeks</span></div>
+      <div className="socialHeatmap" aria-label="Videos published over the last 12 weeks">
+        {activityDays.map((day) => <i className={day.count ? "hasPosts" : ""} style={{ "--activity": day.count / maximumActivity } as CSSProperties} title={`${day.key}: ${day.count} video${day.count === 1 ? "" : "s"}`} key={day.key}/>) }
+      </div>
+      <div className="socialHeatmapLegend"><span>12 weeks ago</span><span>Fewer <i/><i className="hasPosts"/> More</span><span>Today</span></div>
+    </LiquidGlass>
+    <LiquidGlass className="panel socialTopVideos">
+      <div className="panelHeader"><div><p className="caption">Creative intelligence</p><h2>Top videos</h2></div><span className="pill">Virality vs creator avg</span></div>
+      <div className="socialTopVideoList">
+        {rankedVideos.length ? rankedVideos.map((video, index) => {
+          const social = socials.find((row) => row.id === video.socialAccountId);
+          const average = averages.get(video.socialAccountId || "") || video.views || 1;
+          const virality = video.views / average;
+          return <button type="button" onClick={() => onSelectVideo(video.id)} key={video.id}>
+            <b>{index + 1}</b>
+            {video.thumbnailUrl ? <Image src={video.thumbnailUrl} width={42} height={54} alt="" unoptimized/> : <i><Clapperboard size={17}/></i>}
+            <span><strong>{video.title || "Tracked video"}</strong><small>{social?.creatorName || social?.handle || video.platform} · {formatNumber(video.views)} views</small></span>
+            <em className={virality >= 1 ? "isWinner" : ""}>{virality.toFixed(1)}x</em>
+          </button>;
+        }) : <p className="settingsEmpty">Tracked videos will be ranked here after the next manual sync.</p>}
+      </div>
+    </LiquidGlass>
+  </section>;
+}
+
+function SocialVideoDetail({ video, social, onClose }: { video: CreatorVideo; social?: SocialAccount; onClose: () => void }) {
+  const engagement = video.views ? (video.likes + video.comments + video.shares + video.favorites) / video.views * 100 : 0;
+  const hashtags = (video.title || "").match(/#[\p{L}\p{N}_]+/gu) || [];
+  return <div className="socialVideoBackdrop" role="presentation" onMouseDown={onClose}>
+    <aside className="socialVideoDetail" role="dialog" aria-modal="true" aria-label="Tracked video details" onMouseDown={(event) => event.stopPropagation()}>
+      <header><div><p className="caption">{video.platform} video</p><h2>{video.title || "Tracked video"}</h2><span>{social?.creatorName || social?.handle || "Unknown creator"}</span></div><button className="iconButton" type="button" onClick={onClose} aria-label="Close video details"><X size={20}/></button></header>
+      <div className="socialVideoHero">
+        {video.thumbnailUrl ? <Image src={video.thumbnailUrl} width={220} height={292} alt="Video thumbnail" unoptimized/> : <div><Clapperboard size={34}/><span>No thumbnail</span></div>}
+        <section><div className="socialVideoKpis">
+          <span><strong>{formatNumber(video.views)}</strong><small>Views</small></span><span><strong>{formatNumber(video.likes)}</strong><small>Likes</small></span><span><strong>{formatNumber(video.comments)}</strong><small>Comments</small></span><span><strong>{formatNumber(video.shares)}</strong><small>Shares</small></span><span><strong>{formatNumber(video.favorites)}</strong><small>Saves</small></span><span><strong>{engagement.toFixed(1)}%</strong><small>Engagement</small></span>
+        </div>{video.url ? <a className="primaryButton" href={video.url} target="_blank" rel="noreferrer">Open original video <ArrowUpRight size={16}/></a> : null}</section>
+      </div>
+      <section className="socialVideoMetadata"><span><small>Published</small><strong>{video.publishedAt ? new Date(video.publishedAt).toLocaleString() : "Unknown"}</strong></span><span><small>Tracking status</small><strong>{video.eligibilityStatus || "Tracked"}</strong></span><span><small>App mapping</small><strong>{video.appId ? "Mapped" : "Unmapped"}</strong></span><span><small>Campaign</small><strong>{video.campaignId ? "Assigned" : "Unassigned"}</strong></span></section>
+      <section className="socialVideoCaption"><p className="caption">Caption</p><p>{video.title || "No caption returned by the provider."}</p>{hashtags.length ? <div>{hashtags.map((tag) => <b key={tag}>{tag}</b>)}</div> : null}</section>
+    </aside>
+  </div>;
 }
 
 function SocialDataSkeleton({ count }: { count: number }) {
@@ -5108,7 +5188,7 @@ function videoTotalMetric(totals: ReturnType<typeof videoTotals>, key: SocialMet
   return totals[key];
 }
 
-function SocialHandleCard({ apps, social, videos }: { apps: StudioApp[]; social?: SocialAccount; videos: CreatorVideo[] }) {
+function SocialHandleCard({ apps, social, videos, onSelectVideo }: { apps: StudioApp[]; social?: SocialAccount; videos: CreatorVideo[]; onSelectVideo?: (id: string) => void }) {
   if (!social) return <LiquidGlass className="panel dataPanel socialHandleDetail"><h2>Select a handle</h2></LiquidGlass>;
   const app = apps.find((row) => row.id === social.appId);
   const totals = videoTotals(videos);
@@ -5131,10 +5211,10 @@ function SocialHandleCard({ apps, social, videos }: { apps: StudioApp[]; social?
           {videos.length ? (
             <div className="creatorVideoMiniList">
               {videos.slice(0, 5).map((video) => (
-                <a href={video.url || "#"} target="_blank" rel="noreferrer" key={`handle-video-${video.id}`}>
+                <button type="button" onClick={() => onSelectVideo?.(video.id)} key={`handle-video-${video.id}`}>
                   {video.thumbnailUrl ? <Image src={video.thumbnailUrl} alt="" width={48} height={58} unoptimized /> : <i><Clapperboard size={18} /></i>}
                   <span><strong>{video.title || "Tracked video"}</strong><small>{formatNumber(video.views)} views · {formatNumber(video.likes)} likes</small></span>
-                </a>
+                </button>
               ))}
             </div>
           ) : null}

@@ -97,6 +97,12 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.match(page, /Social sync complete/);
   assert.match(page, /How many newest videos should be refreshed per creator/);
   assert.match(page, /Daily gains calculated between manual sync snapshots/);
+  assert.match(page, /SocialPerformanceWorkspace/);
+  assert.match(page, /Coverage & refresh/);
+  assert.match(page, /Post activity/);
+  assert.match(page, /Virality vs creator avg/);
+  assert.match(page, /function SocialVideoDetail/);
+  assert.match(page, /Solis never refreshes social data in the background/);
   assert.match(page, /campaignAttribution/);
   assert.match(page, /AnalyticsSkeleton/);
   assert.match(page, /aria-busy="true"/);
@@ -238,6 +244,9 @@ test("source keeps local setup configurable and icon-based", async () => {
   assert.match(css, /backdrop-filter:\s*blur\(8px\) brightness\(0\.52\)/);
   assert.match(css, /\.aiDockPanel/);
   assert.match(css, /\.aiComposer/);
+  assert.match(css, /\.socialPerformanceWorkspace/);
+  assert.match(css, /\.socialHeatmap/);
+  assert.match(css, /\.socialVideoDetail/);
   assert.match(css, /\.aiMessage/);
   assert.match(css, /\.asoCommandBar/);
   assert.match(css, /\.asoTable/);

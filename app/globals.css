@@ -7952,12 +7952,22 @@ h2 {
   opacity: 0.58;
 }
 
-.creatorVideoMiniList a {
+.creatorVideoMiniList :is(a, button) {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
+  width: 100%;
+  padding: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+
+.creatorVideoMiniList button:hover { background: rgba(255, 255, 255, 0.035); }
 
 .creatorVideoMiniList img,
 .creatorVideoMiniList i {
@@ -7971,7 +7981,7 @@ h2 {
   object-fit: cover;
 }
 
-.creatorVideoMiniList a > span {
+.creatorVideoMiniList :is(a, button) > span {
   display: grid;
   min-width: 0;
   gap: 4px;
@@ -8716,4 +8726,153 @@ body {
   .revenueSignalGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Viral-inspired information architecture, adapted to DriftOS' dark operating UI. */
+.socialPerformanceWorkspace {
+  display: grid;
+  grid-template-columns: minmax(280px, .72fr) minmax(420px, 1.28fr);
+  gap: 14px;
+}
+
+.socialPerformanceWorkspace > .panel {
+  padding: 18px;
+  border-color: var(--viral-border);
+}
+
+.socialTrackingCoverage { grid-column: 1; }
+.socialPostActivity { grid-column: 2; }
+.socialTopVideos { grid-column: 1 / -1; }
+
+.socialCoverageStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.socialCoverageStats > span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--viral-border);
+  border-radius: 9px;
+  background: #070708;
+}
+
+.socialCoverageStats strong { font-size: 21px; color: #fffaf2; font-variant-numeric: tabular-nums; }
+.socialCoverageStats small, .socialRefreshPolicy small { color: var(--viral-muted); }
+
+.socialRefreshPolicy {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: rgba(215, 173, 92, .07);
+  color: #f1c974;
+}
+
+.socialRefreshPolicy > span { display: grid; gap: 4px; }
+.socialRefreshPolicy small { line-height: 1.35; }
+
+.socialHeatmap {
+  display: grid;
+  grid-template-rows: repeat(7, 13px);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(9px, 1fr);
+  gap: 5px;
+  margin-top: 19px;
+}
+
+.socialHeatmap > i,
+.socialHeatmapLegend i {
+  display: block;
+  width: 100%;
+  min-width: 8px;
+  height: 13px;
+  border: 1px solid rgba(255, 255, 255, .055);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.socialHeatmap > i.hasPosts { background: rgba(215, 173, 92, calc(.28 + var(--activity) * .68)); border-color: rgba(215, 173, 92, .34); }
+.socialHeatmapLegend { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; color: var(--viral-muted); font-size: 11px; }
+.socialHeatmapLegend span:nth-child(2) { display: flex; align-items: center; gap: 5px; }
+.socialHeatmapLegend i { width: 11px; min-width: 11px; height: 11px; }
+.socialHeatmapLegend i.hasPosts { background: var(--orange-2); }
+
+.socialTopVideoList { display: grid; margin-top: 8px; }
+.socialTopVideoList > button {
+  display: grid;
+  grid-template-columns: 24px 42px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 9px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--viral-border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.socialTopVideoList > button:hover { background: rgba(255, 255, 255, .027); }
+.socialTopVideoList > button > b { color: var(--viral-muted); text-align: center; }
+.socialTopVideoList img, .socialTopVideoList > button > i { width: 42px; height: 54px; border-radius: 6px; object-fit: cover; background: #070708; display: grid; place-items: center; }
+.socialTopVideoList span { display: grid; min-width: 0; gap: 4px; }
+.socialTopVideoList strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.socialTopVideoList small { color: var(--viral-muted); }
+.socialTopVideoList em { padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--viral-muted); font-style: normal; font-weight: 650; }
+.socialTopVideoList em.isWinner { background: rgba(87, 199, 128, .13); color: #73d99a; }
+
+.socialVideoBackdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, .68);
+  backdrop-filter: blur(7px);
+}
+
+.socialVideoDetail {
+  width: min(720px, calc(100vw - 280px));
+  height: 100%;
+  overflow-y: auto;
+  padding: 26px;
+  border-left: 1px solid rgba(215, 173, 92, .24);
+  background: #101012;
+  box-shadow: -22px 0 70px rgba(0,0,0,.45);
+}
+
+.socialVideoDetail > header { display: flex; justify-content: space-between; gap: 16px; }
+.socialVideoDetail > header h2 { margin: 5px 0 7px; font-size: 26px; }
+.socialVideoDetail > header span { color: var(--viral-muted); }
+.socialVideoHero { display: grid; grid-template-columns: 220px 1fr; gap: 18px; margin-top: 22px; }
+.socialVideoHero > img, .socialVideoHero > div { width: 220px; height: 292px; object-fit: cover; border-radius: 12px; background: #060607; display: grid; place-items: center; }
+.socialVideoHero > div { align-content: center; gap: 8px; color: var(--viral-muted); }
+.socialVideoHero > section { display: grid; align-content: start; gap: 12px; }
+.socialVideoHero .primaryButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; }
+.socialVideoKpis { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.socialVideoKpis span, .socialVideoMetadata span { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--viral-border); border-radius: 9px; background: #070708; }
+.socialVideoKpis strong { color: #fffaf2; font-size: 19px; }
+.socialVideoKpis small, .socialVideoMetadata small { color: var(--viral-muted); }
+.socialVideoMetadata { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 18px; }
+.socialVideoCaption { margin-top: 18px; padding: 16px; border: 1px solid var(--viral-border); border-radius: 11px; background: #080809; }
+.socialVideoCaption p:not(.caption) { line-height: 1.55; }
+.socialVideoCaption > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.socialVideoCaption b { padding: 5px 8px; border-radius: 999px; background: rgba(215,173,92,.1); color: #efc978; font-size: 12px; }
+
+@media (max-width: 1100px) {
+  .socialPerformanceWorkspace { grid-template-columns: 1fr; }
+  .socialTrackingCoverage, .socialPostActivity, .socialTopVideos { grid-column: 1; }
+  .socialVideoDetail { width: min(720px, 100vw); }
+}
+
+@media (max-width: 650px) {
+  .socialVideoHero { grid-template-columns: 1fr; }
+  .socialVideoHero > img, .socialVideoHero > div { width: 100%; height: 320px; }
+  .socialVideoMetadata { grid-template-columns: 1fr; }
 }
