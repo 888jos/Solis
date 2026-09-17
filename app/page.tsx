@@ -2383,7 +2383,12 @@ export default function Home() {
         <div className="sideStatus"><span>Workspace health</span><strong>{apps.length} apps / {socials.length} handles</strong><i /></div>
       </LiquidGlass>
       <section className="workbench">
-        <LiquidGlass as="header" className="topHeader">
+        <header className="topHeader pageCommandHeader">
+          <div className="pageIntro">
+            <p>{copy.eyebrow}</p>
+            <h1>{copy.title}</h1>
+            <span>{copy.subline}</span>
+          </div>
           <div className="topActions">
             <div className="dateRangePicker">
               <label className="rangeControl"><CalendarRange size={22} strokeWidth={2} /><select value={dateRange.startsWith("custom:") ? "custom" : dateRange} onChange={(event) => selectDateRange(event.target.value)} aria-label="Date range"><option value="today">Today (Apple may be delayed)</option><option value="yesterday">Yesterday</option><option value="7d">1 Week</option><option value="30d">Last 30 Days</option><option value="90d">Last 90 Days</option><option value="180d">Last 180 Days</option><option value="365d">Last 365 Days</option><option value="all">All Time</option><option value="custom">{dateRange.startsWith("custom:") ? customRangeLabel(customStartDate, customEndDate) : "Custom"}</option></select></label>
@@ -2392,8 +2397,7 @@ export default function Home() {
             {activePage === "social" ? <button className="primaryTopButton" type="button" onClick={() => setSocialFormOpen(true)}><AtSign size={20} strokeWidth={2} />Add @</button> : null}
             <button type="button" onClick={exportWorkspace}><Download size={21} strokeWidth={2} />Export</button>
           </div>
-        </LiquidGlass>
-        <section className="heroRow compactHero"><h1>{copy.title}</h1></section>
+        </header>
         {renderPage()}
       </section>
       <LiquidGlass as="nav" className="mobileTabBar" aria-label="Mobile navigation">
@@ -3645,6 +3649,7 @@ function campaignAttribution(campaign: Campaign, creatives: Creative[], videos: 
 
 function CampaignsPage({ apps, metrics, videos, creatives, campaigns, setCampaigns, setActivePage }: { apps: StudioApp[]; metrics: AppStoreMetric[]; videos: CreatorVideo[]; creatives: Creative[]; campaigns: Campaign[]; setCampaigns: React.Dispatch<React.SetStateAction<Campaign[]>>; setActivePage: (page: PageKey) => void }) {
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState({
     appId: apps[0]?.id ?? "",
     channel: "Creators" as Campaign["channel"],
@@ -3711,6 +3716,7 @@ function CampaignsPage({ apps, metrics, videos, creatives, campaigns, setCampaig
       const savedCampaign = campaignFromBackend(payload.data.campaign);
       setCampaigns((rows) => rows.map((row) => row.id === nextCampaign.id ? savedCampaign : row));
       setSelectedCampaignId(savedCampaign.id);
+      setCreateOpen(false);
     } catch {
       setCampaigns((rows) => rows.filter((row) => row.id !== nextCampaign.id));
       setSelectedCampaignId("");
@@ -3721,6 +3727,10 @@ function CampaignsPage({ apps, metrics, videos, creatives, campaigns, setCampaig
 
   return (
     <section className="campaignsPage">
+      <div className="sectionToolbar">
+        <div><strong>Campaign performance</strong><span>Connect spend to revenue, downloads and creator output.</span></div>
+        <button className="primaryButton" type="button" onClick={() => setCreateOpen(true)}>New campaign</button>
+      </div>
       <section className="moduleMatrix campaignStats">
         <LiquidGlass className="panel moduleCard">
           <span className="cardAccentRail" aria-hidden="true" />
@@ -3749,21 +3759,23 @@ function CampaignsPage({ apps, metrics, videos, creatives, campaigns, setCampaig
         </LiquidGlass>
       </section>
 
-      <LiquidGlass as="form" className="panel dataPanel campaignFormPanel" onSubmit={addCampaign}>
-        <div className="panelHeader"><div><p className="caption">Create</p><h2>New campaign</h2></div><span className="pill">{campaigns.length} campaigns</span></div>
-        <div className="campaignFormGrid">
-          <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Campaign name" />
-          <select value={draft.appId} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
-          <select value={draft.channel} onChange={(event) => setDraft((current) => ({ ...current, channel: event.target.value as Campaign["channel"] }))}><option>Creators</option><option>Paid Ads</option><option>ASO</option><option>Launch</option><option>Promo</option></select>
-          <select value={draft.goal} onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value as Campaign["goal"] }))}><option>Downloads</option><option>Revenue</option><option>Awareness</option><option>Trials</option><option>Retention</option></select>
-          <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Campaign["status"] }))}><option>Draft</option><option>Live</option><option>Paused</option><option>Completed</option></select>
-          <input type="number" min="0" step="0.01" value={draft.spend} onChange={(event) => setDraft((current) => ({ ...current, spend: event.target.value }))} placeholder="Spend" />
-          <input type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
-          <input type="date" value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
-          <input className="campaignNotesInput" value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" />
-        </div>
-        <button className="primaryButton" type="submit">Create campaign</button>
-      </LiquidGlass>
+      {createOpen ? <div className="entityFormBackdrop" role="presentation" onMouseDown={() => setCreateOpen(false)}>
+        <LiquidGlass as="form" className="panel dataPanel campaignFormPanel entityFormModal" onSubmit={addCampaign} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create campaign">
+          <div className="panelHeader"><div><p className="caption">Create</p><h2>New campaign</h2></div><button className="iconButton" type="button" onClick={() => setCreateOpen(false)} aria-label="Close"><X size={18} /></button></div>
+          <div className="campaignFormGrid">
+            <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Campaign name" autoFocus />
+            <select value={draft.appId} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
+            <select value={draft.channel} onChange={(event) => setDraft((current) => ({ ...current, channel: event.target.value as Campaign["channel"] }))}><option>Creators</option><option>Paid Ads</option><option>ASO</option><option>Launch</option><option>Promo</option></select>
+            <select value={draft.goal} onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value as Campaign["goal"] }))}><option>Downloads</option><option>Revenue</option><option>Awareness</option><option>Trials</option><option>Retention</option></select>
+            <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Campaign["status"] }))}><option>Draft</option><option>Live</option><option>Paused</option><option>Completed</option></select>
+            <input type="number" min="0" step="0.01" value={draft.spend} onChange={(event) => setDraft((current) => ({ ...current, spend: event.target.value }))} placeholder="Spend" />
+            <input type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} />
+            <input type="date" value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} />
+            <input className="campaignNotesInput" value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" />
+          </div>
+          <div className="entityFormActions"><button className="ghostButton" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primaryButton" type="submit">Create campaign</button></div>
+        </LiquidGlass>
+      </div> : null}
 
       <section className="campaignWorkArea">
         <LiquidGlass className="panel dataPanel campaignSheetPanel">
@@ -3873,6 +3885,7 @@ function creativeFromVideo(video: CreatorVideo, socials: SocialAccount[]): Creat
 
 function CreativePage({ apps, socials, videos, creatives, campaigns, setCreatives, isFiltered = false }: { apps: StudioApp[]; socials: SocialAccount[]; videos: CreatorVideo[]; creatives: Creative[]; campaigns: Campaign[]; setCreatives: React.Dispatch<React.SetStateAction<Creative[]>>; isFiltered?: boolean }) {
   const [selectedCreativeId, setSelectedCreativeId] = useState(creatives[0]?.id ?? "");
+  const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState({
     angle: "Demo" as Creative["angle"],
     appId: apps[0]?.id ?? "",
@@ -3964,6 +3977,7 @@ function CreativePage({ apps, socials, videos, creatives, campaigns, setCreative
       const savedCreative = creativeFromBackend(payload.data.creative);
       setCreatives((rows) => rows.map((row) => row.id === nextCreative.id ? savedCreative : row));
       setSelectedCreativeId(savedCreative.id);
+      setCreateOpen(false);
     } catch {
       setCreatives((rows) => rows.filter((row) => row.id !== nextCreative.id));
       setSelectedCreativeId("");
@@ -3974,6 +3988,10 @@ function CreativePage({ apps, socials, videos, creatives, campaigns, setCreative
 
   return (
     <section className="creativesPage">
+      <div className="sectionToolbar">
+        <div><strong>Creative library</strong><span>Compare every tracked video and manual concept in one place.</span></div>
+        <button className="primaryButton" type="button" onClick={() => setCreateOpen(true)}>Add creative</button>
+      </div>
       <section className="moduleMatrix creativeStats">
         <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Creatives</h2><strong>{formatNumber(allCreatives.length)}</strong></LiquidGlass>
         <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Views</h2><strong>{totalViews ? formatNumber(totalViews) : "—"}</strong></LiquidGlass>
@@ -3981,29 +3999,31 @@ function CreativePage({ apps, socials, videos, creatives, campaigns, setCreative
         <LiquidGlass className="panel moduleCard marketingMetricCard"><span className="cardAccentRail" aria-hidden="true" /><h2>Winners</h2><strong>{formatNumber(winners)}</strong></LiquidGlass>
       </section>
 
-      <LiquidGlass as="form" className="panel dataPanel creativeFormPanel" onSubmit={addCreative}>
-        <div className="panelHeader"><div><p className="caption">Create</p><h2>Add creative</h2></div><span className="pill">{allCreatives.length} creatives</span></div>
-        <div className="creativeFormGrid">
-          <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Creative title" />
-          <select value={draft.appId} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
-          <select value={draft.socialId} onChange={(event) => setDraft((current) => ({ ...current, socialId: event.target.value }))}><option value="">No creator</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.handle}</option>)}</select>
-          <select value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">No campaign</option>{campaigns.filter((campaign) => campaign.appId === draft.appId).map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select>
-          <select value={draft.angle} onChange={(event) => setDraft((current) => ({ ...current, angle: event.target.value as Creative["angle"] }))}><option>Pain</option><option>Benefit</option><option>Proof</option><option>Demo</option><option>Offer</option><option>UGC</option></select>
-          <select value={draft.format} onChange={(event) => setDraft((current) => ({ ...current, format: event.target.value as Creative["format"] }))}><option>Talking head</option><option>Screen recording</option><option>UGC</option><option>Meme</option><option>Static</option><option>Other</option></select>
-          <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Creative["status"] }))}><option>Idea</option><option>Scripted</option><option>Posted</option><option>Winner</option><option>Fatigue</option><option>Archived</option></select>
-          <input value={draft.hook} onChange={(event) => setDraft((current) => ({ ...current, hook: event.target.value }))} placeholder="Hook" />
-          <input value={draft.url} onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} placeholder="Video URL" />
-          <input type="number" min="0" value={draft.views} onChange={(event) => setDraft((current) => ({ ...current, views: event.target.value }))} placeholder="Views" />
-          <input type="number" min="0" value={draft.likes} onChange={(event) => setDraft((current) => ({ ...current, likes: event.target.value }))} placeholder="Likes" />
-          <input type="number" min="0" value={draft.comments} onChange={(event) => setDraft((current) => ({ ...current, comments: event.target.value }))} placeholder="Comments" />
-          <input type="number" min="0" value={draft.shares} onChange={(event) => setDraft((current) => ({ ...current, shares: event.target.value }))} placeholder="Shares" />
-          <input type="number" min="0" value={draft.favorites} onChange={(event) => setDraft((current) => ({ ...current, favorites: event.target.value }))} placeholder="Favorites" />
-          <input type="number" min="0" value={draft.installs} onChange={(event) => setDraft((current) => ({ ...current, installs: event.target.value }))} placeholder="Attributed installs" />
-          <input type="number" min="0" step="0.01" value={draft.revenue} onChange={(event) => setDraft((current) => ({ ...current, revenue: event.target.value }))} placeholder="Attributed revenue" />
-          <input type="number" min="0" step="0.01" value={draft.spend} onChange={(event) => setDraft((current) => ({ ...current, spend: event.target.value }))} placeholder="Creative spend" />
-        </div>
-        <button className="primaryButton" type="submit">Add creative</button>
-      </LiquidGlass>
+      {createOpen ? <div className="entityFormBackdrop" role="presentation" onMouseDown={() => setCreateOpen(false)}>
+        <LiquidGlass as="form" className="panel dataPanel creativeFormPanel entityFormModal entityFormModalWide" onSubmit={addCreative} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Add creative">
+          <div className="panelHeader"><div><p className="caption">Create</p><h2>Add creative</h2></div><button className="iconButton" type="button" onClick={() => setCreateOpen(false)} aria-label="Close"><X size={18} /></button></div>
+          <div className="creativeFormGrid">
+            <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Creative title" autoFocus />
+            <select value={draft.appId} onChange={(event) => setDraft((current) => ({ ...current, appId: event.target.value }))}>{apps.map((app) => <option value={app.id} key={app.id}>{appDisplayName(app.name)}</option>)}</select>
+            <select value={draft.socialId} onChange={(event) => setDraft((current) => ({ ...current, socialId: event.target.value }))}><option value="">No creator</option>{socials.map((social) => <option value={social.id} key={social.id}>{social.handle}</option>)}</select>
+            <select value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">No campaign</option>{campaigns.filter((campaign) => campaign.appId === draft.appId).map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select>
+            <select value={draft.angle} onChange={(event) => setDraft((current) => ({ ...current, angle: event.target.value as Creative["angle"] }))}><option>Pain</option><option>Benefit</option><option>Proof</option><option>Demo</option><option>Offer</option><option>UGC</option></select>
+            <select value={draft.format} onChange={(event) => setDraft((current) => ({ ...current, format: event.target.value as Creative["format"] }))}><option>Talking head</option><option>Screen recording</option><option>UGC</option><option>Meme</option><option>Static</option><option>Other</option></select>
+            <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as Creative["status"] }))}><option>Idea</option><option>Scripted</option><option>Posted</option><option>Winner</option><option>Fatigue</option><option>Archived</option></select>
+            <input value={draft.hook} onChange={(event) => setDraft((current) => ({ ...current, hook: event.target.value }))} placeholder="Hook" />
+            <input value={draft.url} onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} placeholder="Video URL" />
+            <input type="number" min="0" value={draft.views} onChange={(event) => setDraft((current) => ({ ...current, views: event.target.value }))} placeholder="Views" />
+            <input type="number" min="0" value={draft.likes} onChange={(event) => setDraft((current) => ({ ...current, likes: event.target.value }))} placeholder="Likes" />
+            <input type="number" min="0" value={draft.comments} onChange={(event) => setDraft((current) => ({ ...current, comments: event.target.value }))} placeholder="Comments" />
+            <input type="number" min="0" value={draft.shares} onChange={(event) => setDraft((current) => ({ ...current, shares: event.target.value }))} placeholder="Shares" />
+            <input type="number" min="0" value={draft.favorites} onChange={(event) => setDraft((current) => ({ ...current, favorites: event.target.value }))} placeholder="Favorites" />
+            <input type="number" min="0" value={draft.installs} onChange={(event) => setDraft((current) => ({ ...current, installs: event.target.value }))} placeholder="Attributed installs" />
+            <input type="number" min="0" step="0.01" value={draft.revenue} onChange={(event) => setDraft((current) => ({ ...current, revenue: event.target.value }))} placeholder="Attributed revenue" />
+            <input type="number" min="0" step="0.01" value={draft.spend} onChange={(event) => setDraft((current) => ({ ...current, spend: event.target.value }))} placeholder="Creative spend" />
+          </div>
+          <div className="entityFormActions"><button className="ghostButton" type="button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primaryButton" type="submit">Add creative</button></div>
+        </LiquidGlass>
+      </div> : null}
 
       <section className="creativeWorkArea">
         <LiquidGlass className="panel dataPanel creativeSheetPanel">
