@@ -8939,6 +8939,7 @@ body {
 .accountsEmpty .primaryButton { margin-top: 8px; }
 .accountDetailPanel { width: min(1180px, calc(100vw - 250px)); }
 .accountDetailPanel .creatorProfileFooter small { color: var(--viral-muted); }
+.creatorProfileBackdrop { z-index: 120; }
 
 @media (max-width: 1450px) {
   .accountsToolbar { grid-template-columns: minmax(200px,1fr) repeat(3,minmax(115px,.6fr)); }
