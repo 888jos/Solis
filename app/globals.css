@@ -8732,6 +8732,12 @@ body {
   transform: none !important;
 }
 
+.socialMetricCard.isSelected {
+  background: #101012 !important;
+  border-color: var(--viral-border-strong) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025) !important;
+}
+
 .monetizationRow:hover,
 .monetizationActions button:hover {
   border-color: var(--viral-border) !important;
