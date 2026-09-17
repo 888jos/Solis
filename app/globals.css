@@ -9128,6 +9128,10 @@ body { background: var(--viral-bg); }
 .mapGrid,
 .settingsGrid { gap: 10px !important; margin-bottom: 12px; }
 
+.moduleMatrix {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+}
+
 .panel { padding: 18px; }
 .dataPanel,
 .trendPanel,
@@ -9257,6 +9261,7 @@ select,
   .pageCommandHeader { align-items: flex-start; flex-direction: column; }
   .pageCommandHeader .topActions { width: 100%; justify-content: flex-start; }
   .pageIntro span { display: block; }
+  .moduleMatrix { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
 
 .sectionToolbar {
@@ -9312,4 +9317,5 @@ select,
   .entityFormBackdrop { align-items: flex-end; padding: 0; }
   .entityFormModal,
   .entityFormModalWide { border-radius: 16px 16px 0 0 !important; max-height: 92vh; max-width: none; }
+  .moduleMatrix { grid-template-columns: 1fr !important; }
 }
