@@ -8,10 +8,18 @@
  * @module
  */
 
-import type * as creatorMigration from "../creatorMigration.js";
-import type * as health from "../health.js";
-import type * as migration from "../migration.js";
-import type * as store from "../store.js";
+import type * as lib_apps from "../lib/apps.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_dates from "../lib/dates.js";
+import type * as schema_core from "../schema/core.js";
+import type * as schema_expenses from "../schema/expenses.js";
+import type * as schema_growth from "../schema/growth.js";
+import type * as schema_product from "../schema/product.js";
+import type * as schema_revenue from "../schema/revenue.js";
+import type * as schema_subscriptions from "../schema/subscriptions.js";
+import type * as session from "../session.js";
+import type * as sources_asc from "../sources/asc.js";
+import type * as syncRuns from "../syncRuns.js";
 
 import type {
   ApiFromModules,
@@ -20,10 +28,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  creatorMigration: typeof creatorMigration;
-  health: typeof health;
-  migration: typeof migration;
-  store: typeof store;
+  "lib/apps": typeof lib_apps;
+  "lib/auth": typeof lib_auth;
+  "lib/dates": typeof lib_dates;
+  "schema/core": typeof schema_core;
+  "schema/expenses": typeof schema_expenses;
+  "schema/growth": typeof schema_growth;
+  "schema/product": typeof schema_product;
+  "schema/revenue": typeof schema_revenue;
+  "schema/subscriptions": typeof schema_subscriptions;
+  session: typeof session;
+  "sources/asc": typeof sources_asc;
+  syncRuns: typeof syncRuns;
 }>;
 
 /**
