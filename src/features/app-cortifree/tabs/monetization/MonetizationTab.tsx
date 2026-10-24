@@ -111,7 +111,7 @@ export default function MonetizationTab() {
 
       <Card
         title="Revenu tracké dans Amplitude"
-        subtitle="Somme de $revenue par événement de revenu (client et RevenueCat → Amplitude)"
+        subtitle="Somme de $revenue (ou $price si $revenue est vide) par événement de revenu, client et RevenueCat → Amplitude"
       >
         <Async cell={vm.revenue} height={220}>
           {(r) => (

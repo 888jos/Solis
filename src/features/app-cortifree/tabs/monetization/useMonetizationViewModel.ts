@@ -414,7 +414,7 @@ export function useMonetizationViewModel() {
           x: p.series[0].x,
           series: p.series.map((s, i) => ({
             key: s.event,
-            label: s.event,
+            label: s.prop && s.prop !== "$revenue" ? `${s.event} (${s.prop})` : s.event,
             color: color(i),
             values: s.values,
           })),

@@ -38,7 +38,7 @@ class Slots {
   }
 }
 
-type Ctx = { memo: Map<string, Promise<any>>; amp: Slots; rc: Slots };
+type Ctx = { memo: Map<string, Promise<any>>; amp: Slots; rc: Slots; ampBlocked?: ApiError };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const compact = (day: string) => day.replaceAll("-", "");
 const PSEUDO_EVENTS = new Set(["_active", "_new", "_all", "_any_revenue_event"]);
@@ -65,7 +65,9 @@ async function getJson(url: string, headers: Record<string, string>, label: stri
       }
       throw new ApiError(502, `${label} injoignable (${(err as Error).name})`);
     }
-    if (res.status === 429 && attempt < 5) {
+    // Amplitude's 429 is mostly its cost budget ("Exceeded rate limit with query of cost N"): long retries only keep
+    // the action alive until it times out (600 s). Retry briefly; the page retries the card later.
+    if (res.status === 429 && attempt < (label === "Amplitude" ? 2 : 5)) {
       const retry = Number(res.headers.get("Retry-After"));
       await sleep(Number.isFinite(retry) && retry > 0 ? retry * 1000 : 3000 * (attempt + 1));
       continue;
@@ -99,7 +101,16 @@ function amp(c: Ctx, path: string, params: Params = {}): Promise<any> {
   let hit = c.memo.get(url);
   if (!hit) {
     const auth = Buffer.from(`${key}:${secret}`).toString("base64");
-    hit = c.amp.run(() => getJson(url, { Authorization: `Basic ${auth}` }, "Amplitude"));
+    hit = c.amp.run(async () => {
+      // Once Amplitude refuses a query for its rate limit, the rest of this run fails fast instead of piling up.
+      if (c.ampBlocked) throw c.ampBlocked;
+      try {
+        return await getJson(url, { Authorization: `Basic ${auth}` }, "Amplitude");
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 429) c.ampBlocked = new ApiError(429, "Amplitude : limite de requêtes atteinte (budget horaire de l'API), nouvel essai automatique dans quelques minutes");
+        throw err;
+      }
+    });
     c.memo.set(url, hit);
     hit.catch(() => c.memo.delete(url));
   }
@@ -215,8 +226,13 @@ type Labeled = { spec: Spec; label: string };
 
 const json = (x: unknown) => JSON.stringify(x);
 
+/** Amplitude rounds `start` down to the interval (Monday for i=7, the 1st of the month for i=30), so any interval
+ *  but daily silently widens the window (e.g. 23 Sep - 22 Oct with i=30 counted from 1 Sep). Every query is therefore
+ *  daily; period totals come from seriesCollapsed, which Amplitude de-duplicates over the exact window. */
+const exactInterval = (_i: number | string) => 1;
+
 async function segmentation(c: Ctx, spec: unknown, r: Range, m: string, i: number | string, limit?: number): Promise<any> {
-  return (await amp(c, "/api/2/events/segmentation", { e: json(spec), ...ap(r), m, i, limit })).data ?? {};
+  return (await amp(c, "/api/2/events/segmentation", { e: json(spec), ...ap(r), m, i: exactInterval(i), limit })).data ?? {};
 }
 
 type SeriesResult = { x: string[]; series: Record<string, number[]>; totals: Record<string, number>; missing: string[] };
@@ -230,7 +246,7 @@ async function series(c: Ctx, items: Labeled[], m: string, r: Range, i: number |
   for (let k = 0; k < present.length; k += 2) pairs.push(present.slice(k, k + 2));
   const results = await Promise.all(
     pairs.map((pair) => {
-      const params: Params = { ...ap(r), m, i };
+      const params: Params = { ...ap(r), m, i: exactInterval(i) };
       pair.forEach((it, k) => (params[k === 0 ? "e" : `e${k + 1}`] = json(it.spec)));
       return amp(c, "/api/2/events/segmentation", params).then((res) => [pair, res.data ?? {}] as const);
     }),
@@ -801,7 +817,21 @@ async function paywalls(c: Ctx, dim: string, r: Range) {
 async function revenueAmp(c: Ctx, r: Range) {
   const set = await known(c);
   const candidates = ["revenue_amount", "[Amplitude] Revenue", ...[...set].filter((n) => n.startsWith("rc_"))].filter((e) => set.has(e));
-  const sets = await Promise.all(candidates.map((e) => sums(c, { event: e, prop: "$revenue" }, r).then((res) => ({ event: e, ...res }))));
+  // $revenue stays 0 when the app logs only $price (Amplitude computes it from price x quantity only for some SDK
+  // paths): sum the first revenue-like property that carries values on each event.
+  const REVENUE_PROPS = ["$revenue", "revenue", "$price", "price"];
+  const sets = await Promise.all(
+    candidates.map(async (e) => {
+      const props = await eventProperties(c, e).catch(() => [] as string[]);
+      const order = ["$revenue", ...REVENUE_PROPS.filter((p) => p !== "$revenue" && props.includes(p))];
+      let last: Awaited<ReturnType<typeof sums>> & { prop: string } = { missing: true, x: [], series: [], total: 0, prop: "$revenue" };
+      for (const prop of order) {
+        last = { ...(await sums(c, { event: e, prop }, r)), prop };
+        if (!last.missing && last.total) break;
+      }
+      return { event: e, ...last };
+    }),
+  );
   let ltv: any = null;
   try {
     const out: any = {};
@@ -814,7 +844,7 @@ async function revenueAmp(c: Ctx, r: Range) {
   } catch {
     ltv = null;
   }
-  return { candidates, series: sets.filter((s) => !s.missing && s.total).map((s) => ({ event: s.event, x: s.x, values: s.series, total: s.total })), ltv };
+  return { candidates, series: sets.filter((s) => !s.missing && s.total).map((s) => ({ event: s.event, prop: s.prop, x: s.x, values: s.series, total: s.total })), ltv };
 }
 
 const LIFECYCLE = ["trial_started", "trial_converted", "trial_expired", "subscription_started", "subscription_purchased", "transaction_complete", "non_recurring_purchase", "subscription_auto_renew_off", "subscription_auto_renew_on", "subscription_expired", "transaction_restore"];

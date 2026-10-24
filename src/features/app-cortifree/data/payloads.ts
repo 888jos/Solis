@@ -133,7 +133,7 @@ export type PaywallsP = {
 };
 export type RevenueAmpP = {
   candidates: string[];
-  series: { event: string; x: string[]; values: number[]; total: number }[];
+  series: { event: string; prop?: string; x: string[]; values: number[]; total: number }[];
   ltv: {
     totalRevenue: Record<string, number>;
     arpu: Record<string, number>;

@@ -32,11 +32,11 @@ export function gateOf(fs: FirestoreData): GateView {
       return {
         kind: "building",
         title: "Lecture de Firestore en cours",
-        body: s.progress && s.progress.total > 1 ? `${formatInt(s.progress.loaded)} jours sur ${formatInt(s.progress.total)} déjà lus. Les jours terminés ne sont lus qu'une fois puis gardés en cache.` : "Les événements de la période sont lus puis gardés en cache.",
+        body: s.progress && s.progress.total > 1 ? `${formatInt(s.progress.loaded)} sur ${formatInt(s.progress.total)} jours déjà lus. Les jours terminés ne sont lus qu'une fois puis gardés en cache.` : "Les événements de la période sont lus puis gardés en cache.",
       };
     case "error": {
       const quota = s.message.startsWith("Quota");
-      const progress = s.progress && s.progress.total > 1 ? ` ${formatInt(s.progress.loaded)} jours sur ${formatInt(s.progress.total)} déjà lus.` : "";
+      const progress = s.progress && s.progress.total > 1 ? ` ${formatInt(s.progress.loaded)} sur ${formatInt(s.progress.total)} jours déjà lus.` : "";
       return {
         kind: "error",
         title: quota ? "Quota Firestore du jour atteint" : "Firestore n'a pas répondu",
@@ -49,7 +49,7 @@ export function gateOf(fs: FirestoreData): GateView {
       return {
         kind: "ready",
         partialNote: fs.partial
-          ? `Historique partiel : ${formatInt(fs.partial.loaded)} jours sur ${formatInt(fs.partial.total)} chargés (quota gratuit Firestore de 50 000 lectures par jour). Les chiffres couvrent les jours déjà lus${fs.partial.resumeAt && fs.partial.resumeAt > Date.now() ? `, la suite arrive vers ${time.format(new Date(fs.partial.resumeAt))}` : ""}.`
+          ? `Historique partiel : ${formatInt(fs.partial.loaded)} sur ${formatInt(fs.partial.total)} jours chargés (quota gratuit Firestore de 50 000 lectures par jour). Les chiffres couvrent les jours déjà lus${fs.partial.resumeAt && fs.partial.resumeAt > Date.now() ? `, la suite arrive vers ${time.format(new Date(fs.partial.resumeAt))}` : ""}.`
           : null,
       };
   }

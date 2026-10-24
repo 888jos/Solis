@@ -10,7 +10,7 @@ import { addDays, isoDay } from "./lib/dates";
 
 export const APP_SLUG = "cortifree";
 /** Bump when a widget's computation changes: old cached payloads are then ignored. */
-export const WIDGET_VERSION = 4;
+export const WIDGET_VERSION = 6;
 
 export const requestValidator = v.object({
   w: v.string(),

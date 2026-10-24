@@ -483,7 +483,15 @@ const isQuota = (msg: string) => msg.startsWith("Quota Firestore");
 async function ensureBounds(ctx: ActionCtx, force: boolean): Promise<Bounds> {
   const row = await ctx.runQuery(internal.cocoriseAnalytics.getCache, { key: boundsKey() });
   if (!force && row?.payload && Date.now() - row.fetchedAt <= TTL_BOUNDS_MS) return row.payload as Bounds;
-  const [first, last] = await Promise.all([edgeEvent("ASCENDING"), edgeEvent("DESCENDING")]);
+  let first: number | null;
+  let last: number | null;
+  try {
+    [first, last] = await Promise.all([edgeEvent("ASCENDING"), edgeEvent("DESCENDING")]);
+  } catch (err) {
+    // Out of quota (or Firestore down): the last known bounds are good enough to keep loading cached days.
+    if (row?.payload) return row.payload as Bounds;
+    throw err;
+  }
   const bounds: Bounds = { firstDay: first != null ? parisDay(first) : null, lastDay: last != null ? parisDay(last) : null, lastEventAt: last };
   await ctx.runMutation(internal.cocoriseAnalytics.putCache, { key: boundsKey(), payload: bounds });
   return bounds;
@@ -564,9 +572,17 @@ async function buildReport(ctx: ActionCtx, from: string, to: string): Promise<Fi
 export const resumeBackfill = internalAction({
   args: {},
   handler: async (ctx) => {
-    const bounds = await ensureBounds(ctx, false);
-    if (!bounds.firstDay || !bounds.lastDay) return;
-    await fillDays(ctx, daysOf(bounds.firstDay, bounds.lastDay), false);
+    try {
+      const bounds = await ensureBounds(ctx, false);
+      if (!bounds.firstDay || !bounds.lastDay) return;
+      await fillDays(ctx, daysOf(bounds.firstDay, bounds.lastDay), false);
+    } catch (err) {
+      // Never let the chain die: retry later (fillDays reschedules itself, this covers failures before it).
+      const error = err instanceof Error ? err.message : String(err);
+      const scheduledFor = Date.now() + QUOTA_RETRY_MS;
+      await ctx.scheduler.runAfter(QUOTA_RETRY_MS, internal.sources.cocoriseAnalytics.resumeBackfill, {});
+      await ctx.runMutation(internal.cocoriseAnalytics.backfillLease, { op: "release", lastError: error, scheduledFor });
+    }
   },
 });
 
