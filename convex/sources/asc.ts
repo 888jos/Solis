@@ -58,6 +58,8 @@ export async function ascSalesReport(opts: {
   frequency: "DAILY" | "WEEKLY" | "MONTHLY";
   reportDate: string;
   version: string;
+  /** Throw (message starts with "NOT_AVAILABLE_YET") when Apple has not published the day yet, instead of returning null. */
+  notAvailableAsError?: boolean;
 }): Promise<Record<string, string>[] | null> {
   const q = new URLSearchParams({
     "filter[frequency]": opts.frequency,
@@ -68,7 +70,12 @@ export async function ascSalesReport(opts: {
     "filter[version]": opts.version,
   });
   const res = await fetch(`https://api.appstoreconnect.apple.com/v1/salesReports?${q}`, { headers: { Authorization: `Bearer ${ascToken()}` } });
-  if (res.status === 404) return null;
+  if (res.status === 404) {
+    if (!opts.notAvailableAsError) return null;
+    const text = await res.text();
+    if (/not available yet/i.test(text)) throw new Error(`NOT_AVAILABLE_YET: ${opts.reportType} ${opts.reportDate}`);
+    return null;
+  }
   if (!res.ok) throw new Error(`ASC report ${opts.reportType} ${opts.reportDate}: ${res.status} ${(await res.text()).slice(0, 300)}`);
   const tsv = zlib.gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
   return parseTsv(tsv);

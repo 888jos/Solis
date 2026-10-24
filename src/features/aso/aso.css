@@ -1,0 +1,282 @@
+/* ASO page. Scoped under .f-aso; colors only from tokens. */
+.f-aso .aso-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 92px;
+}
+
+.f-aso .aso-meter__track {
+  position: relative;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+  flex: none;
+}
+
+.f-aso .aso-meter__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+
+.f-aso .aso-meter--full .aso-meter__fill {
+  background: var(--text);
+}
+
+.f-aso .aso-meter--low .aso-meter__fill {
+  background: var(--chart-axis);
+}
+
+.f-aso .aso-meter--over .aso-meter__fill {
+  background: var(--text);
+}
+
+.f-aso .aso-meter__value {
+  font-size: 12.5px;
+  min-width: 44px;
+}
+
+.f-aso .aso-loc-table tbody tr {
+  cursor: pointer;
+}
+
+.f-aso .aso-loc-table tbody tr[aria-selected="true"] td {
+  background: var(--surface-2);
+}
+
+.f-aso .aso-code {
+  font-size: 11.5px;
+}
+
+.f-aso .aso-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 550;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.f-aso .aso-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-strong);
+}
+
+.f-aso .aso-link--active {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+}
+
+.f-aso .aso-kw {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.f-aso .aso-kw .app-chip {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.f-aso .aso-competitor {
+  color: var(--text-2);
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.f-aso .aso-remove {
+  height: 26px;
+  width: 26px;
+  padding: 0;
+  color: var(--text-3);
+}
+
+.f-aso .aso-remove:hover {
+  color: var(--text);
+}
+
+.f-aso .aso-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.f-aso .aso-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.f-aso .aso-add__kw {
+  flex: 1 1 180px;
+}
+
+.f-aso .aso-add .select {
+  max-width: 200px;
+}
+
+.f-aso .aso-add__error {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.f-aso .aso-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.f-aso .aso-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.f-aso .aso-facts strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.f-aso .aso-section-label {
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 550;
+}
+
+.f-aso .aso-detail-wrap {
+  border-top: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.f-aso .aso-detail__title {
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+
+.f-aso .aso-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-6);
+}
+
+.f-aso .aso-detail__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.f-aso .aso-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 550;
+  margin-bottom: 6px;
+}
+
+.f-aso .aso-field__text {
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.f-aso .aso-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.f-aso .aso-chip {
+  font-size: 12.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.f-aso .aso-chip--dup {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+
+.f-aso .aso-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.f-aso .aso-issues li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.f-aso .aso-issues li .badge {
+  flex: none;
+}
+
+.f-aso .aso-issues li span:last-child {
+  padding-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.f-aso .aso-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+@media (max-width: 860px) {
+  .f-aso .card__head {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .f-aso .card__head > div:first-child {
+    flex: 1 1 100%;
+  }
+  .f-aso .card__head .segmented {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .f-aso .aso-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+  .f-aso .aso-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .f-aso .aso-detail-wrap {
+    padding: var(--space-4);
+  }
+  .f-aso .aso-competitor {
+    max-width: 140px;
+  }
+}

@@ -1,0 +1,67 @@
+.f-geo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.f-geo .geo-total {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.f-geo .geo-country {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.f-geo .geo-country__flag {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.f-geo .geo-country__name {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.f-geo .geo-country__name small {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.f-geo .geo-more {
+  margin-top: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.f-geo .geo-more:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .f-geo .geo-hide-md,
+  .f-geo .table th:has(> .geo-hide-md),
+  .f-geo .table td:has(> .geo-hide-md) {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .f-geo .geo-hide-sm,
+  .f-geo .table th:has(> .geo-hide-sm),
+  .f-geo .table td:has(> .geo-hide-sm) {
+    display: none;
+  }
+}

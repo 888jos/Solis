@@ -44,7 +44,19 @@ function diffDays(from: string, to: string) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
 }
 
-export function computePeriod(key: PeriodKey, today = iso(new Date())): Period {
+/**
+ * Today's date in Apple's reporting time zone (America/Los_Angeles). Apple Sales and Subscription
+ * reports are Pacific-time days and day D is published on the morning of D+1 PT: anchoring periods on
+ * the Pacific date keeps the last day of every window a day Apple can already have reported (a UTC
+ * anchor added an always-empty day between 00:00 UTC and ~08:00 UTC).
+ */
+export function appleToday(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+export function computePeriod(key: PeriodKey, today = appleToday()): Period {
   const to = shift(today, -1);
   let from: string;
   switch (key) {

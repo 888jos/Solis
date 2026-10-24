@@ -1,0 +1,207 @@
+/* Avis & notes. Scoped under .f-reviews; everything else comes from src/ui. */
+.f-reviews .rv-stars {
+  display: inline-flex;
+  gap: 1px;
+  vertical-align: middle;
+}
+
+.f-reviews .rv-star {
+  color: var(--border-strong);
+  fill: transparent;
+}
+
+.f-reviews .rv-star--on {
+  color: var(--brand);
+  fill: var(--brand);
+}
+
+.f-reviews .rv-rating-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.f-reviews .rv-country {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.f-reviews .rv-cc {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  width: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.f-reviews .rv-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.f-reviews .rv-perapp {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.f-reviews .rv-perapp__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 90px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.f-reviews .rv-perapp__row:last-child {
+  border-bottom: 0;
+}
+
+.f-reviews .rv-perapp__row > :last-child {
+  text-align: right;
+}
+
+.f-reviews .rv-perapp__avg {
+  font-weight: 600;
+  min-width: 24px;
+  text-align: right;
+}
+
+.f-reviews .rv-dist .hbar__label {
+  font-variant-numeric: tabular-nums;
+}
+
+.f-reviews .rv-dist__fill {
+  background: var(--series-4);
+}
+
+.f-reviews .rv-filters {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.f-reviews .rv-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.f-reviews .rv-item {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.f-reviews .rv-item:first-child {
+  border-top: 0;
+}
+
+.f-reviews .rv-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.f-reviews .rv-item__rating {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.f-reviews .rv-item__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.f-reviews .rv-item__badge {
+  margin-left: auto;
+  flex: none;
+}
+
+.f-reviews .rv-item__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  max-width: 78ch;
+  white-space: pre-line;
+}
+
+.f-reviews .rv-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.f-reviews .rv-item__meta .app-chip {
+  color: var(--text-2);
+}
+
+.f-reviews .rv-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.f-reviews .rv-errors {
+  flex-wrap: wrap;
+}
+
+.f-reviews .rv-spin {
+  animation: rv-spin 0.9s linear infinite;
+}
+
+@keyframes rv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.f-reviews .table td {
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .f-reviews .table .rv-stars {
+    display: none;
+  }
+
+  .f-reviews .card__head {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .f-reviews .rv-filters {
+    justify-content: flex-start;
+  }
+
+  .f-reviews .rv-item {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .f-reviews .rv-item__head {
+    flex-wrap: wrap;
+  }
+
+  .f-reviews .rv-item__title {
+    white-space: normal;
+    flex-basis: 100%;
+    order: 3;
+  }
+}

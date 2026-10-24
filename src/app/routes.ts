@@ -1,4 +1,4 @@
-import { Activity, Clapperboard, Download, Euro, Globe2, LayoutDashboard, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, Clapperboard, Download, Euro, Globe2, LayoutDashboard, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 // The sidebar and the router both read this list. One entry per feature module in src/features/.
@@ -24,6 +24,9 @@ export const PAGES: PageDef[] = [
   { id: "engagement", path: "/engagement", label: "Engagement", section: "Produit", icon: Activity, Component: lazy(() => import("@/features/engagement")) },
   { id: "reviews", path: "/avis", label: "Avis & notes", section: "Produit", icon: Star, Component: lazy(() => import("@/features/reviews")) },
   { id: "versions", path: "/versions", label: "Versions", section: "Produit", icon: Rocket, Component: lazy(() => import("@/features/versions")) },
+  { id: "app-cortifree", path: "/apps/cortifree", label: "CortiFree", section: "Apps", icon: AppWindow, Component: lazy(() => import("@/features/app-cortifree")) },
+  { id: "app-cocorise", path: "/apps/cocorise", label: "Cocorise", section: "Apps", icon: AppWindow, Component: lazy(() => import("@/features/app-cocorise")) },
+  { id: "app-questirl", path: "/apps/questirl", label: "Quest IRL", section: "Apps", icon: AppWindow, Component: lazy(() => import("@/features/app-questirl")) },
   { id: "sources", path: "/sources", label: "Sources", section: "Système", icon: Plug, Component: lazy(() => import("@/features/sources")) },
   { id: "settings", path: "/reglages", label: "Réglages", section: "Système", icon: Settings, Component: lazy(() => import("@/features/settings")) },
 ];

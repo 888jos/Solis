@@ -1,0 +1,50 @@
+.f-acquisition {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.f-acquisition .aq-total {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.f-acquisition .aq-foot {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.f-acquisition .delta {
+  white-space: nowrap;
+}
+
+.f-acquisition .aq-aligned {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.f-acquisition .aq-chart-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: var(--space-1);
+}
+
+.f-acquisition .table tr:last-child td:has(strong) {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .f-acquisition .table th,
+  .f-acquisition .table td {
+    white-space: nowrap;
+  }
+
+  .f-acquisition .aq-hide-sm,
+  .f-acquisition .table td:has(> .aq-hide-sm:only-child),
+  .f-acquisition .table th:has(> .aq-hide-sm:only-child) {
+    display: none;
+  }
+}

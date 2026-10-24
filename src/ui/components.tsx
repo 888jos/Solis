@@ -30,7 +30,7 @@ export function Card({ title, subtitle, action, children, flush, className, foot
         </div>
       )}
       <div className={flush ? "card__body--flush" : "card__body"}>{children}</div>
-      {footer && <div style={{ padding: "0 var(--space-5) var(--space-4)" }}>{footer}</div>}
+      {footer && <div className="card__footer">{footer}</div>}
     </section>
   );
 }

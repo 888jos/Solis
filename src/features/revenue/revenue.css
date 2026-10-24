@@ -1,0 +1,125 @@
+.f-revenue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.f-revenue .rv-lag {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+/* Waterfall */
+.rv-waterfall {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rv-waterfall__row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.9fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.rv-waterfall__row--net {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 11px;
+}
+
+.rv-waterfall__label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text-2);
+}
+
+.rv-waterfall__row--total .rv-waterfall__label span {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.rv-waterfall__label small {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.rv-waterfall__track {
+  position: relative;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.rv-waterfall__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: var(--chart-axis);
+}
+
+.rv-waterfall__row--minus .rv-waterfall__bar {
+  background: var(--series-8);
+  opacity: 0.7;
+}
+
+.rv-waterfall__row--net .rv-waterfall__bar {
+  background: var(--text);
+}
+
+.rv-waterfall__amount {
+  text-align: right;
+  font-weight: 600;
+  min-width: 72px;
+}
+
+.rv-waterfall__row--minus .rv-waterfall__amount {
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.rv-waterfall__row--net .rv-waterfall__amount {
+  font-size: 15px;
+}
+
+/* Product cell */
+.rv-product {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rv-product small {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.f-revenue .rv-show-sm {
+  display: none;
+}
+
+.rv-chart-total {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .rv-waterfall__row {
+    grid-template-columns: minmax(96px, 1fr) minmax(60px, 1fr) auto;
+    gap: var(--space-2);
+  }
+  .f-revenue .rv-hide-sm,
+  .f-revenue .table td:has(> .rv-hide-sm:only-child),
+  .f-revenue .table th:has(> .rv-hide-sm:only-child) {
+    display: none;
+  }
+  .f-revenue .rv-show-sm {
+    display: inline;
+  }
+}

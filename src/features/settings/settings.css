@@ -1,0 +1,290 @@
+/* Réglages. Scoped under .f-settings; everything else comes from src/ui. */
+.f-settings {
+  gap: var(--space-5);
+}
+
+.f-settings .set-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.f-settings .set-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.f-settings .set-code,
+.f-settings .set-env code,
+.f-settings .set-cc {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
+.f-settings .set-code {
+  color: var(--text-2);
+}
+
+.f-settings .set-cc {
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.f-settings .set-top {
+  align-items: start;
+}
+
+/* Device rows */
+.f-settings .set-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.f-settings .set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+
+.f-settings .set-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.f-settings .set-row:last-child {
+  padding-bottom: 0;
+}
+
+.f-settings .set-row__label {
+  font-weight: 550;
+}
+
+.f-settings .set-row__hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
+/* What is missing */
+.f-settings .set-needs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.f-settings .set-needs li {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.f-settings .set-needs li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.f-settings .set-needs li:last-child {
+  padding-bottom: 0;
+}
+
+.f-settings .set-needs__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.f-settings .set-needs__head strong {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.f-settings .set-needs__unlocks {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.f-settings .set-needs__where {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.f-settings .set-needs__done {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+/* Definitions */
+.f-settings .set-defs {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.f-settings .set-defs > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.f-settings .set-defs dt {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.f-settings .set-defs dd {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* VAT */
+.f-settings .set-vat-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 0 var(--space-5) var(--space-3);
+  font-size: 13px;
+}
+
+.f-settings .set-vat-table {
+  max-height: 300px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.f-settings .set-vat-table .table td {
+  vertical-align: top;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.f-settings .set-vat-table td:first-child {
+  white-space: nowrap;
+}
+
+.f-settings .set-vat-table .set-cc {
+  word-spacing: 4px;
+}
+
+/* Env vars */
+.f-settings .set-env {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.f-settings .set-env__title {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.f-settings .set-env__var {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text);
+  min-width: 0;
+}
+
+.f-settings .set-env__var svg {
+  flex: none;
+  color: var(--good-text);
+}
+
+.f-settings .set-env__var code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.f-settings .set-env__var--missing {
+  color: var(--text-3);
+}
+
+.f-settings .set-env__var--missing svg {
+  color: var(--text-3);
+}
+
+/* Briefs */
+.f-settings .set-briefs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.f-settings .set-briefs__head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.f-settings .set-briefs__error {
+  font-size: 12.5px;
+  color: var(--critical-text);
+  background: var(--critical-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  margin-bottom: var(--space-3);
+}
+
+.f-settings .set-briefs__text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.f-settings .set-briefs__older {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.f-settings .set-briefs__older li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 4px 0;
+}
+
+@media (max-width: 860px) {
+  .f-settings .set-row {
+    flex-wrap: wrap;
+  }
+  .f-settings .set-defs > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .f-settings .set-env {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .f-settings .set-vat-pick {
+    padding: 0 14px 12px;
+  }
+}

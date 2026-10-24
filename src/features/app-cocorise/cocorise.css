@@ -1,0 +1,213 @@
+/* Cocorise app page. Everything scoped under .f-cocorise. */
+.f-cocorise {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cr-tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -2px;
+  padding: 0 2px;
+}
+.cr-tabs::-webkit-scrollbar {
+  display: none;
+}
+.cr-tabs .segmented {
+  width: max-content;
+}
+
+.cr-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cr-computing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.cr-spin {
+  animation: cr-spin 1s linear infinite;
+}
+@keyframes cr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cr-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.cr-banner svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.cr-section-title {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Funnel */
+.cr-funnel {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cr-funnel__row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 0;
+}
+.cr-funnel__label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.cr-funnel__label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cr-funnel__label small {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.cr-funnel__track {
+  height: 22px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.cr-funnel__fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  min-width: 2px;
+}
+.cr-funnel__value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.cr-funnel__value strong {
+  font-size: 13.5px;
+}
+.cr-funnel__value small {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.cr-funnel__between {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0 1px calc(190px + 12px);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.cr-funnel__lost {
+  color: var(--text-3);
+}
+
+/* Inline share bar inside tables */
+.cr-cellbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.cr-cellbar__track {
+  width: 64px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.cr-cellbar__fill {
+  display: block;
+  height: 100%;
+  background: var(--series-1);
+  border-radius: 3px;
+}
+
+.cr-step {
+  display: flex;
+  flex-direction: column;
+}
+.cr-step small {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.cr-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.cr-reviews {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.cr-review {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.cr-review:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.cr-review__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.cr-review__body {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.cr-review__meta {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+@media (max-width: 720px) {
+  .cr-hide-sm {
+    display: none;
+  }
+  .cr-funnel__row {
+    grid-template-columns: 120px minmax(0, 1fr) 62px;
+    gap: 8px;
+  }
+  .cr-funnel__between {
+    padding-left: calc(120px + 8px);
+  }
+  .cr-cellbar__track {
+    display: none;
+  }
+}

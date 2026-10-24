@@ -1,0 +1,192 @@
+/* Sources page. Scoped under .f-sources; everything else comes from src/ui. */
+.f-sources {
+  gap: var(--space-5);
+}
+
+.f-sources .src-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.f-sources .src-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px 220px 160px 150px;
+  grid-template-areas:
+    "main status fresh cadence action"
+    "msg msg msg msg msg";
+  align-items: center;
+  column-gap: var(--space-4);
+  padding: 12px var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.f-sources .src-list .src-row:first-child {
+  border-top: 0;
+}
+
+.f-sources .src-row--head {
+  padding-top: 0;
+  padding-bottom: 8px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-3);
+}
+
+.f-sources .src-row--head .src-row__cadence,
+.f-sources .src-row--head .src-row__fresh {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.f-sources .src-row__main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.f-sources .src-row__name {
+  font-weight: 550;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.f-sources .src-row__icon {
+  color: var(--text-3);
+}
+
+.f-sources .src-row__feeds {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
+.f-sources .src-row__status {
+  grid-area: status;
+}
+
+.f-sources .src-row__fresh {
+  grid-area: fresh;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.f-sources .src-row__cadence {
+  grid-area: cadence;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.f-sources .src-row__k {
+  display: none;
+}
+
+.f-sources .src-row__action {
+  grid-area: action;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.f-sources .src-row__action .btn {
+  min-width: 132px;
+}
+
+.f-sources .src-row__msg {
+  grid-area: msg;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.f-sources .src-row__msg--critical,
+.f-sources .src-row__msg--neutral {
+  color: var(--critical-text);
+  background: var(--critical-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.f-sources .src-row__msg--neutral {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.f-sources .src-flash {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.f-sources .src-flash--error {
+  background: var(--critical-soft);
+  color: var(--critical-text);
+}
+
+.f-sources .src-spin {
+  animation: src-spin 1s linear infinite;
+}
+
+@keyframes src-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1100px) {
+  .f-sources .src-row {
+    grid-template-columns: minmax(0, 1fr) 120px 200px 140px;
+    grid-template-areas:
+      "main status fresh action"
+      "msg msg msg msg";
+  }
+  .f-sources .src-row__cadence {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .f-sources .src-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main status"
+      "fresh action"
+      "msg msg";
+    row-gap: 8px;
+    padding: 12px 14px;
+  }
+  .f-sources .src-row--head {
+    display: none;
+  }
+  .f-sources .src-list .src-row--head + .src-row {
+    border-top: 0;
+  }
+  .f-sources .src-row__k {
+    display: inline;
+    color: var(--text-3);
+    margin-right: 6px;
+  }
+  .f-sources .src-row__action .btn {
+    min-width: 0;
+    width: 36px;
+    padding: 0;
+  }
+  .f-sources .src-row__action a.btn {
+    width: auto;
+    padding: 0 12px;
+  }
+  .f-sources .src-btn-label {
+    display: none;
+  }
+  .f-sources .src-row__msg {
+    margin-top: 0;
+  }
+}

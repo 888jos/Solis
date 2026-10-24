@@ -1,0 +1,301 @@
+/* Apps > CortiFree. Scoped under .f-cortifree; everything else comes from src/ui. */
+.f-cortifree .cf-tabs {
+  overflow-x: auto;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 0 var(--space-1) 2px;
+  scrollbar-width: none;
+}
+.f-cortifree .cf-tabs::-webkit-scrollbar {
+  display: none;
+}
+.f-cortifree .cf-section {
+  margin: var(--space-2) 0 calc(-1 * var(--space-2));
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.f-cortifree .cf-spin {
+  animation: cf-spin 0.9s linear infinite;
+}
+@keyframes cf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.f-cortifree .cf-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  word-break: break-all;
+}
+.f-cortifree .cf-pending,
+.f-cortifree .cf-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.f-cortifree .cf-pending span {
+  color: var(--text-2);
+}
+.f-cortifree .cf-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.f-cortifree .cf-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.f-cortifree .cf-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+.f-cortifree .cf-mini-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.f-cortifree .cf-select {
+  max-width: 260px;
+}
+.f-cortifree .cf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Funnel */
+.f-cortifree .cf-funnel {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.f-cortifree .cf-funnel__row {
+  display: grid;
+  grid-template-columns: 22px minmax(120px, 1.1fr) minmax(80px, 2fr) 56px 46px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+}
+.f-cortifree .cf-funnel__row--btn {
+  cursor: pointer;
+}
+.f-cortifree .cf-funnel__row--btn:hover {
+  background: var(--surface-hover);
+}
+.f-cortifree .cf-funnel__idx {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.f-cortifree .cf-funnel__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.f-cortifree .cf-funnel__label > span:not(.cf-worst) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.f-cortifree .cf-funnel__track {
+  height: 14px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.f-cortifree .cf-funnel__bar {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.f-cortifree .cf-funnel__count {
+  text-align: right;
+  font-weight: 600;
+}
+.f-cortifree .cf-funnel__pct {
+  text-align: right;
+  color: var(--text-2);
+}
+.f-cortifree .cf-funnel__conv {
+  padding-left: 36px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-3);
+}
+.f-cortifree .cf-funnel__detail {
+  margin: 4px 0 10px 36px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.f-cortifree .cf-worst {
+  flex: none;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--critical-text);
+  background: var(--critical-soft);
+}
+.f-cortifree .cf-chev {
+  flex: none;
+  color: var(--text-3);
+  transition: transform 0.15s;
+}
+.f-cortifree .cf-chev--open {
+  transform: rotate(90deg);
+}
+
+/* Quiz detail */
+.f-cortifree .cf-quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.f-cortifree .cf-quiz details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 6px 10px;
+}
+.f-cortifree .cf-quiz summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.f-cortifree .cf-quiz summary strong {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.f-cortifree .cf-quiz .hbar {
+  grid-template-columns: minmax(120px, 2fr) minmax(0, 1fr) auto;
+}
+
+/* Cohort heat table */
+.f-cortifree .cf-cohort td,
+.f-cortifree .cf-cohort th {
+  padding: 4px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.f-cortifree .cf-heat {
+  display: block;
+  padding: 2px 4px;
+  border-radius: 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Explorer */
+.f-cortifree .cf-explorer {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.f-cortifree .cf-evlist {
+  max-height: 640px;
+  overflow-y: auto;
+  margin: var(--space-2) calc(-1 * var(--space-2)) 0;
+}
+.f-cortifree .cf-evgroup {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.f-cortifree .cf-evitem {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.f-cortifree .cf-evitem:hover {
+  background: var(--surface-hover);
+}
+.f-cortifree .cf-evitem[aria-current="true"] {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.f-cortifree .cf-evitem span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.f-cortifree .cf-evitem span:last-child {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.f-cortifree .cf-bignum {
+  font-size: 24px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 860px) {
+  .f-cortifree .cf-explorer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .f-cortifree .cf-evlist {
+    max-height: 260px;
+  }
+}
+@media (max-width: 560px) {
+  .f-cortifree .cf-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .f-cortifree .cf-funnel__row {
+    grid-template-columns: 18px minmax(0, 1fr) 44px 40px;
+    row-gap: 3px;
+  }
+  .f-cortifree .cf-funnel__track {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    height: 8px;
+  }
+  .f-cortifree .cf-funnel__conv {
+    padding-left: 28px;
+  }
+  .f-cortifree .cf-funnel__detail {
+    margin-left: 0;
+  }
+  .f-cortifree .cf-select {
+    max-width: 100%;
+  }
+}

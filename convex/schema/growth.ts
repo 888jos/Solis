@@ -2,27 +2,44 @@ import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export const growthTables = {
-  // Owner: ugc agent. Snapshot of the Airtable UGC base (appDXNkfK2prnjyud).
+  // Owner: ugc agent. Snapshot of the Airtable UGC base (appDXNkfK2prnjyud), read-only.
+  // Filled by convex/sources/airtable.ts (REST, needs AIRTABLE_TOKEN) or ugcData:importSnapshot.
   ugcCreators: defineTable({
     airtableId: v.string(),
     name: v.string(),
     handle: v.optional(v.string()),
     platform: v.optional(v.string()),
-    status: v.optional(v.string()),
-    deal: v.optional(v.string()), // "CPM", "Daily $500", "Weekly $300", "Trial"...
+    status: v.optional(v.string()), // Airtable "Status": Active / Paused / Inactive / Onboarding
+    deal: v.optional(v.string()), // legacy free label
+    program: v.optional(v.string()), // "CPM campaign" | "Creator Program (fixed)"
+    stage: v.optional(v.string()), // Onboarding / Trial / Fixed / CPM / Floor ($4/video) / Paused / Ended
+    campaign: v.optional(v.string()), // SideShift campaign
     country: v.optional(v.string()),
+    tiktokUrl: v.optional(v.string()),
+    startDate: v.optional(v.string()),
+    trialStart: v.optional(v.string()),
+    fixedStart: v.optional(v.string()),
+    fixedMonthlyUsd: v.optional(v.number()), // only when Airtable records the amount ("$300/month")
+    createdAt: v.optional(v.number()), // Airtable record creation time
     updatedAt: v.number(),
   }).index("by_airtable", ["airtableId"]),
 
   ugcVideos: defineTable({
     airtableId: v.string(),
     creatorAirtableId: v.optional(v.string()),
+    label: v.optional(v.string()),
+    status: v.optional(v.string()), // Selected / Published / Abandoned
     url: v.optional(v.string()),
     platform: v.optional(v.string()),
     postedAt: v.optional(v.string()),
     views: v.number(),
     likes: v.optional(v.number()),
+    comments: v.optional(v.number()),
+    shares: v.optional(v.number()),
     script: v.optional(v.string()),
+    costUsd: v.optional(v.number()), // Airtable "Attributed cost USD" (recorded)
+    costSource: v.optional(v.string()),
+    statsUpdatedAt: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_airtable", ["airtableId"]),
 
@@ -33,15 +50,39 @@ export const growthTables = {
     amountUsd: v.number(),
     amountEur: v.number(),
     kind: v.string(), // "cpm" | "fixed" | "bonus" | "contest" | "trial"
-    status: v.optional(v.string()), // "paid" | "due" | "estimated"
+    status: v.optional(v.string()), // "paid" | "due"
     updatedAt: v.number(),
   }).index("by_airtable", ["airtableId"]).index("by_month", ["month"]),
 
-  // Owner: aso agent.
+  // Outreach rows (no names or messages stored: only dates and labels for the funnel).
+  ugcOutreach: defineTable({
+    airtableId: v.string(),
+    firstContact: v.optional(v.string()),
+    label: v.optional(v.string()),
+    lastReplyDate: v.optional(v.string()),
+    lastMessageBy: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_airtable", ["airtableId"]),
+
+  // Creator applications (no personal data stored).
+  ugcApplications: defineTable({
+    airtableId: v.string(),
+    appliedAt: v.string(), // ISO timestamp
+    program: v.optional(v.string()),
+    decision: v.optional(v.string()),
+    source: v.optional(v.string()),
+    creatorAirtableId: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_airtable", ["airtableId"]),
+
+  // Owner: aso agent. App Store metadata per app × locale, from App Store Connect (read-only).
+  // channel "live" = version on sale, "draft" = newer version being edited (only when it exists).
   asoLocalizations: defineTable({
     appSlug: v.string(),
     locale: v.string(),
+    channel: v.optional(v.union(v.literal("live"), v.literal("draft"))),
     versionString: v.optional(v.string()),
+    versionState: v.optional(v.string()),
     name: v.optional(v.string()),
     subtitle: v.optional(v.string()),
     keywords: v.optional(v.string()),
@@ -52,10 +93,16 @@ export const growthTables = {
 
   asoKeywords: defineTable({
     appSlug: v.string(),
-    keyword: v.string(),
+    keyword: v.string(), // lowercase, trimmed
     country: v.string(), // lowercase iTunes storefront, e.g. "us", "fr"
-  }).index("by_app", ["appSlug"]),
+    source: v.optional(v.union(v.literal("metadata"), v.literal("manual"))),
+    addedAt: v.optional(v.number()),
+    removedAt: v.optional(v.number()), // untracked from the UI; kept so metadata seeding does not bring it back
+  })
+    .index("by_app", ["appSlug"])
+    .index("by_app_keyword_country", ["appSlug", "keyword", "country"]),
 
+  // One snapshot per keyword × country × day, from the public iTunes Search API (top 200 results).
   asoRankings: defineTable({
     appSlug: v.string(),
     keyword: v.string(),
@@ -63,5 +110,6 @@ export const growthTables = {
     date: v.string(),
     rank: v.union(v.number(), v.null()), // null = not in top 200
     topCompetitor: v.optional(v.string()),
+    resultCount: v.optional(v.number()),
   }).index("by_app_keyword_date", ["appSlug", "keyword", "country", "date"]).index("by_date", ["date"]),
 };

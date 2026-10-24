@@ -18,12 +18,14 @@ type Props = ChartData & {
   showTotal?: boolean;
   legend?: boolean;
   emptyLabel?: ReactNode;
+  /** Draw small values at the top (ranks: 1 is best). Line charts only. */
+  invertY?: boolean;
 };
 
 const PAD = { top: 12, right: 8, bottom: 26, left: 52 };
 
 /** One chart for every time series in Solis: line, area, stacked or grouped bars, with a crosshair tooltip. */
-export function TimeChart({ x, series, kind = "line", height = 240, formatValue, formatX, formatXLong, showTotal, legend = true }: Props) {
+export function TimeChart({ x, series, kind = "line", height = 240, formatValue, formatX, formatXLong, showTotal, legend = true, emptyLabel, invertY = false }: Props) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const isBar = kind === "bar" || kind === "bar-grouped";
@@ -52,16 +54,26 @@ export function TimeChart({ x, series, kind = "line", height = 240, formatValue,
         });
       }
     });
-    const t = niceTicks(lo, hi === lo ? lo + 1 : hi, 4);
+    const integer = series.every((s) => s.values.every((v) => v == null || Number.isInteger(v)));
+    const t = niceTicks(lo, hi === lo ? lo + 1 : hi, 4, integer);
     return { ticks: t, yMin: t[0], yMax: t[t.length - 1] };
   }, [x, series, stacked]);
+
+  // Axis labels: when every tick is a whole number, drop the ",00" decimals ("50,00 €" → "50 €").
+  const tickLabels = useMemo(() => {
+    const raw = ticks.map((t) => formatValue(t));
+    return ticks.every((t) => Number.isInteger(t)) ? raw.map((s) => s.replace(/,00(?=\D|$)/, "")) : raw;
+  }, [ticks, formatValue]);
 
   const innerW = Math.max(0, width - PAD.left - PAD.right);
   const innerH = height - PAD.top - PAD.bottom;
   const n = x.length;
   const band = n > 0 ? innerW / n : 0;
   const xCenter = (i: number) => PAD.left + (isBar ? band * i + band / 2 : n <= 1 ? innerW / 2 : (innerW * i) / (n - 1));
-  const y = (v: number) => PAD.top + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
+  const y = (v: number) => {
+    const t = (v - yMin) / (yMax - yMin || 1);
+    return PAD.top + (invertY ? t : 1 - t) * innerH;
+  };
   const labels = labelIndexes(n, Math.max(2, Math.min(8, Math.floor(innerW / 70))));
 
   const onMove = (event: React.PointerEvent<SVGRectElement>) => {
@@ -99,25 +111,39 @@ export function TimeChart({ x, series, kind = "line", height = 240, formatValue,
     tooltipRows.push({ color: "transparent", label: "Total", value: formatValue(total) });
   }
 
+  if (!series.some((s) => s.values.some((v) => v != null))) {
+    return (
+      <div className="chart chart--empty" style={{ height }}>
+        {emptyLabel ?? "Aucune donnée sur la période"}
+      </div>
+    );
+  }
+
   return (
     <div className="stack" style={{ gap: 10 }}>
       {legend && <Legend items={series.map((s) => ({ label: s.label, color: s.color }))} />}
       <div className="chart" ref={ref} style={{ height }}>
         {width > 0 && (
           <svg width={width} height={height} role="img" aria-label={series.map((s) => s.label).join(", ")}>
-            {ticks.map((t) => (
+            {ticks.map((t, ti) => (
               <g key={t}>
                 <line x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)} stroke={t === 0 ? "var(--chart-axis)" : "var(--chart-grid)"} strokeWidth={1} />
                 <text x={PAD.left - 8} y={y(t)} dy="0.32em" textAnchor="end">
-                  {formatValue(t)}
+                  {tickLabels[ti]}
                 </text>
               </g>
             ))}
-            {labels.map((i) => (
-              <text key={x[i]} x={xCenter(i)} y={height - 6} textAnchor={i === 0 && !isBar ? "start" : i === n - 1 && !isBar ? "end" : "middle"}>
-                {formatX(x[i])}
-              </text>
-            ))}
+            {labels.map((i) => {
+              // Edge labels hug the plot edges so they never spill outside the card (narrow bars included).
+              const edge = !isBar || band < 48;
+              const anchor = edge && i === 0 && n > 1 ? "start" : edge && i === n - 1 && n > 1 ? "end" : "middle";
+              const lx = anchor === "start" ? (isBar ? xCenter(i) - barW / 2 : xCenter(i)) : anchor === "end" ? (isBar ? xCenter(i) + barW / 2 : xCenter(i)) : xCenter(i);
+              return (
+                <text key={x[i]} x={lx} y={height - 6} textAnchor={anchor}>
+                  {formatX(x[i])}
+                </text>
+              );
+            })}
 
             {hover != null && <line x1={xCenter(hover)} x2={xCenter(hover)} y1={PAD.top} y2={PAD.top + innerH} stroke="var(--chart-axis)" strokeDasharray={isBar ? undefined : "3 3"} />}
 

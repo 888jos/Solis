@@ -9,7 +9,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [token, setLocal] = useState(getToken());
   const status = useQuery(api.session.check, token ? { token } : "skip");
 
-  if (token && status === undefined) return null;
+  if (token && status === undefined)
+    return (
+      <div className="muted" style={{ minHeight: "100%", display: "grid", placeItems: "center", padding: 16 }} aria-busy="true">
+        Connexion…
+      </div>
+    );
   if (token && status === true) return <>{children}</>;
 
   return (

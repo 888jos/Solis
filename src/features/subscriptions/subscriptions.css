@@ -1,0 +1,36 @@
+/* Subscriptions page (scoped). */
+.f-subs {
+  gap: var(--space-5);
+}
+
+.f-subs__sub {
+  font-size: 12px;
+}
+
+.f-subs__plans {
+  gap: var(--space-4);
+}
+
+.f-subs__mix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.f-subs__mix-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.f-subs__mix-row > .muted {
+  text-align: right;
+}
+
+.f-subs__sources {
+  gap: 4px;
+}

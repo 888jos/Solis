@@ -8,9 +8,33 @@
  * @module
  */
 
+import type * as acquisition from "../acquisition.js";
+import type * as aso from "../aso.js";
+import type * as asoData from "../asoData.js";
+import type * as brief from "../brief.js";
+import type * as cocoriseAnalytics from "../cocoriseAnalytics.js";
+import type * as cortifreeAnalytics from "../cortifreeAnalytics.js";
+import type * as crons from "../crons.js";
+import type * as engagement from "../engagement.js";
+import type * as engagementData from "../engagementData.js";
+import type * as expenses from "../expenses.js";
+import type * as expensesData from "../expensesData.js";
+import type * as fx from "../fx.js";
+import type * as geo from "../geo.js";
 import type * as lib_apps from "../lib/apps.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_dates from "../lib/dates.js";
+import type * as lib_fx from "../lib/fx.js";
+import type * as lib_validate from "../lib/validate.js";
+import type * as lib_vat from "../lib/vat.js";
+import type * as overview from "../overview.js";
+import type * as profitability from "../profitability.js";
+import type * as questirlAnalytics from "../questirlAnalytics.js";
+import type * as revenue from "../revenue.js";
+import type * as revenueData from "../revenueData.js";
+import type * as reviews from "../reviews.js";
+import type * as reviewsData from "../reviewsData.js";
+import type * as schema_analytics from "../schema/analytics.js";
 import type * as schema_core from "../schema/core.js";
 import type * as schema_expenses from "../schema/expenses.js";
 import type * as schema_growth from "../schema/growth.js";
@@ -18,8 +42,27 @@ import type * as schema_product from "../schema/product.js";
 import type * as schema_revenue from "../schema/revenue.js";
 import type * as schema_subscriptions from "../schema/subscriptions.js";
 import type * as session from "../session.js";
+import type * as sources from "../sources.js";
+import type * as sources_aiCosts from "../sources/aiCosts.js";
+import type * as sources_airtable from "../sources/airtable.js";
 import type * as sources_asc from "../sources/asc.js";
+import type * as sources_aso from "../sources/aso.js";
+import type * as sources_cocoriseAnalytics from "../sources/cocoriseAnalytics.js";
+import type * as sources_cortifreeAnalytics from "../sources/cortifreeAnalytics.js";
+import type * as sources_engagement from "../sources/engagement.js";
+import type * as sources_questirlAnalytics from "../sources/questirlAnalytics.js";
+import type * as sources_revenue from "../sources/revenue.js";
+import type * as sources_reviews from "../sources/reviews.js";
+import type * as sources_subscriptions from "../sources/subscriptions.js";
+import type * as sources_telegram from "../sources/telegram.js";
+import type * as sources_versions from "../sources/versions.js";
+import type * as subscriptions from "../subscriptions.js";
+import type * as subscriptionsData from "../subscriptionsData.js";
 import type * as syncRuns from "../syncRuns.js";
+import type * as ugc from "../ugc.js";
+import type * as ugcData from "../ugcData.js";
+import type * as versions from "../versions.js";
+import type * as versionsData from "../versionsData.js";
 
 import type {
   ApiFromModules,
@@ -28,9 +71,33 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  acquisition: typeof acquisition;
+  aso: typeof aso;
+  asoData: typeof asoData;
+  brief: typeof brief;
+  cocoriseAnalytics: typeof cocoriseAnalytics;
+  cortifreeAnalytics: typeof cortifreeAnalytics;
+  crons: typeof crons;
+  engagement: typeof engagement;
+  engagementData: typeof engagementData;
+  expenses: typeof expenses;
+  expensesData: typeof expensesData;
+  fx: typeof fx;
+  geo: typeof geo;
   "lib/apps": typeof lib_apps;
   "lib/auth": typeof lib_auth;
   "lib/dates": typeof lib_dates;
+  "lib/fx": typeof lib_fx;
+  "lib/validate": typeof lib_validate;
+  "lib/vat": typeof lib_vat;
+  overview: typeof overview;
+  profitability: typeof profitability;
+  questirlAnalytics: typeof questirlAnalytics;
+  revenue: typeof revenue;
+  revenueData: typeof revenueData;
+  reviews: typeof reviews;
+  reviewsData: typeof reviewsData;
+  "schema/analytics": typeof schema_analytics;
   "schema/core": typeof schema_core;
   "schema/expenses": typeof schema_expenses;
   "schema/growth": typeof schema_growth;
@@ -38,8 +105,27 @@ declare const fullApi: ApiFromModules<{
   "schema/revenue": typeof schema_revenue;
   "schema/subscriptions": typeof schema_subscriptions;
   session: typeof session;
+  sources: typeof sources;
+  "sources/aiCosts": typeof sources_aiCosts;
+  "sources/airtable": typeof sources_airtable;
   "sources/asc": typeof sources_asc;
+  "sources/aso": typeof sources_aso;
+  "sources/cocoriseAnalytics": typeof sources_cocoriseAnalytics;
+  "sources/cortifreeAnalytics": typeof sources_cortifreeAnalytics;
+  "sources/engagement": typeof sources_engagement;
+  "sources/questirlAnalytics": typeof sources_questirlAnalytics;
+  "sources/revenue": typeof sources_revenue;
+  "sources/reviews": typeof sources_reviews;
+  "sources/subscriptions": typeof sources_subscriptions;
+  "sources/telegram": typeof sources_telegram;
+  "sources/versions": typeof sources_versions;
+  subscriptions: typeof subscriptions;
+  subscriptionsData: typeof subscriptionsData;
   syncRuns: typeof syncRuns;
+  ugc: typeof ugc;
+  ugcData: typeof ugcData;
+  versions: typeof versions;
+  versionsData: typeof versionsData;
 }>;
 
 /**

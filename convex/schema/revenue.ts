@@ -25,6 +25,14 @@ export const revenueTables = {
     exVatEur: v.number(),
     proceedsEur: v.number(),
     lineKey: v.string(), // stable dedupe key per report line
+    // Optional detail columns (added by the revenue agent; absent on rows written before).
+    parentSku: v.optional(v.string()), // IAP rows: SKU of the parent app
+    appleId: v.optional(v.string()), // Apple Identifier of the product
+    subscriptionKind: v.optional(v.string()), // Apple "Subscription" column: "New" | "Renewal" | ""
+    period: v.optional(v.string()), // "7 Days", "1 Year"...
+    orderType: v.optional(v.string()), // e.g. "Free Trial Intro Offer"
+    device: v.optional(v.string()),
+    version: v.optional(v.string()),
   })
     .index("by_date", ["date"])
     .index("by_app_date", ["appSlug", "date"])
@@ -37,5 +45,6 @@ export const revenueTables = {
     status: v.union(v.literal("ok"), v.literal("empty"), v.literal("error")),
     rows: v.number(),
     fetchedAt: v.number(),
+    message: v.optional(v.string()), // why a day is not ok (Apple error, "not available yet"...)
   }).index("by_type_date", ["reportType", "date"]),
 };

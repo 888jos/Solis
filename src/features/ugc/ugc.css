@@ -1,0 +1,68 @@
+.f-ugc {
+  gap: var(--space-5);
+  transition: opacity 120ms ease;
+}
+
+.f-ugc[data-refreshing] {
+  opacity: 0.6;
+}
+
+.f-ugc .ugc-creator {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.f-ugc .ugc-creator__name {
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.f-ugc .ugc-creator__handle {
+  font-size: 12px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.f-ugc a.ugc-creator__handle:hover,
+.f-ugc .ugc-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.f-ugc .ugc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.f-ugc .ugc-link svg {
+  color: var(--text-3);
+}
+
+.f-ugc .ugc-small {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.f-ugc .table td {
+  white-space: nowrap;
+}
+
+.f-ugc .ugc-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.f-ugc .ugc-breakdown strong {
+  color: var(--text);
+  font-weight: 600;
+}

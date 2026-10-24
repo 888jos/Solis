@@ -1,0 +1,198 @@
+/* Apps > Quest IRL. Scoped under .f-questirl; layout comes from ui/base.css. */
+.f-questirl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.f-questirl .qi-tabs {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+.f-questirl .qi-tabs::-webkit-scrollbar {
+  display: none;
+}
+.f-questirl .qi-tabs > * {
+  flex: none;
+}
+
+.f-questirl .qi-computing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.f-questirl .qi-spin {
+  animation: qi-spin 1s linear infinite;
+}
+@keyframes qi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* KPI rows: always 4 per row on desktop, 2 on narrow screens (no orphan tile). */
+.f-questirl .qi-kpis.grid--kpi,
+.f-questirl .qi-kpis > .grid--kpi {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .f-questirl .qi-kpis.grid--kpi,
+  .f-questirl .qi-kpis > .grid--kpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Health strip (worst drop-off, slowest screen, paywall conversion). */
+.f-questirl .qi-health {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.f-questirl .qi-health__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-4) var(--space-5);
+}
+.f-questirl .qi-health__label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.f-questirl .qi-health__value {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.f-questirl .qi-health__foot {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* Funnel */
+.qi-funnel {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.qi-funnel__row {
+  display: grid;
+  grid-template-columns: minmax(110px, 180px) minmax(0, 1fr) 74px;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+.qi-funnel__label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  min-width: 0;
+}
+.qi-funnel__label small {
+  color: var(--text-3);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qi-funnel__track {
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.qi-funnel__fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--radius-sm);
+}
+.qi-funnel__value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 13px;
+}
+.qi-funnel__value small {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.qi-funnel__between {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: calc(min(180px, 30%) + 12px);
+  font-size: 12px;
+  color: var(--text-2);
+  height: 18px;
+}
+.qi-funnel__between svg {
+  color: var(--text-3);
+}
+.qi-funnel__lost {
+  color: var(--text-3);
+}
+
+/* Tables */
+.f-questirl .qi-code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.f-questirl .qi-toolbar {
+  padding: 0 var(--space-5) var(--space-3);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.f-questirl .qi-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.f-questirl .qi-props {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  color: var(--text-2);
+  max-width: 520px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.f-questirl .qi-cell-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.f-questirl .qi-bars-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin: var(--space-4) 0 var(--space-2);
+}
+.f-questirl .qi-bars-title:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .f-questirl .qi-health {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qi-funnel__row {
+    grid-template-columns: minmax(84px, 110px) minmax(0, 1fr) 56px;
+    gap: 8px;
+  }
+  .qi-funnel__between {
+    padding-left: calc(110px + 8px);
+  }
+  .f-questirl .qi-hide-sm {
+    display: none;
+  }
+}
+
+.f-questirl .table .num {
+  white-space: nowrap;
+}

@@ -1,8 +1,10 @@
 import { Menu, X } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { appColor } from "@/lib/apps";
 import { PERIODS, useFilters } from "@/lib/filters";
 import { AppPicker, Segmented, Skeleton } from "@/ui";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { PAGES, SECTIONS } from "./routes";
 
 /** Pages where the global period/app filters don't apply hide them. */
@@ -14,8 +16,15 @@ export function Shell() {
   const { period, setPeriod, app, setApp } = useFilters();
   const search = location.search;
   const current = PAGES.find((p) => p.path === location.pathname);
+  const showFilters = !NO_FILTERS.has(location.pathname);
 
   useEffect(() => setNavOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setNavOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   useEffect(() => {
     document.title = current ? `${current.label} · Solis` : "Solis";
   }, [current]);
@@ -38,7 +47,7 @@ export function Shell() {
             <div className="nav-section__label">{section}</div>
             {PAGES.filter((p) => p.section === section).map((p) => (
               <NavLink key={p.id} to={{ pathname: p.path, search }} end className="nav-item">
-                <p.icon />
+                {p.path.startsWith("/apps/") ? <span className="nav-item__dot" style={{ background: appColor(p.path.split("/")[2]) }} aria-hidden /> : <p.icon />}
                 {p.label}
               </NavLink>
             ))}
@@ -48,7 +57,7 @@ export function Shell() {
       </aside>
       <div className="scrim" onClick={() => setNavOpen(false)} />
       <div className="main">
-        <div className="topbar">
+        <div className={`topbar${showFilters ? "" : " topbar--bare"}`}>
           <button className="btn btn--ghost topbar__menu" onClick={() => setNavOpen(true)} aria-label="Ouvrir le menu">
             <Menu />
           </button>
@@ -56,17 +65,19 @@ export function Shell() {
             {current?.label}
           </strong>
           <div className="topbar__spacer" />
-          {!NO_FILTERS.has(location.pathname) && (
-            <>
+          {showFilters && (
+            <div className="topbar__filters">
               <AppPicker value={app} onChange={setApp} />
               <Segmented label="Période" value={period.key} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p.key, label: p.short }))} />
-            </>
+            </div>
           )}
         </div>
         <main className="content">
-          <Suspense fallback={<Skeleton height={320} />}>
-            <Outlet />
-          </Suspense>
+          <ErrorBoundary key={location.pathname}>
+            <Suspense fallback={<Skeleton height={320} />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>
