@@ -5,7 +5,10 @@ import { usePageViewModel, TABS, type TabId } from "./usePageViewModel";
 import { RefreshContext } from "./data/useWidgets";
 import "./cortifree.css";
 
-const VIEWS: Record<TabId, React.LazyExoticComponent<() => React.JSX.Element>> = {
+const VIEWS: Record<
+  TabId,
+  React.LazyExoticComponent<() => React.JSX.Element>
+> = {
   overview: lazy(() => import("./tabs/overview/OverviewTab")),
   onboarding: lazy(() => import("./tabs/onboarding/OnboardingTab")),
   icp: lazy(() => import("./tabs/icp/IcpTab")),
@@ -28,14 +31,25 @@ export default function CortiFreePage() {
           title="CortiFree"
           subtitle={vm.subtitle}
           actions={
-            <button type="button" className="btn" onClick={vm.refresh} disabled={vm.busy} title="Recalculer depuis Amplitude et RevenueCat (ignore le cache)">
+            <button
+              type="button"
+              className="btn"
+              onClick={vm.refresh}
+              disabled={vm.busy}
+              title="Recalculer depuis Amplitude et RevenueCat (ignore le cache)"
+            >
               <RefreshCw className={vm.busy ? "cf-spin" : undefined} />
               {vm.busy ? "Calcul…" : "Actualiser"}
             </button>
           }
         />
         <div className="cf-tabs">
-          <Segmented<TabId> label="Section" value={vm.tab} onChange={vm.setTab} options={TABS.map((t) => ({ value: t.id, label: t.label }))} />
+          <Segmented<TabId>
+            label="Section"
+            value={vm.tab}
+            onChange={vm.setTab}
+            options={TABS.map((t) => ({ value: t.id, label: t.label }))}
+          />
         </div>
         <Suspense fallback={<Skeleton height={320} />}>
           <View key={vm.tab} />

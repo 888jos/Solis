@@ -85,7 +85,7 @@
 }
 .f-cortifree .cf-funnel__row {
   display: grid;
-  grid-template-columns: 22px minmax(120px, 1.1fr) minmax(80px, 2fr) 56px 46px;
+  grid-template-columns: 22px minmax(150px, 1.4fr) minmax(80px, 2fr) 56px 52px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -136,6 +136,7 @@
 }
 .f-cortifree .cf-funnel__pct {
   text-align: right;
+  white-space: nowrap;
   color: var(--text-2);
 }
 .f-cortifree .cf-funnel__conv {
@@ -281,7 +282,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .f-cortifree .cf-funnel__row {
-    grid-template-columns: 18px minmax(0, 1fr) 44px 40px;
+    grid-template-columns: 18px minmax(0, 1fr) 40px 50px;
     row-gap: 3px;
   }
   .f-cortifree .cf-funnel__track {

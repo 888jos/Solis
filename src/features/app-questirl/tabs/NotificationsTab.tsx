@@ -31,7 +31,7 @@ export function NotificationsTab({ data, window }: { data: QuestirlSummary | nul
       <KpiGrid items={vm?.kpis2 ?? null} />
 
       <div className="grid grid--2">
-        <Card title="Combien de notifications partent, et combien sont ouvertes ?" subtitle="Par jour">
+        <Card title="Combien de notifications partent, et combien sont ouvertes ?" subtitle="Events par jour, avant déduplication (une notif reprogrammée compte plusieurs fois)">
           {!vm ? <Skeleton height={220} /> : vm.hasVolume ? <TimeChart kind="bar-grouped" x={vm.x} series={vm.volumeSeries} height={220} formatValue={formatInt} formatX={vm.formatX} formatXLong={vm.formatXLong} /> : <EmptyState title="Aucune notification sur la période" />}
         </Card>
         <Card title="Que font les gens après avoir ouvert une notif ?" subtitle="Achats et quêtes validées dans les 2 h suivant l'ouverture, par jour">

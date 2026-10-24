@@ -67,7 +67,7 @@ async function getJson(url: string, headers: Record<string, string>, label: stri
     }
     if (res.status === 429 && attempt < 5) {
       const retry = Number(res.headers.get("Retry-After"));
-      await sleep(Number.isFinite(retry) && retry > 0 ? retry * 1000 : 2000 * (attempt + 1));
+      await sleep(Number.isFinite(retry) && retry > 0 ? retry * 1000 : 3000 * (attempt + 1));
       continue;
     }
     if (!res.ok) {
@@ -139,7 +139,19 @@ function prevRange(r: Range): Range {
   const to = addDays(r.from, -1);
   return rangeOf(addDays(to, -(r.days - 1)), to);
 }
-const ap = (r: Range) => ({ start: compact(r.from), end: compact(r.to) });
+/** Amplitude keeps one year of data and rounds a start date down to its interval (month for i=30): start no earlier
+ *  than the first day of the month after the cutoff, or the whole query is refused (403). */
+function retentionStart(): string {
+  const cutoff = addDays(new Date().toISOString().slice(0, 10), -364);
+  const d = new Date(`${cutoff.slice(0, 7)}-01T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString().slice(0, 10);
+}
+const ap = (r: Range) => {
+  const min = retentionStart();
+  const from = r.from < min ? (r.to < min ? r.to : min) : r.from;
+  return { start: compact(from), end: compact(r.to) };
+};
 
 function dayLabels(xs: any[] | undefined): string[] {
   return (xs ?? []).map((x) => (typeof x === "number" ? new Date(x).toISOString().slice(0, 10) : String(x).slice(0, 10)));
@@ -717,8 +729,20 @@ async function icpAll(c: Ctx, r: Range) {
   const icpProps = props.filter((p) => p.startsWith("icp_")).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
   const extra = ["country", "app_language", "device_type", "plan_goal", "has_apple_watch"].filter((p) => props.includes(p));
   const dims = [...ICP_EXPECTED.filter((p) => !icpProps.includes(p)), ...icpProps, ...extra].sort((a, b) => rank(a) - rank(b));
-  const results = await Promise.all(dims.map((d) => icp(c, d, steps, r).catch(() => ({ missing: true, prop: d, steps: [] as string[], segments: [] as { value: string; counts: number[] }[] }))));
-  return { steps: steps.map((s) => ({ label: s.label, event: s.spec.event_type })), notYet: ICP_EXPECTED.filter((p) => !props.includes(p)), dims: results };
+  // Funnels are the most expensive Amplitude queries (cost-based rate limit): two at a time, and a dimension that
+  // still fails is reported as such (the widget is then marked partial and recomputed after 2 min).
+  const lane = new Slots(2);
+  const results = await Promise.all(
+    dims.map((d) =>
+      lane.run(() =>
+        icp(c, d, steps, r).then(
+          (res) => ({ ...res, error: null as string | null }),
+          (err) => ({ missing: false, prop: d, steps: [] as string[], segments: [] as { value: string; counts: number[] }[], error: String((err as Error)?.message ?? err).slice(0, 200) }),
+        ),
+      ),
+    ),
+  );
+  return { steps: steps.map((s) => ({ label: s.label, event: s.spec.event_type })), notYet: ICP_EXPECTED.filter((p) => !props.includes(p)), dims: results, partial: results.some((x) => x.error) };
 }
 
 async function onboardingTime(c: Ctx, r: Range) {

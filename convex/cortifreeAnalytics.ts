@@ -10,7 +10,7 @@ import { addDays, isoDay } from "./lib/dates";
 
 export const APP_SLUG = "cortifree";
 /** Bump when a widget's computation changes: old cached payloads are then ignored. */
-export const WIDGET_VERSION = 3;
+export const WIDGET_VERSION = 4;
 
 export const requestValidator = v.object({
   w: v.string(),
@@ -51,8 +51,9 @@ export function requestKey(req: WidgetRequest): string {
 
 const MIN = 60_000;
 /** 15 min while the period touches the last two days, 6 h for a closed period; errors retry after 2 min. */
-export function ttlFor(req: WidgetRequest, error?: boolean): number {
-  if (error) return 2 * MIN;
+export function ttlFor(req: WidgetRequest, error?: boolean, payload?: unknown): number {
+  // Partial results (some Amplitude queries were rate-limited) are retried like errors.
+  if (error || (typeof payload === "string" && payload.endsWith(',"partial":true}'))) return 2 * MIN;
   const yesterday = addDays(isoDay(new Date()), -1);
   if (req.to && req.to < addDays(yesterday, -1)) return 6 * 60 * MIN;
   return 15 * MIN;
@@ -76,7 +77,7 @@ export const read = authQuery({
           payload: row.error ? null : typeof row.payload === "string" ? row.payload : null,
           error: row.error ?? null,
           fetchedAt: row.fetchedAt,
-          expiresAt: row.fetchedAt + ttlFor(req, !!row.error),
+          expiresAt: row.fetchedAt + ttlFor(req, !!row.error, row.payload),
         };
       }),
     );
@@ -95,7 +96,7 @@ export const freshKeys = internalQuery({
         .query("analyticsCache")
         .withIndex("by_key", (q) => q.eq("key", key))
         .unique();
-      if (row && row.fetchedAt + ttlFor(req, !!row.error) > now) fresh.push(key);
+      if (row && row.fetchedAt + ttlFor(req, !!row.error, row.payload) > now) fresh.push(key);
     }
     return fresh;
   },

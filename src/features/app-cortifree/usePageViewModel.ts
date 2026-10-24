@@ -19,7 +19,9 @@ export type TabId = (typeof TABS)[number]["id"];
 export function usePageViewModel() {
   const period = usePeriod();
   const [raw, setRaw] = useUrlParam("tab", "overview");
-  const tab: TabId = TABS.some((t) => t.id === raw) ? (raw as TabId) : "overview";
+  const tab: TabId = TABS.some((t) => t.id === raw)
+    ? (raw as TabId)
+    : "overview";
   const [tick, setTick] = useState(0);
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
 
@@ -36,6 +38,7 @@ export function usePageViewModel() {
     refresh: () => setTick((t) => t + 1),
     busy,
     refreshContext,
-    sourceNote: "Amplitude Dashboard API (projet UE) et RevenueCat v2, lecture seule · résultats gardés 15 min en cache dans Solis",
+    sourceNote:
+      "Amplitude Dashboard API (projet UE) et RevenueCat v2, lecture seule · résultats gardés 15 min en cache dans Solis",
   };
 }

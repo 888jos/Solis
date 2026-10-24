@@ -20,7 +20,7 @@ export function useOnboardingViewModel(data: QuestirlSummary | null) {
     const kpis2: KpiItem[] = [
       { key: "median", label: "Durée médiane jusqu'à la fin", value: formatMinutes(c.medianCompletionMinutes), foot: `P90 ${formatMinutes(c.p90CompletionMinutes)}`, hint: "elapsed_since_first_seen_seconds sur les onboardings terminés" },
       { key: "step", label: "Durée moyenne par écran", value: formatSeconds(c.avgStepDuration), foot: "écrans validés", hint: "duration_seconds des onboarding_step_completed (< 10 min)" },
-      { key: "answers", label: "Réponses aux questions", value: formatInt(c.questionsAnswered), foot: "onboarding_question_answered" },
+      { key: "answers", label: "Réponses aux questions", value: formatInt(c.questionsAnswered), foot: "réponses enregistrées", hint: "onboarding_question_answered" },
       { key: "paywall", label: "Paywall atteint", value: formatInt(c.onboardingPaywallReached), foot: "tentatives", hint: "onboarding_paywall_reached" },
     ];
 

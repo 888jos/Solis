@@ -9,7 +9,7 @@ import { missingQuestirlEnv, questirlCacheKey, questirlTtlMs } from "../questirl
 // Quest IRL (LifeQuest) analytics, ported from LifeQuest/analytics-dashboard/server.mjs.
 // Source: PostHog HogQL query API (read-only SELECTs). Instead of downloading every event with its
 // full properties JSON (which hit "504 max execution time"), we fetch only the ~45 properties the
-// dashboard reads, in 7-day chunks, then run the exact same aggregation as the old dashboard and
+// dashboard reads, in ~monthly chunks, then run the exact same aggregation as the old dashboard and
 // cache the compact summary in analyticsCache.
 
 type Props = Record<string, unknown>;
@@ -29,7 +29,8 @@ const PROP_KEYS = [
 ] as const;
 
 const DAY = 86400000;
-const CHUNK_DAYS = 7;
+// One HogQL call per ~month (PostHog rate-limits the query API); a window hitting ROW_LIMIT is split in two.
+const CHUNK_DAYS = 31;
 const ROW_LIMIT = 50000;
 
 function env(name: string): string {
@@ -88,7 +89,7 @@ async function fetchWindow(startMs: number, endMs: number): Promise<Ev[]> {
   });
 }
 
-/** All events of [start, end), newest first, fetched in 7-day chunks (3 at a time). */
+/** All events of [start, end), newest first, fetched in ~monthly chunks (3 at a time). */
 async function fetchEvents(startMs: number, endMs: number): Promise<Ev[]> {
   const chunks: [number, number][] = [];
   for (let e = endMs; e > startMs; e -= CHUNK_DAYS * DAY) chunks.push([Math.max(startMs, e - CHUNK_DAYS * DAY), e]);

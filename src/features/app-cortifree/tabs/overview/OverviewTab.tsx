@@ -1,5 +1,12 @@
 import { Card, Segmented } from "@/ui";
-import { Async, Bars, ChartCard, KpiRow, SectionTitle, Show } from "../../components/blocks";
+import {
+  Async,
+  Bars,
+  ChartCard,
+  KpiRow,
+  SectionTitle,
+  Show,
+} from "../../components/blocks";
 import { useOverviewViewModel } from "./useOverviewViewModel";
 
 export default function OverviewTab() {
@@ -12,14 +19,26 @@ export default function OverviewTab() {
       <KpiRow cell={vm.money} count={6} />
 
       <div className="grid grid--2">
-        <ChartCard title="Combien de personnes utilisent l'app ?" subtitle="Actifs et nouveaux par jour, uniques" cell={vm.usersChart} />
-        <ChartCard title="Que font-elles ?" subtitle="Événements clés par jour" cell={vm.keyActivity} />
+        <ChartCard
+          title="Combien de personnes utilisent l'app ?"
+          subtitle="Actifs et nouveaux par jour, uniques"
+          cell={vm.usersChart}
+        />
+        <ChartCard
+          title="Que font-elles ?"
+          subtitle="Événements clés par jour"
+          cell={vm.keyActivity}
+        />
       </div>
 
       <div className="grid grid--2">
         <Card
           title="Événements les plus envoyés"
-          subtitle={vm.top.state === "ready" && vm.top.data.kind === "data" ? vm.top.data.data.note : undefined}
+          subtitle={
+            vm.top.state === "ready" && vm.top.data.kind === "data"
+              ? vm.top.data.data.note
+              : undefined
+          }
           action={
             <Segmented
               label="Fenêtre"
@@ -36,7 +55,10 @@ export default function OverviewTab() {
             {(d) => <Bars vm={d.bars} />}
           </Async>
         </Card>
-        <Card title="D'où viennent les actifs, sur quelle version ?" subtitle="Utilisateurs actifs uniques par pays et par version de l'app">
+        <Card
+          title="D'où viennent les actifs, sur quelle version ?"
+          subtitle="Utilisateurs actifs uniques par pays et par version de l'app"
+        >
           <Async cell={vm.geo} height={300}>
             {(g) => (
               <div className="cf-split">
