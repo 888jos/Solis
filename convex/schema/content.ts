@@ -1,6 +1,20 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// One save from the carousel editor. Lists, not records: script paths contain dots.
+export const carouselEditsV = v.object({
+  text: v.array(v.object({ path: v.string(), value: v.string() })),
+  style: v.array(
+    v.object({
+      slide: v.number(), // 0-based
+      font: v.optional(v.string()),
+      scale: v.optional(v.number()),
+      color: v.optional(v.string()),
+    }),
+  ),
+  images: v.array(v.object({ slide: v.number(), slot: v.number(), imageId: v.string() })),
+});
+
 // Owner: carousels agent. Mirror of the Carousel Factory (~/app/carousel-factory) that runs on Jos's Mac:
 // `cf sync` pushes accounts, the day plans and every rendered carousel (slides in file storage), and pulls
 // back the review decisions taken here. The Mac stays the source of truth; Solis only adds decisions.
@@ -61,9 +75,30 @@ export const contentTables = {
     // A decision taken in Solis waits here until `cf sync` applies it on the Mac.
     decisionPending: v.boolean(),
     decision: v.optional(v.object({ status: v.string(), at: v.number() })),
+    // Editor (src/features/carousels/components/CarouselEditor.tsx). `editor` is pushed by the Mac: the editable
+    // texts of the script, each slide's photos and style, the fonts and the bank categories of the brand.
+    editor: v.optional(v.any()),
+    // Edits saved here wait in `pendingEdit` until `cf sync --edits` stores them on the Mac (SQLite
+    // carousel_edits), renders the carousel again and acknowledges. syncCarousels never touches these fields.
+    pendingEdit: v.optional(v.object({ edits: carouselEditsV, at: v.number() })),
+    editPending: v.optional(v.boolean()),
+    editStatus: v.optional(v.object({ state: v.string(), at: v.number(), message: v.optional(v.string()) })),
   })
     .index("by_cid", ["cid"])
     .index("by_created", ["createdAt"])
     .index("by_status_created", ["status", "createdAt"])
-    .index("by_decision_pending", ["decisionPending"]),
+    .index("by_decision_pending", ["decisionPending"])
+    .index("by_edit_pending", ["editPending"]),
+
+  // 240 px thumbnails of the Mac's image bank (pushed by `cf sync`), for the editor's photo picker.
+  carouselBank: defineTable({
+    imageId: v.string(), // sha1 of the file on the Mac
+    category: v.string(), // bank folder, e.g. qi_gym
+    name: v.string(), // file name
+    storageId: v.id("_storage"),
+    width: v.number(),
+    height: v.number(),
+  })
+    .index("by_image", ["imageId"])
+    .index("by_category", ["category"]),
 };

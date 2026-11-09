@@ -6,7 +6,7 @@ import { formatAgo, formatDay, formatDayLong, formatInt } from "@/lib/format";
 import type { Status } from "@/ui";
 
 // Carrousels page: mirror of the Carousel Factory on the Mac (convex/carousels.ts).
-// URL state: ?vue=plan|review|all · &date=YYYY-MM-DD · &statut= · &compte= · &c=<carousel id>
+// URL state: ?vue=plan|review|all · &date=YYYY-MM-DD · &statut= · &compte= · &c=<carousel id> · &edit=1 (editor)
 
 export type ViewKey = "plan" | "review" | "all";
 export type ReviewAction = "ok" | "redo" | "no";
@@ -97,6 +97,7 @@ export function useCarouselsViewModel() {
   const rawView = params.get("vue") as ViewKey | null;
   const view: ViewKey = rawView && VIEWS.includes(rawView) ? rawView : "plan";
   const cid = params.get("c");
+  const editing = !!cid && params.get("edit") === "1";
   const today = todayIso();
   const rawDate = params.get("date") ?? "";
   const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : today;
@@ -304,7 +305,11 @@ export function useCarouselsViewModel() {
     account,
     setAccount: (a: string) => set({ compte: a || null }),
     cid,
-    close: () => set({ c: null }),
+    close: () => set({ c: null, edit: null }),
+    editing,
+    openEditor: () => set({ edit: "1" }),
+    closeEditor: () => set({ edit: null }),
+    detailData: detailData ?? null,
     plan,
     gallery,
     detail,

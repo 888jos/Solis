@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, Pencil, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Card } from "@/ui";
@@ -13,7 +13,7 @@ const BUTTONS: { action: ReviewAction; label: string; key: string; tone: string;
   { action: "no", label: "Rejeter", key: "X", tone: "critical", Icon: X },
 ];
 
-export function CarouselDetail({ detail, review, onClose }: { detail: Detail; review: VM["review"]; onClose: () => void }) {
+export function CarouselDetail({ detail, review, onClose, onEdit }: { detail: Detail; review: VM["review"]; onClose: () => void; onEdit: () => void }) {
   const [copied, setCopied] = useState(false);
 
   // V / R / X review shortcuts, ignored while typing.
@@ -53,6 +53,10 @@ export function CarouselDetail({ detail, review, onClose }: { detail: Detail; re
           <p className="muted">{detail.meta}</p>
         </div>
         <Badge status={detail.status.tone}>{detail.status.label}</Badge>
+        <button type="button" className="btn" onClick={onEdit}>
+          <Pencil />
+          Modifier
+        </button>
       </div>
 
       <div className="cr-detail">

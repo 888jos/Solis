@@ -1,7 +1,9 @@
 import { v } from "convex/values";
+import type { Infer } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authMutation, authQuery, carouselSyncMutation, carouselSyncQuery } from "./lib/auth";
+import { carouselEditsV } from "./schema/content";
 
 // Carousel Factory mirror (see convex/schema/content.ts).
 // - authQuery / authMutation: the Carrousels page (src/features/carousels).
@@ -149,7 +151,78 @@ export const detail = authQuery({
         : null,
       nextToReview: queue[0]?.cid ?? null,
       toReview: queue.length,
+      editor: c.editor ?? null,
+      pendingEdit: c.pendingEdit?.edits ?? null,
+      editStatus: c.editStatus ?? null,
+      photos: await photoUrls(ctx, c),
     };
+  },
+});
+
+/* ---------------------------------------------------------------- editor */
+
+type Edits = Infer<typeof carouselEditsV>;
+
+/** Thumbnails of the photos the editor shows: the slides' current photos and those of a pending edit. */
+async function photoUrls(ctx: QueryCtx, c: Doc<"carousels">) {
+  const ids = new Set<string>();
+  for (const s of (c.editor?.slides ?? []) as { images?: string[] }[]) for (const id of s.images ?? []) ids.add(id);
+  for (const i of c.pendingEdit?.edits.images ?? []) ids.add(i.imageId);
+  const out: Record<string, { url: string; name: string; category: string }> = {};
+  for (const id of ids) {
+    const b = await ctx.db.query("carouselBank").withIndex("by_image", (q) => q.eq("imageId", id)).unique();
+    const url = b ? await ctx.storage.getUrl(b.storageId) : null;
+    if (b && url) out[id] = { url, name: b.name, category: b.category };
+  }
+  return out;
+}
+
+/** A newer save wins field by field over an edit the Mac has not applied yet. */
+function mergeEdits(old: Edits | undefined, next: Edits): Edits {
+  if (!old) return next;
+  const text = new Map(old.text.map((t) => [t.path, t]));
+  for (const t of next.text) text.set(t.path, t);
+  const style = new Map(old.style.map((s) => [s.slide, s]));
+  for (const s of next.style) style.set(s.slide, s);
+  const images = new Map(old.images.map((i) => [`${i.slide}.${i.slot}`, i]));
+  for (const i of next.images) images.set(`${i.slide}.${i.slot}`, i);
+  return { text: [...text.values()], style: [...style.values()], images: [...images.values()] };
+}
+
+/** Enregistrer: stored here until `cf sync --edits` applies it on the Mac (re-render) and acknowledges. */
+export const saveEdits = authMutation({
+  args: { cid: v.string(), edits: carouselEditsV },
+  handler: async (ctx, { cid, edits }) => {
+    const c = await byCid(ctx, cid);
+    if (!c) throw new Error("Carrousel inconnu");
+    if (!c.editor) throw new Error("Ce carrousel n'est pas encore modifiable : attendre la prochaine synchro du Mac");
+    if (edits.text.length + edits.style.length + edits.images.length === 0) return { pending: !!c.editPending };
+    for (const s of edits.style) {
+      if (s.color && !/^#[0-9a-fA-F]{6}$/.test(s.color)) throw new Error(`Couleur invalide : ${s.color}`);
+      if (s.scale !== undefined && (s.scale < 0.6 || s.scale > 1.8)) throw new Error("Taille hors limites (60 à 180 %)");
+    }
+    const now = Date.now();
+    await ctx.db.patch(c._id, {
+      pendingEdit: { edits: mergeEdits(c.editPending ? c.pendingEdit?.edits : undefined, edits), at: now },
+      editPending: true,
+      editStatus: { state: "pending", at: now },
+    });
+    return { pending: true };
+  },
+});
+
+/** Photo picker: bank categories with their counts, and the thumbnails of one category. */
+export const bank = authQuery({
+  args: { category: v.optional(v.string()) },
+  handler: async (ctx, { category }) => {
+    const all = await ctx.db.query("carouselBank").collect();
+    const counts: Record<string, number> = {};
+    for (const b of all) counts[b.category] = (counts[b.category] ?? 0) + 1;
+    const rows = category ? all.filter((b) => b.category === category).sort((a, b) => a.name.localeCompare(b.name)) : [];
+    const images = await Promise.all(
+      rows.map(async (b) => ({ imageId: b.imageId, name: b.name, category: b.category, url: await ctx.storage.getUrl(b.storageId) })),
+    );
+    return { counts, images: images.filter((i): i is typeof i & { url: string } => !!i.url) };
   },
 });
 
@@ -281,6 +354,7 @@ const carouselV = v.object({
   updatedAt: v.number(),
   slidesHash: v.string(),
   slides: v.optional(v.array(v.id("_storage"))), // only when new slides were uploaded
+  editor: v.optional(v.any()), // what the editor shows (see convex/schema/content.ts)
 });
 
 export const syncCarousels = carouselSyncMutation({
@@ -322,6 +396,72 @@ export const ackDecisions = carouselSyncMutation({
       if (c && c.decisionPending && (c.decision?.at ?? 0) <= d.at) await ctx.db.patch(c._id, { decisionPending: false });
     }
     return decisions.length;
+  },
+});
+
+/** Edits saved in the editor that the Mac has not applied yet. */
+export const pendingEdits = carouselSyncQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("carousels").withIndex("by_edit_pending", (q) => q.eq("editPending", true)).collect();
+    return rows.filter((c) => c.pendingEdit).map((c) => ({ cid: c.cid, at: c.pendingEdit!.at, edits: c.pendingEdit!.edits }));
+  },
+});
+
+/** The Mac applied (or refused) these edits. A newer save made meanwhile stays pending. */
+export const ackEdits = carouselSyncMutation({
+  args: { results: v.array(v.object({ cid: v.string(), at: v.number(), ok: v.boolean(), message: v.string() })) },
+  handler: async (ctx, { results }) => {
+    const now = Date.now();
+    for (const r of results) {
+      const c = await byCid(ctx, r.cid);
+      if (!c) continue;
+      const newer = c.pendingEdit && c.pendingEdit.at > r.at;
+      if (newer) continue;
+      await ctx.db.patch(c._id, {
+        pendingEdit: undefined,
+        editPending: false,
+        editStatus: r.ok ? { state: "done", at: now } : { state: "error", at: now, message: r.message },
+      });
+    }
+    return results.length;
+  },
+});
+
+export const bankIds = carouselSyncQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("carouselBank").collect()).map((b) => b.imageId),
+});
+
+export const syncBank = carouselSyncMutation({
+  args: {
+    images: v.array(
+      v.object({ imageId: v.string(), category: v.string(), name: v.string(), storageId: v.id("_storage"), width: v.number(), height: v.number() }),
+    ),
+  },
+  handler: async (ctx, { images }) => {
+    for (const img of images) {
+      const e = await ctx.db.query("carouselBank").withIndex("by_image", (q) => q.eq("imageId", img.imageId)).unique();
+      if (e) {
+        if (e.storageId !== img.storageId) await ctx.storage.delete(e.storageId);
+        await ctx.db.patch(e._id, img);
+      } else await ctx.db.insert("carouselBank", img);
+    }
+    return images.length;
+  },
+});
+
+export const pruneBank = carouselSyncMutation({
+  args: { imageIds: v.array(v.string()) },
+  handler: async (ctx, { imageIds }) => {
+    for (const id of imageIds) {
+      const e = await ctx.db.query("carouselBank").withIndex("by_image", (q) => q.eq("imageId", id)).unique();
+      if (e) {
+        await ctx.storage.delete(e.storageId);
+        await ctx.db.delete(e._id);
+      }
+    }
+    return imageIds.length;
   },
 });
 
