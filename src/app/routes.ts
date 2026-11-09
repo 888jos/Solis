@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Clapperboard, Download, Euro, Globe2, LayoutDashboard, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, Clapperboard, Download, Euro, GalleryHorizontalEnd, Globe2, LayoutDashboard, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 // The sidebar and the router both read this list. One entry per feature module in src/features/.
@@ -20,6 +20,7 @@ export const PAGES: PageDef[] = [
   { id: "expenses", path: "/depenses", label: "Dépenses", section: "Dépenses", icon: Receipt, Component: lazy(() => import("@/features/expenses")) },
   { id: "acquisition", path: "/acquisition", label: "Acquisition", section: "Croissance", icon: Download, Component: lazy(() => import("@/features/acquisition")) },
   { id: "ugc", path: "/ugc", label: "Créateurs UGC", section: "Croissance", icon: Clapperboard, Component: lazy(() => import("@/features/ugc")) },
+  { id: "carousels", path: "/carrousels", label: "Carrousels", section: "Croissance", icon: GalleryHorizontalEnd, Component: lazy(() => import("@/features/carousels")) },
   { id: "aso", path: "/aso", label: "ASO", section: "Croissance", icon: Search, Component: lazy(() => import("@/features/aso")) },
   { id: "engagement", path: "/engagement", label: "Engagement", section: "Produit", icon: Activity, Component: lazy(() => import("@/features/engagement")) },
   { id: "reviews", path: "/avis", label: "Avis & notes", section: "Produit", icon: Star, Component: lazy(() => import("@/features/reviews")) },

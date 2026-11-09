@@ -8,7 +8,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { PAGES, SECTIONS } from "./routes";
 
 /** Pages where the global period/app filters don't apply hide them. */
-const NO_FILTERS = new Set(["/sources", "/reglages", "/versions"]);
+const NO_FILTERS = new Set(["/sources", "/reglages", "/versions", "/carrousels"]);
 
 export function Shell() {
   const [navOpen, setNavOpen] = useState(false);

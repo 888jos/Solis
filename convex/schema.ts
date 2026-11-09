@@ -1,5 +1,6 @@
 import { defineSchema } from "convex/server";
 import { analyticsTables } from "./schema/analytics";
+import { contentTables } from "./schema/content";
 import { coreTables } from "./schema/core";
 import { expenseTables } from "./schema/expenses";
 import { growthTables } from "./schema/growth";
@@ -16,4 +17,5 @@ export default defineSchema({
   ...growthTables,
   ...productTables,
   ...analyticsTables,
+  ...contentTables,
 });
