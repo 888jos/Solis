@@ -75,9 +75,11 @@ export const keywords = authQuery({
         difficulty: k.difficulty ?? null,
         competitors: k.competitors ?? null,
         astroUpdatedAt: k.astroUpdatedAt ?? null,
+        statsSource: k.statsSource ?? (k.popularity != null ? "astro" : null),
+        statsUpdatedAt: k.statsUpdatedAt ?? k.astroUpdatedAt ?? null,
       });
     }
-    return { sync: await latestRun(ctx, "aso_ranks"), astro: await latestRun(ctx, "astro"), rows };
+    return { sync: await latestRun(ctx, "aso_ranks"), stats: await latestRun(ctx, "aso_stats"), astro: await latestRun(ctx, "astro"), rows };
   },
 });
 

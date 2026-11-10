@@ -129,8 +129,26 @@ export function KeywordTable({ vm }: { vm: AsoViewModel }) {
       ),
     },
     { key: "move", header: "vs 7 j", align: "right", cell: (r) => <Move move={r.move} /> },
-    { key: "pop", header: <span title="Popularité Apple Search Ads (5 à 100), via Astro">Popularité</span>, align: "right", cell: (r) => <Meter value={r.popularity} tone="pop" /> },
-    { key: "diff", header: <span title="Difficulté Astro (0 à 100) : force des apps déjà classées">Difficulté</span>, align: "right", cell: (r) => <Meter value={r.difficulty} tone="diff" /> },
+    {
+      key: "pop",
+      header: <span title="Estimée (5 à 100) : nombre de lettres à taper avant que l'App Store suggère le mot-clé, et sa place dans les suggestions">Popularité</span>,
+      align: "right",
+      cell: (r) => (
+        <span title={r.statsLabel} className={r.statsFromAstro ? "aso-stale" : undefined}>
+          <Meter value={r.popularity} tone="pop" />
+        </span>
+      ),
+    },
+    {
+      key: "diff",
+      header: <span title="0 à 100 : force des 10 premières apps (nombre médian de notes, échelle log : 100 000 notes = 100)">Difficulté</span>,
+      align: "right",
+      cell: (r) => (
+        <span title={r.statsLabel} className={r.statsFromAstro ? "aso-stale" : undefined}>
+          <Meter value={r.difficulty} tone="diff" />
+        </span>
+      ),
+    },
     { key: "opp", header: <span title="Popularité × facilité × marge de progression (0 à 100)">Opportunité</span>, align: "right", cell: (r) => (r.opportunity == null ? <span className="muted">—</span> : <strong className="num">{r.opportunity}</strong>) },
     { key: "apps", header: <span className="aso-hide-sm" title="Nombre d'apps classées sur ce mot-clé (Astro)">Apps</span>, align: "right", cell: (r) => <span className="num muted aso-hide-sm">{r.competitors ?? "—"}</span> },
     {
@@ -160,7 +178,7 @@ export function KeywordTable({ vm }: { vm: AsoViewModel }) {
   return (
     <Card
       title="Où se classent les mots-clés suivis ?"
-      subtitle="Rang dans la recherche App Store (Astro, jusqu'à #999) ou iTunes Search (top 200) · popularité et difficulté d'Astro"
+      subtitle="Rang réel dans la recherche App Store (≈ 250 premiers), mesuré chaque jour · popularité estimée et difficulté recalculées tous les 14 jours"
       flush
       footer={<AddKeyword form={vm.addForm} />}
     >

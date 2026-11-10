@@ -62,7 +62,7 @@ export default function Page() {
                   )}
                 </div>
               ) : (
-                <EmptyState title="Aucune mesure pour l'instant">La mesure quotidienne passe par l'API iTunes Search (≈ 20 requêtes par minute).</EmptyState>
+                <EmptyState title="Aucune mesure pour l'instant">La mesure quotidienne lit la recherche App Store de chaque pays (≈ 20 requêtes par minute).</EmptyState>
               )}
             </Card>
           </div>
@@ -83,8 +83,9 @@ export default function Page() {
 
           <div className="aso-sources">
             <SourceNote source="Métadonnées : App Store Connect" updatedAt={vm.metaSync?.lastOkAt ?? null} />
-            <SourceNote source="Rangs App Store, popularité, difficulté : Astro (Mac)" updatedAt={vm.astroSync?.lastOkAt ?? null} />
-            <SourceNote source="Rangs quotidiens : API iTunes Search (top 200)" updatedAt={vm.ranksSync?.lastOkAt ?? null} />
+            <SourceNote source="Rangs : recherche App Store, chaque jour" updatedAt={vm.ranksSync?.lastOkAt ?? null} />
+            <SourceNote source="Popularité estimée et difficulté : calculées par Solis" updatedAt={vm.statsSync?.lastOkAt ?? null} />
+            <SourceNote source="Historique avant le 11 nov. : import Astro (grisé tant que pas recalculé)" updatedAt={vm.astroSync?.lastOkAt ?? null} />
           </div>
         </>
       )}

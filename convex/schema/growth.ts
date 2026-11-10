@@ -110,7 +110,9 @@ export const growthTables = {
     lastRankSource: v.optional(v.string()),
     prevRank: v.optional(v.union(v.number(), v.null())), // latest measure at least 7 days before lastRankDate
     prevRankDate: v.optional(v.string()),
-    itunesDate: v.optional(v.string()), // last day the iTunes tracker measured it
+    itunesDate: v.optional(v.string()), // last day the server tracker measured it (App Store search, iTunes fallback)
+    statsSource: v.optional(v.string()), // "solis" (computed from App Store search + suggestions) or "astro" (imported)
+    statsUpdatedAt: v.optional(v.number()),
   })
     .index("by_app", ["appSlug"])
     .index("by_app_keyword_country", ["appSlug", "keyword", "country"]),
@@ -126,6 +128,8 @@ export const growthTables = {
     resultCount: v.optional(v.number()),
     // "astro" = real App Store search results measured by Astro on the Mac; "itunes" (or absent) = public
     // iTunes Search API. One row per day: an Astro measure replaces an iTunes one, never the reverse.
-    source: v.optional(v.union(v.literal("itunes"), v.literal("astro"))),
+    // "appstore" = real App Store search order (server, daily); "astro" = imported from Astro; "itunes" (or
+    // absent) = public iTunes Search API. One row per day; priority appstore > astro > itunes.
+    source: v.optional(v.union(v.literal("itunes"), v.literal("astro"), v.literal("appstore"))),
   }).index("by_app_keyword_date", ["appSlug", "keyword", "country", "date"]).index("by_date", ["date"]),
 };

@@ -151,6 +151,8 @@ export type KeywordRowVM = {
   coverage: Coverage;
   coverageLabel: string;
   sourceLabel: string;
+  statsLabel: string;
+  statsFromAstro: boolean;
   selected: boolean;
   select: () => void;
 };
@@ -290,7 +292,9 @@ export function useAsoViewModel() {
     opportunity: r.opp,
     coverage: r.cov,
     coverageLabel: COVERAGE_LABEL[r.cov],
-    sourceLabel: r.rankSource === "astro" ? `App Store (Astro) · ${r.date ? formatDay(r.date) : ""}` : `iTunes Search · ${r.date ? formatDay(r.date) : ""}`,
+    sourceLabel: `${r.rankSource === "appstore" ? "Recherche App Store" : r.rankSource === "astro" ? "Historique Astro" : "iTunes Search"} · ${r.date ? formatDay(r.date) : ""}`,
+    statsLabel: r.statsSource === "solis" ? `Calculé par Solis${r.statsUpdatedAt ? ` le ${formatDay(new Date(r.statsUpdatedAt).toISOString().slice(0, 10))}` : ""}` : r.statsSource === "astro" ? `Import Astro${r.statsUpdatedAt ? ` du ${formatDay(new Date(r.statsUpdatedAt).toISOString().slice(0, 10))}` : ""} : recalcul par Solis à venir` : "Pas encore calculé",
+    statsFromAstro: r.statsSource === "astro",
     selected: selectedRow != null && keyOf(r) === keyOf(selectedRow),
     select: () => setSelectedKey(keyOf(r)),
   }));
@@ -427,6 +431,7 @@ export function useAsoViewModel() {
       count: filtered.length,
     },
     astroSync: kw?.astro ?? null,
+    statsSync: kw?.stats ?? null,
     keywordMore: keywordRows.length > ROWS_PREVIEW ? { showAll, hidden: keywordRows.length - ROWS_PREVIEW, total: keywordRows.length, toggle: () => setShowAll((x) => !x) } : null,
     chart,
     addForm: {

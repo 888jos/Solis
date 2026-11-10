@@ -48,9 +48,11 @@ export const SOURCES: SourceDef[] = [
   { source: "itunes_ratings", name: "iTunes Lookup · notes par pays", feeds: "Avis & notes", job: "reviews", envs: [], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_versions", name: "App Store Connect · versions", feeds: "Versions", job: "versions", envs: ASC, cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_analytics", name: "App Store Connect · analytics (fiche)", feeds: "Acquisition (impressions, vues, conversion)", job: "ascAnalytics", envs: ASC, cadence: "2 fois par jour", staleAfterHours: 30 },
-  { source: "astro", name: "Astro · mots-clés et positions App Store", feeds: "ASO (popularité, difficulté, rangs)", job: null, envs: [], cadence: "poussé depuis le Mac (scripts/astro_sync.py)", staleAfterHours: 50 },
+  { source: "aso_stats", name: "App Store · popularité et difficulté", feeds: "ASO", job: null, envs: [], cadence: "chaque jour, chaque mot-clé tous les 14 jours", staleAfterHours: 50 },
+  // One-off import of Astro's history (scripts/astro_sync.py); never expected to run again: no staleness alert.
+  { source: "astro", name: "Astro · import historique", feeds: "ASO (avant le 11 nov.)", job: null, envs: [], cadence: "import ponctuel", staleAfterHours: 1e9 },
   { source: "aso_metadata", name: "App Store Connect · fiches", feeds: "ASO", job: "aso", envs: ASC, cadence: "chaque jour", staleAfterHours: 50 },
-  { source: "aso_ranks", name: "iTunes Search · positions", feeds: "ASO", job: "aso", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
+  { source: "aso_ranks", name: "App Store · positions des mots-clés", feeds: "ASO", job: "aso", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "amplitude", name: "Amplitude · CortiFree", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "amplitude_questirl", name: "Amplitude · Quest IRL", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_QUESTIRL_API_KEY", "AMPLITUDE_QUESTIRL_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "amplitude_cocorise", name: "Amplitude · Cocorise", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_COCORISE_API_KEY", "AMPLITUDE_COCORISE_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },

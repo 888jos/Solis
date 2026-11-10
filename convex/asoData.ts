@@ -90,10 +90,13 @@ type RankRow = { appSlug: string; keyword: string; country: string; date: string
  * Writes one day's rank (Astro wins over iTunes for the same day) and refreshes the keyword's
  * denormalized latest / 7-days-before measure. Returns false when an Astro row kept its place.
  */
-export async function writeRank(ctx: MutationCtx, row: RankRow, source: "itunes" | "astro", keyword?: Doc<"asoKeywords"> | null): Promise<boolean> {
+export type RankSource = "itunes" | "astro" | "appstore";
+const PRIORITY: Record<string, number> = { itunes: 1, astro: 2, appstore: 3 };
+
+export async function writeRank(ctx: MutationCtx, row: RankRow, source: RankSource, keyword?: Doc<"asoKeywords"> | null): Promise<boolean> {
   const range = (q: any) => q.eq("appSlug", row.appSlug).eq("keyword", row.keyword).eq("country", row.country);
   const existing = await ctx.db.query("asoRankings").withIndex("by_app_keyword_date", (q) => range(q).eq("date", row.date)).first();
-  if (existing && existing.source === "astro" && source === "itunes") return false;
+  if (existing && PRIORITY[existing.source ?? "itunes"] > PRIORITY[source]) return false;
   const doc = { ...row, source };
   if (existing) await ctx.db.replace(existing._id, doc);
   else await ctx.db.insert("asoRankings", doc);
@@ -115,11 +118,42 @@ export const upsertRanking = internalMutation({
     rank: v.union(v.number(), v.null()),
     topCompetitor: v.optional(v.string()),
     resultCount: v.optional(v.number()),
+    source: v.optional(v.union(v.literal("itunes"), v.literal("appstore"))),
   },
-  handler: async (ctx, row) => {
+  handler: async (ctx, { source, ...row }) => {
     const k = await ctx.db.query("asoKeywords").withIndex("by_app_keyword_country", (q) => q.eq("appSlug", row.appSlug).eq("keyword", row.keyword).eq("country", row.country)).first();
-    await writeRank(ctx, row, "itunes", k);
+    await writeRank(ctx, row, source ?? "itunes", k);
     if (k) await ctx.db.patch(k._id, { itunesDate: row.date });
+  },
+});
+
+const STATS_MAX_AGE_MS = 14 * 86400000;
+
+/** Keywords whose popularity/difficulty were never computed by Solis, or more than 14 days ago. */
+export const pendingStats = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, { limit }) => {
+    const now = Date.now();
+    const todo = (await ctx.db.query("asoKeywords").collect())
+      .filter((k) => !k.removedAt && (k.statsSource !== "solis" || !k.statsUpdatedAt || now - k.statsUpdatedAt > STATS_MAX_AGE_MS))
+      // Never computed first, then the best ranked.
+      .sort((a, b) => Number(a.statsSource === "solis") - Number(b.statsSource === "solis") || (a.lastRank ?? 9999) - (b.lastRank ?? 9999));
+    return { batch: todo.slice(0, limit).map((k) => ({ id: k._id, appSlug: k.appSlug, keyword: k.keyword, country: k.country })), remaining: Math.max(0, todo.length - limit) };
+  },
+});
+
+export const writeStats = internalMutation({
+  args: { id: v.id("asoKeywords"), popularity: v.number(), difficulty: v.union(v.number(), v.null()), competitors: v.number() },
+  handler: (ctx, { id, popularity, difficulty, competitors }) =>
+    ctx.db.patch(id, { popularity, difficulty: difficulty ?? undefined, competitors, statsSource: "solis", statsUpdatedAt: Date.now() }),
+});
+
+/** True while a stats run started less than an hour ago is still going. */
+export const statsRunActive = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const run = await ctx.db.query("syncRuns").withIndex("by_source_started", (q) => q.eq("source", "aso_stats")).order("desc").first();
+    return !!run && run.status === "running" && Date.now() - run.startedAt < RANK_RUN_STALE_MS;
   },
 });
 

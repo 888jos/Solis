@@ -47,11 +47,11 @@ export const upsertKeywords = carouselSyncMutation({
       const keyword = normalizeKeyword(r.keyword);
       const country = r.country.trim().toLowerCase();
       if (!keyword || !/^[a-z]{2}$/.test(country)) continue;
-      const stats = { popularity: r.popularity, difficulty: r.difficulty, competitors: r.competitors, astroUpdatedAt: r.updatedAt };
+      const stats = { popularity: r.popularity, difficulty: r.difficulty, competitors: r.competitors, astroUpdatedAt: r.updatedAt, statsSource: "astro" };
       const k = await ctx.db.query("asoKeywords").withIndex("by_app_keyword_country", (q) => q.eq("appSlug", appSlug).eq("keyword", keyword).eq("country", country)).first();
       if (k) {
-        // Never brings back a keyword removed from the UI; only refreshes its stats.
-        await ctx.db.patch(k._id, stats);
+        // Never brings back a keyword removed from the UI, never overwrites Solis' own stats.
+        if (k.statsSource !== "solis") await ctx.db.patch(k._id, stats);
         updated++;
       } else {
         await ctx.db.insert("asoKeywords", { appSlug, keyword, country, source: "astro", addedAt: now, ...stats });
