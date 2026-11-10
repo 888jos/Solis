@@ -1167,3 +1167,147 @@ button {
     font-size: 28px;
   }
 }
+
+/* ==========================================================================
+   Sidebar extras: counters, "En pause" fold, tab strip in the top bar, mobile bottom bar.
+   ========================================================================== */
+.nav-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.nav-badge--count {
+  background: var(--surface-hover);
+  color: var(--text-2);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.nav-badge--alert {
+  background: var(--critical);
+  color: #fff;
+}
+
+.nav-item[aria-current="page"] .nav-badge--count {
+  background: transparent;
+  color: inherit;
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+.nav-item--toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.nav-chevron {
+  transition: transform 0.15s ease;
+}
+
+.nav-chevron--open {
+  transform: rotate(90deg);
+}
+
+.page-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.page-tab {
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.page-tab:hover {
+  color: var(--text);
+}
+
+.page-tab[aria-current="page"] {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.mobile-bar {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .page-tabs {
+    order: 3;
+    flex: 1 0 100%;
+    overflow-x: auto;
+  }
+
+  .mobile-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    padding: 6px 8px max(6px, env(safe-area-inset-bottom));
+    background: var(--sidebar);
+    border-top: 1px solid var(--border);
+  }
+
+  .mobile-bar__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .mobile-bar__item svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .mobile-bar__item[aria-current="page"] {
+    color: var(--text);
+  }
+
+  .mobile-bar__item .nav-badge {
+    position: absolute;
+    top: 0;
+    left: calc(50% + 6px);
+  }
+
+  .content {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}

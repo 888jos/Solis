@@ -205,7 +205,7 @@ async function buildToday(ctx: QueryCtx) {
 
   // 1. Sources down (opened by the hourly watchdog).
   const alerts = (await ctx.db.query("alerts").withIndex("by_opened").order("desc").take(200)).filter((a) => a.resolvedAt === undefined);
-  for (const a of alerts) actions.push({ key: a.key, severity: a.kind === "source" ? "critical" : "warning", title: a.message, detail: a.kind === "source" ? "Synchro à réparer" : "Écart inhabituel", href: a.kind === "source" ? "/sources" : "/" });
+  for (const a of alerts) actions.push({ key: a.key, severity: a.kind === "source" ? "critical" : "warning", title: a.message, detail: a.kind === "source" ? "Synchro à réparer" : "Écart inhabituel", href: a.kind === "source" ? "/sources" : "/vue-d-ensemble" });
 
   // 2. Versions validated by Apple, waiting for Jos.
   const versions = await ctx.db.query("appVersions").collect();
@@ -233,7 +233,7 @@ async function buildToday(ctx: QueryCtx) {
   // 5. Experiments past their end date, not decided.
   const exps = await ctx.db.query("experiments").withIndex("by_start").order("desc").take(50);
   for (const e of exps.filter((x) => x.status === "running" && x.endDay < todayParis)) {
-    actions.push({ key: `exp:${e._id}`, severity: "warning", title: `Trancher l'expérience « ${e.title} »`, detail: `Terminée le ${e.endDay}`, href: "/aujourdhui#experiences" });
+    actions.push({ key: `exp:${e._id}`, severity: "warning", title: `Trancher l'expérience « ${e.title} »`, detail: `Terminée le ${e.endDay}`, href: "/#experiences" });
   }
 
   // 6. Goals behind pace this month.
@@ -242,10 +242,10 @@ async function buildToday(ctx: QueryCtx) {
   for (const g of goalRows) {
     const p = await goalProgress(ctx, g, days);
     if (p.ratio != null && p.ratio < 0.9 && p.elapsed >= 5) {
-      actions.push({ key: `goal:${g._id}`, severity: "warning", title: `Objectif en retard : ${METRICS[g.metric]?.label ?? g.metric} (${g.project})`, detail: `Projection à ${Math.round(p.ratio * 100)} % de la cible`, href: "/aujourdhui#objectifs" });
+      actions.push({ key: `goal:${g._id}`, severity: "warning", title: `Objectif en retard : ${METRICS[g.metric]?.label ?? g.metric} (${g.project})`, detail: `Projection à ${Math.round(p.ratio * 100)} % de la cible`, href: "/#objectifs" });
     }
   }
-  if (!goalRows.length) actions.push({ key: "no-goals", severity: "neutral", title: "Fixer les objectifs du mois", detail: "Sans cible, pas de cap", href: "/aujourdhui#objectifs" });
+  if (!goalRows.length) actions.push({ key: "no-goals", severity: "neutral", title: "Fixer les objectifs du mois", detail: "Sans cible, pas de cap", href: "/#objectifs" });
 
   // 7. Expenses: nothing imported for 35 days → the margin is blind.
   const lastBatch = await ctx.db.query("importBatches").order("desc").first();
@@ -438,5 +438,27 @@ export const latestReview = authQuery({
   handler: async (ctx) => {
     const r = await ctx.db.query("reviews").order("desc").first();
     return r ? { weekStart: r.weekStart, weekEnd: r.weekEnd, text: r.text, createdAt: r.createdAt } : null;
+  },
+});
+
+/* ---------------- Sidebar counters ---------------- */
+
+/** Small live counters for the sidebar. Cheap reads only. */
+export const navBadges = authQuery({
+  args: {},
+  handler: async (ctx) => {
+    const t = await buildToday(ctx);
+    const today = t.actions.filter((a) => a.severity !== "neutral").length;
+    const snap = await ctx.db.query("ottoSnapshot").first();
+    const videos = snap?.validation.filter((x) => x.status === "a_valider").reduce((n, x) => n + x.count, 0) ?? 0;
+    const since = addDays(parisDay(Date.now()), -30);
+    let reviews = 0;
+    for (const a of APPS) {
+      const rows = await ctx.db.query("appReviews").withIndex("by_app_created", (q) => q.eq("appSlug", a.slug).gte("createdAt", since)).collect();
+      reviews += rows.filter((r) => r.rating <= 3 && !r.hasResponse).length;
+    }
+    const versions = (await ctx.db.query("appVersions").collect()).filter((r) => ["PENDING_DEVELOPER_RELEASE", "REJECTED", "METADATA_REJECTED"].includes(r.state)).length;
+    const sources = (await ctx.db.query("alerts").withIndex("by_opened").order("desc").take(200)).filter((a) => a.kind === "source" && a.resolvedAt === undefined).length;
+    return { today, videos, reviews, versions, sources };
   },
 });
