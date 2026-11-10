@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Database, Info, Minus, PlugZap, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
-import { APPS, appColor, type AppSlug } from "@/lib/apps";
+import { APPS, appColor, appName, type AppSlug } from "@/lib/apps";
 import { formatAgo, formatPct } from "@/lib/format";
 
 /* ---------- Page header ---------- */
@@ -97,7 +97,7 @@ export function AppLabel({ slug, name }: { slug: string; name?: string }) {
   return (
     <span className="app-chip">
       <span className="app-dot" style={{ background: appColor(slug) }} />
-      {name ?? app?.name ?? slug}
+      {name ?? app?.name ?? appName(slug)}
     </span>
   );
 }

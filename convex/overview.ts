@@ -6,6 +6,7 @@ import { APPS } from "./lib/apps";
 import { authQuery } from "./lib/auth";
 import { addDays, isoDay } from "./lib/dates";
 import { bucketOf, bucketsBetween, loadSales } from "./revenue";
+import { ottoWindow } from "./otto";
 import { SOURCES } from "./sources";
 import { eventKind } from "./subscriptions";
 
@@ -394,9 +395,16 @@ export const summary = authQuery({
       };
     });
 
+    /* ---------- Otto (not an App Store app: only on the all-projects view) ---------- */
+    const ottoRaw = app ? null : await ottoWindow(ctx, { from, to, prevFrom, prevTo }, (d) => bucketOf(d, bucket as Bucket));
+    const otto = ottoRaw
+      ? { ...ottoRaw.current, prev: ottoRaw.previous, series: x.map((k) => round2(ottoRaw.series.get(k) ?? 0)) }
+      : null;
+
     return {
       x,
       bucket,
+      otto,
       hasSales: salesFirstDay != null,
       comparedDays: { missing: missingDays, prevTo: prevCmpTo },
       net: { total: net, prev: salesFirstDay && salesFirstDay <= prevTo ? prevNet : null, series: known(netSeries.map(round2)) },

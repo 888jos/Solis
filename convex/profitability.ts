@@ -80,6 +80,20 @@ export const overview = authQuery({
       appEntry(m.byApp, s.appSlug).proceeds += s.proceedsEur;
       if (!app || s.appSlug === app) addSale(m.sales, s);
     }
+    // Otto (ottoknows.it, Stripe): counted as collected, Stripe fees not deducted, only on the all-projects view.
+    if (!app) {
+      const ottoRows = await ctx.db.query("ottoDaily").withIndex("by_day", (q) => q.lte("day", to)).collect();
+      for (const r of ottoRows) {
+        if (!r.revenueCents) continue;
+        const eur = r.revenueCents / 100;
+        if (!firstSale || r.day < firstSale) firstSale = r.day;
+        const m = get(r.day.slice(0, 7));
+        appEntry(m.byApp, "otto").proceeds += eur;
+        m.sales.grossEur += eur;
+        m.sales.exVatEur += eur;
+        m.sales.proceedsEur += eur;
+      }
+    }
     let studioSpendAllTime = 0;
     for (const i of spend) {
       const m = get(i.date.slice(0, 7));

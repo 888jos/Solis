@@ -60,6 +60,8 @@ const BADGE: Record<Watch["severity"], { status: Status; label: string }> = {
   neutral: { status: "neutral", label: "Info" },
 };
 
+const OTTO_COLOR = appColor("otto");
+
 const plural = (n: number, one: string, many: string) => `${formatInt(n)} ${n > 1 ? many : one}`;
 const shortDay = (iso: string) => formatDay(iso.slice(0, 10));
 
@@ -132,15 +134,20 @@ export function useOverviewViewModel() {
   const subsAt = data.subscriptions.day ? `au ${formatDay(data.subscriptions.day)}` : "";
   const e = data.expenses;
   const expensesMissing = { label: "Aucune dépense importée", to: to("/depenses") };
+  // Otto (Stripe) joins the studio net on the all-projects view.
+  const otto = data.otto;
+  const netTotal = data.net.total + (otto?.revenue ?? 0);
+  const netPrev = data.net.prev == null ? null : data.net.prev + (otto?.prev.revenue ?? 0);
+  const netSpark = otto ? data.net.series.map((v, i) => (v == null ? null : v + (otto.series[i] ?? 0))) : data.net.series;
   const kpis: OverviewKpi[] = [
     {
       key: "net",
       label: "Net versé",
-      value: formatEur(data.net.total),
-      delta: data.net.prev == null ? null : change(data.net.total, data.net.prev),
-      foot: prevFoot(data.net.prev == null ? null : formatEur(data.net.prev)),
-      hint: `Ce qu'Apple verse : après TVA et commission, remboursements déduits${cmpNote}`,
-      spark: data.net.series,
+      value: formatEur(netTotal),
+      delta: netPrev == null ? null : change(netTotal, netPrev),
+      foot: prevFoot(netPrev == null ? null : formatEur(netPrev)),
+      hint: `Ce qu'Apple verse : après TVA et commission, remboursements déduits${otto ? " · plus Otto : encaissé Stripe, frais Stripe non déduits" : ""}${cmpNote}`,
+      spark: netSpark,
     },
     e
       ? {
@@ -158,11 +165,11 @@ export function useOverviewViewModel() {
       ? {
           key: "margin",
           label: "Marge",
-          value: formatEur(e.margin),
-          delta: e.prevMargin == null ? null : change(e.margin, e.prevMargin),
-          foot: e.partial ? `dépenses depuis le ${formatDay(e.coveredFrom)}` : prevFoot(e.prevMargin == null ? null : formatEur(e.prevMargin)),
-          hint: "Net versé moins dépenses",
-          spark: e.marginSeries,
+          value: formatEur(e.margin + (otto?.revenue ?? 0)),
+          delta: e.prevMargin == null ? null : change(e.margin + (otto?.revenue ?? 0), e.prevMargin + (otto?.prev.revenue ?? 0)),
+          foot: e.partial ? `dépenses depuis le ${formatDay(e.coveredFrom)}` : prevFoot(e.prevMargin == null ? null : formatEur(e.prevMargin + (otto?.prev.revenue ?? 0))),
+          hint: "Net versé moins dépenses (le coût IA d'Otto arrive par la banque ou la clé admin OpenAI, pas compté deux fois)",
+          spark: otto ? e.marginSeries.map((v, i) => (v == null ? null : v + (otto.series[i] ?? 0))) : e.marginSeries,
         }
       : { key: "margin", label: "Marge", value: "—", foot: "", hint: "Net versé moins dépenses : il manque les dépenses", spark: null, missing: { label: "Il manque les dépenses", to: to("/depenses") } },
     {
@@ -198,10 +205,11 @@ export function useOverviewViewModel() {
   const chartSeries: Series[] = APPS.map((a) => data.perApp.find((p) => p.slug === a.slug))
     .filter((p): p is NonNullable<typeof p> => !!p)
     .map((p) => ({ key: p.slug, label: appName(p.slug), color: appColor(p.slug), values: p.netSeries }));
+  if (otto) chartSeries.push({ key: "otto", label: "Otto", color: OTTO_COLOR, values: otto.series });
   const chart = {
     x: data.x,
     series: chartSeries,
-    total: formatEur(data.net.total),
+    total: formatEur(netTotal),
     hasData: chartSeries.some((s) => s.values.some((val) => val !== 0)),
   };
 
@@ -225,6 +233,29 @@ export function useOverviewViewModel() {
     ],
     to: withApp("/revenus", p.slug),
   }));
+
+  if (otto) {
+    const conv = otto.reports ? otto.paid / otto.reports : null;
+    apps.push({
+      slug: "otto",
+      name: "Otto",
+      color: OTTO_COLOR,
+      net: formatEur(otto.revenue),
+      netDelta: change(otto.revenue, otto.prev.revenue),
+      netFoot: `encaissé Stripe · préc. ${formatEur(otto.prev.revenue)}`,
+      spark: otto.series,
+      version: null,
+      versionFoot: `Marge après IA : ${formatEur(otto.margin)}`,
+      pending: null,
+      stats: [
+        { key: "reports", label: "Rapports", value: formatInt(otto.reports) },
+        { key: "paid", label: "Paiements", value: formatInt(otto.paid) },
+        { key: "conv", label: "Conversion", value: conv == null ? "—" : formatPct(conv) },
+        { key: "ai", label: "Coût IA", value: formatEur(otto.aiCost) },
+      ],
+      to: { pathname: "/projets/otto", search: "" },
+    });
+  }
 
   /* ---------- Watch list ---------- */
   const watch: WatchRow[] = data.watch.map((w) => ({ key: w.key, status: BADGE[w.severity].status, badge: BADGE[w.severity].label, ...watchText(w), appSlug: w.appSlug, to: to(w.href) }));

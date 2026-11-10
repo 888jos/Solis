@@ -1,4 +1,6 @@
 import { v } from "convex/values";
+import type { QueryCtx } from "./_generated/server";
+import { ratesForDay } from "./lib/fx";
 import { authQuery, carouselSyncMutation } from "./lib/auth";
 
 // Projets > Otto (src/features/project-otto): ottoknows.it, read on the Mac from Otto's Convex prod
@@ -17,6 +19,45 @@ function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+}
+
+/**
+ * Otto over a date window, for the studio-wide pages (Vue d'ensemble, Rentabilité, Aujourd'hui).
+ * Revenue = what Stripe collected (EUR, Stripe fees not deducted). AI cost converted from USD with the
+ * rate of the window's last day. `bucketOf` maps a day to the caller's chart bucket.
+ */
+export async function ottoWindow(
+  ctx: QueryCtx,
+  win: { from: string; to: string; prevFrom: string; prevTo: string },
+  bucketOf?: (day: string) => string | null,
+) {
+  const rows = await ctx.db
+    .query("ottoDaily")
+    .withIndex("by_day", (q) => q.gte("day", win.prevFrom).lte("day", win.to))
+    .collect();
+  if (!rows.length && !(await ctx.db.query("ottoDaily").first())) return null;
+  const { rates } = await ratesForDay(ctx.db, win.to);
+  const usdPerEur = rates.USD ?? 1.1;
+  const cur = { reports: 0, paid: 0, revenue: 0, aiCost: 0 };
+  const prev = { reports: 0, paid: 0, revenue: 0, aiCost: 0 };
+  const series = new Map<string, number>();
+  for (const r of rows) {
+    const t = r.day >= win.from && r.day <= win.to ? cur : r.day >= win.prevFrom && r.day <= win.prevTo ? prev : null;
+    if (!t) continue;
+    const revenue = r.revenueCents / 100;
+    t.reports += r.reports;
+    t.paid += r.paid;
+    t.revenue += revenue;
+    t.aiCost += r.aiCostMicroUsd / 1e6 / usdPerEur;
+    if (t === cur && bucketOf) {
+      const k = bucketOf(r.day);
+      if (k) series.set(k, (series.get(k) ?? 0) + revenue);
+    }
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const fix = (t: typeof cur) => ({ reports: t.reports, paid: t.paid, revenue: r2(t.revenue), aiCost: r2(t.aiCost), margin: r2(t.revenue - t.aiCost) });
+  const lastSync = await ctx.db.query("syncRuns").withIndex("by_source_started", (q) => q.eq("source", SOURCE)).order("desc").first();
+  return { current: fix(cur), previous: fix(prev), series, syncedAt: lastSync?.finishedAt ?? null };
 }
 
 type Totals = { reports: number; paid: number; revenueCents: number; aiCostMicroUsd: number };
