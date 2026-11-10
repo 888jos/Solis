@@ -1329,6 +1329,7 @@ a.kpi--link:hover {
 a.kpi--link:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
 
 /* Interactive globe (src/ui/charts/Globe.tsx) */
 .globe {
