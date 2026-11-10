@@ -1,3 +1,4 @@
+import { useExplorerLink } from "@/lib/explorer";
 import { ExternalLink } from "lucide-react";
 import { Badge, BarList, Card, DataTable, EmptyState, Kpi, KpiSkeleton, PageHeader, Segmented, Skeleton, SourceNote, TimeChart } from "@/ui";
 import { formatDay, formatDayLong, formatEur, formatInt } from "@/lib/format";
@@ -7,8 +8,12 @@ import "./otto.css";
 
 const SYNC_CMD = "python3 scripts/solis_projects_sync.py otto";
 
+const OTTO_METRIC: Record<string, string> = { "Rapports générés": "ottoReports", Paiements: "ottoPayments", Revenu: "ottoRevenue", "Coût IA": "ottoAiCost" };
+const VIDEO_METRIC: Record<string, string> = { "Vidéos publiées": "videoCount", Vues: "videoViews", Commentaires: "videoComments" };
+
 export default function OttoPage() {
   const vm = useOttoViewModel();
+  const explore = useExplorerLink();
   const actions = <Segmented<RangeKey> label="Période" value={vm.range} onChange={vm.setRange} options={[...RANGES]} />;
 
   if (vm.loading) {
@@ -56,7 +61,7 @@ export default function OttoPage() {
 
       <div className="grid grid--kpi ot-kpis">
         {vm.kpis.map((k) => (
-          <Kpi key={k.label} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} hint={k.hint} />
+          <Kpi key={k.label} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} hint={k.hint} to={OTTO_METRIC[k.label] ? explore(OTTO_METRIC[k.label], { app: "" }) : undefined} />
         ))}
       </div>
 
@@ -72,7 +77,7 @@ export default function OttoPage() {
       <h2 className="ot-section">Vidéos TikTok / Instagram</h2>
       <div className="grid grid--kpi">
         {vm.videoKpis.map((k) => (
-          <Kpi key={k.label} label={k.label} value={k.value} foot={k.foot} />
+          <Kpi key={k.label} label={k.label} value={k.value} foot={k.foot} to={VIDEO_METRIC[k.label] ? explore(VIDEO_METRIC[k.label], { seg: "account", app: "" }) : undefined} />
         ))}
       </div>
 

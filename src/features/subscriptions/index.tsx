@@ -1,3 +1,4 @@
+import { useExplorerLink } from "@/lib/explorer";
 import { formatInt, formatPct } from "@/lib/format";
 
 // Counts are whole numbers: on tiny ranges the shared axis puts ticks at 0.25 steps, leave those unlabeled.
@@ -12,6 +13,7 @@ type EventRow = View["events"]["rows"][number];
 
 export default function SubscriptionsPage() {
   const vm = useSubscriptionsViewModel();
+  const explore = useExplorerLink();
   const v = vm.view;
   const header = <PageHeader title="Abonnements" subtitle="Abonnés actifs, essais et mouvements, rapports Apple et RevenueCat" />;
 
@@ -107,7 +109,7 @@ export default function SubscriptionsPage() {
 
       <div className="grid grid--kpi">
         {v.kpis.map((k) => (
-          <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} spark={k.spark ? <Sparkline values={k.spark} color="var(--text-3)" /> : undefined} />
+          <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} spark={k.spark ? <Sparkline values={k.spark} color="var(--text-3)" /> : undefined} to={k.key === "paid" || k.key === "trials" ? explore(k.key) : k.key === "conversion" ? explore("conversions") : undefined} />
         ))}
       </div>
 

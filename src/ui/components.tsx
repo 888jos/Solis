@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Database, Info, Minus, PlugZap, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
+import { Link, type To } from "react-router-dom";
 import { APPS, appColor, appIcon, appName, type AppSlug } from "@/lib/apps";
 import { formatAgo, formatPct } from "@/lib/format";
 
@@ -50,9 +51,11 @@ export function Delta({ value, invert }: { value: number | null; invert?: boolea
   );
 }
 
-export function Kpi({ label, value, delta, invertDelta, foot, spark, hint, big }: { label: ReactNode; value: ReactNode; delta?: number | null; invertDelta?: boolean; foot?: ReactNode; spark?: ReactNode; hint?: string; big?: boolean }) {
-  return (
-    <div className={`card kpi${big ? " kpi--big" : ""}${spark ? " kpi--spark" : ""}`} title={hint}>
+/** `to`: the whole tile (curve included) opens that page, usually the chart explorer on this metric. */
+export function Kpi({ label, value, delta, invertDelta, foot, spark, hint, big, to }: { label: ReactNode; value: ReactNode; delta?: number | null; invertDelta?: boolean; foot?: ReactNode; spark?: ReactNode; hint?: string; big?: boolean; to?: To }) {
+  const className = `card kpi${big ? " kpi--big" : ""}${spark ? " kpi--spark" : ""}${to ? " kpi--link" : ""}`;
+  const body = (
+    <>
       <div className="kpi__label">{label}</div>
       <div className="kpi__value num">{value}</div>
       <div className="kpi__foot">
@@ -60,6 +63,15 @@ export function Kpi({ label, value, delta, invertDelta, foot, spark, hint, big }
         {foot && <span>{foot}</span>}
       </div>
       {spark && <div className="kpi__spark">{spark}</div>}
+    </>
+  );
+  return to ? (
+    <Link to={to} className={className} title={hint ? `${hint} · cliquer pour explorer` : "Cliquer pour explorer"}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className} title={hint}>
+      {body}
     </div>
   );
 }

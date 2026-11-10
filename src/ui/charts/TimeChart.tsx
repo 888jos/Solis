@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ChartTooltip } from "./Tooltip";
 import { Legend } from "./Legend";
 import { labelIndexes, niceTicks } from "./scale";
-import type { ChartData } from "./types";
+import type { ChartData, Series } from "./types";
 import { useWidth } from "./useWidth";
 
 type Props = ChartData & {
@@ -20,12 +20,14 @@ type Props = ChartData & {
   emptyLabel?: ReactNode;
   /** Draw small values at the top (ranks: 1 is best). Line charts only. */
   invertY?: boolean;
+  /** Optional dashed line drawn over the chart (e.g. the previous period), with its own tooltip label. */
+  overlay?: Series & { tooltipLabel?: (i: number) => string };
 };
 
 const PAD = { top: 12, right: 8, bottom: 26, left: 52 };
 
 /** One chart for every time series in Solis: line, area, stacked or grouped bars, with a crosshair tooltip. */
-export function TimeChart({ x, series, kind = "line", height = 240, formatValue, formatX, formatXLong, showTotal, legend = true, emptyLabel, invertY = false }: Props) {
+export function TimeChart({ x, series, kind = "line", height = 240, formatValue, formatX, formatXLong, showTotal, legend = true, emptyLabel, invertY = false, overlay }: Props) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const isBar = kind === "bar" || kind === "bar-grouped";
@@ -54,10 +56,15 @@ export function TimeChart({ x, series, kind = "line", height = 240, formatValue,
         });
       }
     });
+    overlay?.values.forEach((v) => {
+      if (v == null) return;
+      hi = Math.max(hi, v);
+      lo = Math.min(lo, v);
+    });
     const integer = series.every((s) => s.values.every((v) => v == null || Number.isInteger(v)));
     const t = niceTicks(lo, hi === lo ? lo + 1 : hi, 4, integer);
     return { ticks: t, yMin: t[0], yMax: t[t.length - 1] };
-  }, [x, series, stacked]);
+  }, [x, series, stacked, overlay]);
 
   // Axis labels: when every tick is a whole number, drop the ",00" decimals ("50,00 €" → "50 €").
   const tickLabels = useMemo(() => {
@@ -110,6 +117,9 @@ export function TimeChart({ x, series, kind = "line", height = 240, formatValue,
     const total = series.reduce((sum, s) => sum + (s.values[hover] ?? 0), 0);
     tooltipRows.push({ color: "transparent", label: "Total", value: formatValue(total) });
   }
+  if (hover != null && overlay && overlay.values[hover] != null) {
+    tooltipRows.push({ color: overlay.color, label: overlay.tooltipLabel ? overlay.tooltipLabel(hover) : overlay.label, value: formatValue(overlay.values[hover] as number) });
+  }
 
   if (!series.some((s) => s.values.some((v) => v != null))) {
     return (
@@ -121,7 +131,7 @@ export function TimeChart({ x, series, kind = "line", height = 240, formatValue,
 
   return (
     <div className="stack" style={{ gap: 10 }}>
-      {legend && <Legend items={series.map((s) => ({ label: s.label, color: s.color }))} />}
+      {legend && <Legend items={[...series.map((s) => ({ label: s.label, color: s.color })), ...(overlay ? [{ label: overlay.label, color: overlay.color }] : [])]} />}
       <div className="chart" ref={ref} style={{ height }}>
         {width > 0 && (
           <svg width={width} height={height} role="img" aria-label={series.map((s) => s.label).join(", ")}>
@@ -192,6 +202,10 @@ export function TimeChart({ x, series, kind = "line", height = 240, formatValue,
                   </g>
                 );
               })}
+
+            {overlay && (
+              <path d={linePath(overlay.values)} fill="none" stroke={overlay.color} strokeWidth={1.5} strokeDasharray="4 4" strokeLinejoin="round" opacity={0.85} />
+            )}
 
             <rect x={PAD.left} y={PAD.top} width={innerW} height={innerH} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
           </svg>

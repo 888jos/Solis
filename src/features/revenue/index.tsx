@@ -1,3 +1,4 @@
+import { useExplorerLink } from "@/lib/explorer";
 import { AppLabel, Card, DataTable, EmptyState, Kpi, KpiSkeleton, NotConnected, PageHeader, Skeleton, SourceNote, TimeChart, type Column } from "@/ui";
 import { formatEurCompact } from "@/lib/format";
 import { Waterfall } from "./components/Waterfall";
@@ -34,8 +35,11 @@ const refundColumns: Column<RefundRow>[] = [
   { key: "net", header: "Net repris", align: "right", cell: (r) => <span className="num">{r.net}</span> },
 ];
 
+const REV_METRIC: Record<string, string> = { gross: "gross", exvat: "gross", net: "net", sales: "renewals" };
+
 export default function RevenuePage() {
   const vm = useRevenueViewModel();
+  const explore = useExplorerLink();
 
   if (vm.notConnected) {
     return (
@@ -55,7 +59,7 @@ export default function RevenuePage() {
       {vm.kpis ? (
         <div className="grid grid--kpi">
           {vm.kpis.map((k) => (
-            <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} />
+            <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} to={REV_METRIC[k.key] ? explore(REV_METRIC[k.key]) : undefined} />
           ))}
         </div>
       ) : (

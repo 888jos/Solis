@@ -21,6 +21,7 @@ import type * as engagement from "../engagement.js";
 import type * as engagementData from "../engagementData.js";
 import type * as expenses from "../expenses.js";
 import type * as expensesData from "../expensesData.js";
+import type * as explorer from "../explorer.js";
 import type * as fx from "../fx.js";
 import type * as geo from "../geo.js";
 import type * as http from "../http.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   engagementData: typeof engagementData;
   expenses: typeof expenses;
   expensesData: typeof expensesData;
+  explorer: typeof explorer;
   fx: typeof fx;
   geo: typeof geo;
   http: typeof http;

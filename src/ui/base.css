@@ -1311,3 +1311,22 @@ button {
     padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 }
+
+/* KPI tiles that open the chart explorer */
+a.kpi--link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+a.kpi--link:hover {
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transform: translateY(-1px);
+}
+
+a.kpi--link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}

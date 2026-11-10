@@ -4,6 +4,7 @@ import { formatEurCompact } from "@/lib/format";
 import { Card, EmptyState, Kpi, KpiSkeleton, NotConnected, PageHeader, Skeleton, Sparkline, TimeChart } from "@/ui";
 import { AppCard } from "./components/AppCard";
 import { WatchList } from "./components/WatchList";
+import { useExplorerLink } from "@/lib/explorer";
 import { useOverviewViewModel } from "./useOverviewViewModel";
 import "./overview.css";
 
@@ -12,8 +13,12 @@ const SPARK_COLOR: Record<string, string> = { net: "var(--glow-good)", margin: "
 
 const KPI_ICON: Record<string, LucideIcon> = { net: Wallet, spend: Receipt, margin: Scale, paid: CreditCard, trials: Hourglass, downloads: Download };
 
+/** KPI tile → chart explorer metric. */
+const KPI_METRIC: Record<string, string> = { net: "net", spend: "spend", paid: "paid", trials: "trials", downloads: "downloads" };
+
 export default function OverviewPage() {
   const vm = useOverviewViewModel();
+  const explore = useExplorerLink();
 
   if (vm.loading) {
     return (
@@ -61,13 +66,21 @@ export default function OverviewPage() {
             hint={k.hint}
             foot={k.missing ? <Link to={k.missing.to}>{k.missing.label}</Link> : k.foot}
             big={i < 2}
+            to={!k.missing && KPI_METRIC[k.key] ? explore(KPI_METRIC[k.key]) : undefined}
             spark={k.spark ? <Sparkline values={k.spark} color={SPARK_COLOR[k.key] ?? "var(--glow-good)"} height={i < 2 ? 64 : 40} /> : undefined}
           />
         ))}
       </div>
 
       <div className="grid grid--main-side">
-        <Card title="D'où vient le net ?" subtitle={`Net versé par app · ${vm.bucketLabel.toLowerCase()}, remboursements déduits`} action={<span className="ov-total num">{vm.chart.total}</span>}>
+        <Card title="D'où vient le net ?" subtitle={`Net versé par app · ${vm.bucketLabel.toLowerCase()}, remboursements déduits`} action={
+            <span className="row" style={{ gap: 10 }}>
+              <span className="ov-total num">{vm.chart.total}</span>
+              <Link to={explore("net", { seg: "app" })} className="btn btn--ghost">
+                Explorer
+              </Link>
+            </span>
+          }>
           {vm.chart.hasData ? (
             <TimeChart kind="bar" x={vm.chart.x} series={vm.chart.series} height={250} formatValue={formatEurCompact} formatX={vm.formatX} formatXLong={vm.formatXLong} showTotal />
           ) : (

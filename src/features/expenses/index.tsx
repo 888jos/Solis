@@ -1,3 +1,4 @@
+import { useExplorerLink } from "@/lib/explorer";
 import { FileUp, Plus } from "lucide-react";
 import { useRef } from "react";
 import { formatEur } from "@/lib/format";
@@ -15,6 +16,7 @@ import { useRulesViewModel } from "./useRulesViewModel";
 
 export default function ExpensesPage() {
   const vm = useExpensesViewModel();
+  const explore = useExplorerLink();
   const imp = useImportViewModel();
   const form = useExpenseFormViewModel();
   const rules = useRulesViewModel(vm.rules);
@@ -87,7 +89,7 @@ export default function ExpensesPage() {
       {vm.kpis && (
         <div className="grid grid--kpi">
           {vm.kpis.map((k) => (
-            <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta foot={k.foot} hint={k.hint} />
+            <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta foot={k.foot} hint={k.hint} to={k.key === "total" ? explore("spend", { seg: "category" }) : undefined} />
           ))}
         </div>
       )}

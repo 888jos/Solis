@@ -1,3 +1,4 @@
+import { useExplorerLink } from "@/lib/explorer";
 import { AppLabel, BarList, Card, DataTable, EmptyState, Kpi, KpiSkeleton, NotConnected, PageHeader, Skeleton, SourceNote, TimeChart, type Column } from "@/ui";
 import { formatCompact, formatInt } from "@/lib/format";
 import { useAcquisitionViewModel, type FunnelRow } from "./useAcquisitionViewModel";
@@ -13,8 +14,11 @@ const funnelColumns: Column<FunnelRow>[] = [
   { key: "ratio", header: <span title="Nouveaux payants ÷ téléchargements">Taux</span>, align: "right", cell: (r) => <strong className="num">{r.ratio}</strong> },
 ];
 
+const STORE_METRIC: Record<string, string> = { imp: "impressions", pv: "pageViews", dl: "storeDownloads" };
+
 export default function AcquisitionPage() {
   const vm = useAcquisitionViewModel();
+  const explore = useExplorerLink();
 
   if (vm.notConnected) {
     return (
@@ -36,7 +40,7 @@ export default function AcquisitionPage() {
       {vm.kpis ? (
         <div className="grid grid--kpi">
           {vm.kpis.map((k) => (
-            <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} hint={k.hint} />
+            <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} hint={k.hint} to={k.key === "downloads" ? explore("downloads", { seg: "app" }) : undefined} />
           ))}
         </div>
       ) : (
@@ -71,7 +75,7 @@ export default function AcquisitionPage() {
           <div className="stack">
             <div className="grid grid--kpi">
               {vm.store.kpis.map((k) => (
-                <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} />
+                <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} to={STORE_METRIC[k.key] ? explore(STORE_METRIC[k.key], { seg: "source" }) : undefined} />
               ))}
             </div>
             <DataTable
@@ -100,7 +104,7 @@ export default function AcquisitionPage() {
           <div className="stack">
             <div className="grid grid--kpi">
               {vm.ads.kpis.map((k) => (
-                <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} />
+                <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} to={k.key === "spend" ? explore("adSpend", { seg: "campaign" }) : k.key === "installs" ? explore("adInstalls", { seg: "campaign" }) : undefined} />
               ))}
             </div>
             <DataTable

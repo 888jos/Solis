@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Compass, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, ChartLine, Compass, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 // The sidebar and the router both read this list. One entry per feature module in src/features/.
@@ -25,6 +25,7 @@ export type PageDef = {
 export const PAGES: PageDef[] = [
   { id: "today", path: "/", label: "Aujourd'hui", section: "", icon: Compass, badge: "today", Component: lazy(() => import("@/features/today")) },
   { id: "overview", path: "/vue-d-ensemble", label: "Vue d'ensemble", section: "", icon: LayoutDashboard, Component: lazy(() => import("@/features/overview")) },
+  { id: "explorer", path: "/graphiques", label: "Graphiques", section: "", icon: ChartLine, Component: lazy(() => import("@/features/explorer")) },
 
   { id: "revenue", path: "/revenus", label: "Revenus", tabLabel: "Revenus", section: "Argent", icon: Euro, Component: lazy(() => import("@/features/revenue")) },
   { id: "subscriptions", path: "/abonnements", label: "Abonnements", tabLabel: "Abonnements", tabOf: "revenue", section: "Argent", icon: Repeat, Component: lazy(() => import("@/features/subscriptions")) },
