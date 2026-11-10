@@ -22,11 +22,13 @@ function env(name: string): string {
 const compact = (day: string) => day.replaceAll("-", "");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/* ---------------- Amplitude (CortiFree) ---------------- */
+/* ---------------- Amplitude (CortiFree, Quest IRL) ---------------- */
 
-async function amplitudeGet(path: string, params: Record<string, string>): Promise<any> {
-  const base = (process.env.AMPLITUDE_API_BASE_URL || "https://amplitude.com").replace(/\/$/, "");
-  const auth = Buffer.from(`${env("AMPLITUDE_CORTIFREE_API_KEY")}:${env("AMPLITUDE_CORTIFREE_SECRET_KEY")}`).toString("base64");
+// One Amplitude project per app: AMPLITUDE_<APP>_API_KEY / _SECRET_KEY, optional AMPLITUDE_<APP>_API_BASE_URL
+// (e.g. https://analytics.eu.amplitude.com for an EU project). Default: AMPLITUDE_API_BASE_URL, then US.
+async function amplitudeGet(app: string, path: string, params: Record<string, string>): Promise<any> {
+  const base = (process.env[`AMPLITUDE_${app}_API_BASE_URL`] || process.env.AMPLITUDE_API_BASE_URL || "https://amplitude.com").replace(/\/$/, "");
+  const auth = Buffer.from(`${env(`AMPLITUDE_${app}_API_KEY`)}:${env(`AMPLITUDE_${app}_SECRET_KEY`)}`).toString("base64");
   const url = `${base}${path}?${new URLSearchParams(params)}`;
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
@@ -47,16 +49,16 @@ function seriesByDay(json: any): Map<string, number> {
   return new Map(xs.map((x, i) => [String(x).slice(0, 10), Number(values[i] ?? 0)]));
 }
 
-async function fetchAmplitude(from: string, to: string): Promise<Result> {
+async function fetchAmplitude(app: string, from: string, to: string): Promise<Result> {
   const range = { start: compact(from), end: compact(to) };
   // Sequential on purpose: Amplitude rejects concurrent Dashboard API queries with 429.
-  const active = seriesByDay(await amplitudeGet("/api/2/users", { m: "active", i: "1", ...range }));
-  const fresh = seriesByDay(await amplitudeGet("/api/2/users", { m: "new", i: "1", ...range }));
+  const active = seriesByDay(await amplitudeGet(app, "/api/2/users", { m: "active", i: "1", ...range }));
+  const fresh = seriesByDay(await amplitudeGet(app, "/api/2/users", { m: "new", i: "1", ...range }));
   const sessions = seriesByDay(
-    await amplitudeGet("/api/2/events/segmentation", { e: JSON.stringify({ event_type: "session_start" }), m: "totals", i: "1", ...range }),
+    await amplitudeGet(app, "/api/2/events/segmentation", { e: JSON.stringify({ event_type: "session_start" }), m: "totals", i: "1", ...range }),
   );
   const rolling = seriesByDay(
-    await amplitudeGet("/api/2/events/segmentation", { e: JSON.stringify({ event_type: "_active" }), m: "uniques", i: "1", rollingWindow: "30", ...range }),
+    await amplitudeGet(app, "/api/2/events/segmentation", { e: JSON.stringify({ event_type: "_active" }), m: "uniques", i: "1", rollingWindow: "30", ...range }),
   );
   const daily: DailyRow[] = [...active.keys()].sort().map((date) => ({
     date,
@@ -68,7 +70,7 @@ async function fetchAmplitude(from: string, to: string): Promise<Result> {
 
   // N-day retention of new users (any activity), one cohort per acquisition day.
   // Cells: [0] = cohort size, [n + 1] = day n. A cell counts only once Amplitude marks it complete.
-  const ret = await amplitudeGet("/api/2/retention", {
+  const ret = await amplitudeGet(app, "/api/2/retention", {
     se: JSON.stringify({ event_type: "_new" }),
     re: JSON.stringify({ event_type: "_active" }),
     ...range,
@@ -157,8 +159,10 @@ async function fetchPosthog(from: string, to: string): Promise<Result> {
 /* ---------------- Runner ---------------- */
 
 const PROVIDERS = [
-  { appSlug: "cortifree", source: "amplitude", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], fetch: fetchAmplitude },
-  { appSlug: "questirl", source: "posthog", envs: ["POSTHOG_QUESTIRL_HOST", "POSTHOG_QUESTIRL_PROJECT_ID", "POSTHOG_QUESTIRL_PERSONAL_KEY"], fetch: fetchPosthog },
+  { appSlug: "cortifree", source: "amplitude", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], fetch: (f: string, t: string) => fetchAmplitude("CORTIFREE", f, t) },
+  // Quest IRL moves from PostHog to Amplitude: once its Amplitude keys are set on Convex, PostHog is skipped.
+  { appSlug: "questirl", source: "amplitude_questirl", envs: ["AMPLITUDE_QUESTIRL_API_KEY", "AMPLITUDE_QUESTIRL_SECRET_KEY"], fetch: (f: string, t: string) => fetchAmplitude("QUESTIRL", f, t) },
+  { appSlug: "questirl", source: "posthog", envs: ["POSTHOG_QUESTIRL_HOST", "POSTHOG_QUESTIRL_PROJECT_ID", "POSTHOG_QUESTIRL_PERSONAL_KEY"], fetch: fetchPosthog, unless: ["AMPLITUDE_QUESTIRL_API_KEY"] },
 ];
 
 async function run(ctx: ActionCtx, days: number) {
@@ -166,6 +170,7 @@ async function run(ctx: ActionCtx, days: number) {
   const from = addDays(to, -(days - 1));
   const out: Record<string, string> = {};
   for (const p of PROVIDERS) {
+    if ("unless" in p && p.unless?.every((name) => process.env[name])) continue;
     const runId = await ctx.runMutation(internal.syncRuns.start, { source: p.source });
     const missing = p.envs.filter((name) => !process.env[name]);
     if (missing.length) {

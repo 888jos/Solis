@@ -10,7 +10,8 @@ import { addDays } from "./lib/dates";
 
 const SOURCES: Record<string, { source: string; label: string } | undefined> = {
   cortifree: { source: "amplitude", label: "Amplitude" },
-  questirl: { source: "posthog", label: "PostHog" },
+  // Quest IRL switches to Amplitude as soon as its keys are set on Convex (PostHog history stays readable before that).
+  questirl: process.env.AMPLITUDE_QUESTIRL_API_KEY ? { source: "amplitude_questirl", label: "Amplitude" } : { source: "posthog", label: "PostHog" },
 };
 
 function weekStart(day: string): string {
