@@ -36,8 +36,15 @@ export function Gallery({
       </div>
 
       {gallery.tiles.length ? (
+        gallery.groups.map((g) => (
+        <section key={g.name} className="cr-group">
+          {!account && (
+            <h3 className="cr-group__title">
+              @{g.name} <span className="muted num">{g.tiles.length}</span>
+            </h3>
+          )}
         <div className="cr-tiles">
-          {gallery.tiles.map((t) => (
+          {g.tiles.map((t) => (
             <Link key={t.cid} to={t.href} className="cr-tile">
               <div className="cr-tile__cover">
                 {t.cover ? <img src={t.cover} alt="" loading="lazy" /> : <span className="muted">Pas d'image</span>}
@@ -56,6 +63,8 @@ export function Gallery({
             </Link>
           ))}
         </div>
+        </section>
+        ))
       ) : (
         <div className="card">
           <EmptyState title={emptyTitle}>

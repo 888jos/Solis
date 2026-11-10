@@ -24,11 +24,31 @@ async function cover(ctx: QueryCtx, c: Doc<"carousels"> | null) {
   return c && c.slides.length ? await ctx.storage.getUrl(c.slides[0]) : null;
 }
 
-async function reviewQueue(ctx: QueryCtx) {
+/** App of each account (factory brand id). Accounts synced before the field existed count as CortiFree. */
+export const APPS = [
+  { id: "cortifree", label: "CortiFree" },
+  { id: "questirl", label: "Quest IRL" },
+] as const;
+const DEFAULT_APP = "cortifree";
+
+async function appOfAccounts(ctx: QueryCtx) {
+  const rows = await ctx.db.query("carouselAccounts").collect();
+  return new Map(rows.map((a) => [a.name, a.app || DEFAULT_APP]));
+}
+
+function appOf(map: Map<string, string>, account: string) {
+  return map.get(account) ?? DEFAULT_APP;
+}
+
+async function reviewQueue(ctx: QueryCtx, app?: string) {
+  const apps = app ? await appOfAccounts(ctx) : null;
   const lists = await Promise.all(
     TO_REVIEW.map((status) => ctx.db.query("carousels").withIndex("by_status_created", (q) => q.eq("status", status)).collect()),
   );
-  return lists.flat().sort((a, b) => a.createdAt - b.createdAt);
+  return lists
+    .flat()
+    .filter((c) => !apps || appOf(apps, c.account) === app)
+    .sort((a, b) => a.createdAt - b.createdAt);
 }
 
 async function lastSync(ctx: QueryCtx) {
@@ -43,12 +63,21 @@ async function lastSync(ctx: QueryCtx) {
 
 /* ---------------------------------------------------------------- page */
 
+function appCounts(accounts: { app?: string }[]) {
+  return APPS.map((a) => ({ ...a, accounts: accounts.filter((x) => (x.app || DEFAULT_APP) === a.id).length }));
+}
+
 /** One posting day: every account, its plan items and the carousels made from them. */
 export const day = authQuery({
-  args: { date: v.string() },
-  handler: async (ctx, { date }) => {
-    const accounts = (await ctx.db.query("carouselAccounts").collect()).sort((a, b) => a.position - b.position);
-    const plan = await ctx.db.query("carouselPlan").withIndex("by_date", (q) => q.eq("date", date)).collect();
+  args: { date: v.string(), app: v.optional(v.string()) },
+  handler: async (ctx, { date, app }) => {
+    const wanted = app || DEFAULT_APP;
+    const allAccounts = (await ctx.db.query("carouselAccounts").collect()).sort((a, b) => a.position - b.position);
+    const accounts = allAccounts.filter((a) => (a.app || DEFAULT_APP) === wanted);
+    const names = new Set(accounts.map((a) => a.name));
+    const plan = (await ctx.db.query("carouselPlan").withIndex("by_date", (q) => q.eq("date", date)).collect()).filter((p) =>
+      names.has(p.account),
+    );
     const items = await Promise.all(
       plan
         .sort((a, b) => a.itemId.localeCompare(b.itemId))
@@ -73,8 +102,9 @@ export const day = authQuery({
           };
         }),
     );
-    const queue = await reviewQueue(ctx);
+    const queue = await reviewQueue(ctx, wanted);
     return {
+      apps: appCounts(allAccounts),
       accounts: accounts.map(({ name, persona, series, startDate, slots, perDay, warmupDays }) => ({
         name, persona, series, startDate, slots, perDay, warmupDays,
       })),
@@ -87,9 +117,13 @@ export const day = authQuery({
 
 /** Gallery: newest first, filtered by status group and account. Counts are per status, before filtering. */
 export const list = authQuery({
-  args: { status: v.optional(v.string()), account: v.optional(v.string()) },
-  handler: async (ctx, { status, account }) => {
-    const all = await ctx.db.query("carousels").withIndex("by_created").order("desc").take(2000);
+  args: { status: v.optional(v.string()), account: v.optional(v.string()), app: v.optional(v.string()) },
+  handler: async (ctx, { status, account, app }) => {
+    const wantedApp = app || DEFAULT_APP;
+    const apps = await appOfAccounts(ctx);
+    const all = (await ctx.db.query("carousels").withIndex("by_created").order("desc").take(2000)).filter(
+      (c) => appOf(apps, c.account) === wantedApp,
+    );
     const pool = account ? all.filter((c) => c.account === account) : all;
     const counts: Record<string, number> = {};
     for (const c of pool) counts[c.status] = (counts[c.status] ?? 0) + 1;
@@ -114,6 +148,7 @@ export const list = authQuery({
       shown: shown.length,
       counts,
       accounts: [...new Set(all.map((c) => c.account))].sort(),
+      apps: appCounts(await ctx.db.query("carouselAccounts").collect()),
       sync: await lastSync(ctx),
     };
   },
@@ -129,10 +164,12 @@ export const detail = authQuery({
     const p = c.planItemId
       ? await ctx.db.query("carouselPlan").withIndex("by_item", (q) => q.eq("itemId", c.planItemId!)).unique()
       : null;
-    const queue = (await reviewQueue(ctx)).filter((x) => x.cid !== cid);
+    const app = appOf(await appOfAccounts(ctx), c.account);
+    const queue = (await reviewQueue(ctx, app)).filter((x) => x.cid !== cid);
     return {
       cid: c.cid,
       account: c.account,
+      app,
       templateName: c.templateName,
       topic: c.topic,
       status: c.status,
@@ -253,6 +290,7 @@ const accountV = v.object({
   slots: v.array(v.string()),
   perDay: v.number(),
   warmupDays: v.number(),
+  app: v.optional(v.string()),
 });
 
 export const syncAccounts = carouselSyncMutation({

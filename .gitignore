@@ -6,3 +6,5 @@ dist
 *.p8
 .DS_Store
 coverage
+public/cf-models
+public/cf-phone

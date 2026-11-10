@@ -28,6 +28,7 @@ export const contentTables = {
     perDay: v.number(), // carousels per day after warm-up
     warmupDays: v.number(), // 1 carousel per day, no app mention, during the first N days
     position: v.number(), // order in the config file
+    app: v.optional(v.string()), // brand id from the factory config: cortifree | questirl (missing = cortifree)
     syncedAt: v.number(),
   }).index("by_name", ["name"]),
 

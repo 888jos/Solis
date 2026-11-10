@@ -2,6 +2,7 @@ import { EmptyState, KpiSkeleton, PageHeader, Segmented, Skeleton, SourceNote } 
 import { CarouselDetail } from "./components/CarouselDetail";
 import { CarouselEditorScreen } from "./components/CarouselEditor";
 import { Gallery } from "./components/Gallery";
+import { ModelsView } from "./components/ModelsView";
 import { PlanView } from "./components/PlanView";
 import { useCarouselsViewModel, type ViewKey } from "./useCarouselsViewModel";
 import "./carousels.css";
@@ -12,8 +13,20 @@ export default function CarouselsPage() {
   const header = (
     <PageHeader
       title="Carrousels"
-      subtitle="Comptes TikTok CortiFree : plan du jour, validation, production"
-      actions={vm.cid ? undefined : <Segmented<ViewKey> label="Vue" value={vm.view} onChange={vm.setView} options={vm.views} />}
+      subtitle={`Comptes TikTok ${vm.app === "questirl" ? "Quest IRL" : "CortiFree"} : plan du jour, validation, production`}
+      actions={
+        vm.cid ? undefined : (
+          <div className="cr-head-controls">
+            <Segmented<string> label="App" value={vm.app} onChange={vm.setApp} options={vm.apps} />
+            <Segmented<ViewKey>
+              label="Vue"
+              value={vm.view}
+              onChange={vm.setView}
+              options={vm.app === "cortifree" ? vm.views : vm.views.filter((v) => v.value !== "models")}
+            />
+          </div>
+        )
+      }
     />
   );
 
@@ -39,6 +52,8 @@ export default function CarouselsPage() {
         </EmptyState>
       </div>
     );
+  } else if (vm.view === "models") {
+    body = <ModelsView />;
   } else if (vm.view === "plan" && vm.plan) {
     body = <PlanView plan={vm.plan} date={vm.date} onDate={vm.setDate} />;
   } else if (vm.gallery) {

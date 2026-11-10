@@ -6,12 +6,12 @@ import { formatAgo, formatDay, formatDayLong, formatInt } from "@/lib/format";
 import type { Status } from "@/ui";
 
 // Carrousels page: mirror of the Carousel Factory on the Mac (convex/carousels.ts).
-// URL state: ?vue=plan|review|all · &date=YYYY-MM-DD · &statut= · &compte= · &c=<carousel id> · &edit=1 (editor)
+// URL state: ?app=cortifree|questirl · ?vue=plan|review|all|models · &date=YYYY-MM-DD · &statut= · &compte= · &c=<carousel id> · &edit=1 (editor)
 
-export type ViewKey = "plan" | "review" | "all";
+export type ViewKey = "plan" | "review" | "all" | "models";
 export type ReviewAction = "ok" | "redo" | "no";
 
-const VIEWS: ViewKey[] = ["plan", "review", "all"];
+const VIEWS: ViewKey[] = ["plan", "review", "all", "models"];
 const STATUS: Record<string, { label: string; tone: Status }> = {
   planned: { label: "Planifié", tone: "neutral" },
   generated: { label: "Généré", tone: "neutral" },
@@ -103,6 +103,7 @@ export function useCarouselsViewModel() {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : today;
   const statusFilter = STATUS_FILTERS.some((f) => f.value === params.get("statut")) ? (params.get("statut") ?? "") : "";
   const account = params.get("compte") ?? "";
+  const app = params.get("app") === "questirl" ? "questirl" : "cortifree";
 
   const set = useCallback(
     (patch: Record<string, string | null>) =>
@@ -128,11 +129,11 @@ export function useCarouselsViewModel() {
     [params],
   );
 
-  const dayData = useSolisQuery(api.carousels.day, !cid && view === "plan" ? { date } : "skip");
+  const dayData = useSolisQuery(api.carousels.day, !cid && view === "plan" ? { date, app } : "skip");
   const listData = useSolisQuery(
     api.carousels.list,
-    !cid && view !== "plan"
-      ? { ...(view === "review" ? { status: "review" } : statusFilter ? { status: statusFilter } : {}), ...(account ? { account } : {}) }
+    !cid && view !== "plan" && view !== "models"
+      ? { app, ...(view === "review" ? { status: "review" } : statusFilter ? { status: statusFilter } : {}), ...(account ? { account } : {}) }
       : "skip",
   );
   const detailData = useSolisQuery(api.carousels.detail, cid ? { cid } : "skip");
@@ -214,6 +215,7 @@ export function useCarouselsViewModel() {
       href: linkTo({ c: r.cid }),
       cover: r.cover,
       title: r.topic || r.cid,
+      account: r.account,
       meta: `@${r.account} · ${r.templateName}`,
       slides: `${r.slideCount} slides`,
       created: formatDay(new Date(r.createdAt).toISOString()),
@@ -226,6 +228,8 @@ export function useCarouselsViewModel() {
       more: listData.shown > tiles.length ? listData.shown - tiles.length : 0,
       filters: STATUS_FILTERS.map((f) => ({ value: f.value, label: `${f.label} ${formatInt(count(f.statuses))}` })),
       accounts: listData.accounts,
+      // one section per account (newest first inside), unless one account is already picked
+      groups: [...new Set(tiles.map((t) => t.account))].map((name) => ({ name, tiles: tiles.filter((t) => t.account === name) })),
       empty: listData.total === 0,
       sync: listData.sync,
     };
@@ -297,6 +301,7 @@ export function useCarouselsViewModel() {
       { value: "plan" as ViewKey, label: "Plan" },
       { value: "review" as ViewKey, label: `À valider${toReview != null ? ` ${formatInt(toReview)}` : ""}` },
       { value: "all" as ViewKey, label: "Tous" },
+      { value: "models" as ViewKey, label: "Modèles" },
     ],
     date,
     setDate: (d: string) => set({ date: d && d !== today ? d : null }),
@@ -304,6 +309,12 @@ export function useCarouselsViewModel() {
     setStatusFilter: (s: string) => set({ statut: s || null }),
     account,
     setAccount: (a: string) => set({ compte: a || null }),
+    app,
+    apps: ((dayData ?? listData)?.apps ?? [
+      { id: "cortifree", label: "CortiFree", accounts: 0 },
+      { id: "questirl", label: "Quest IRL", accounts: 0 },
+    ]).map((a) => ({ value: a.id, label: a.accounts ? `${a.label} · ${a.accounts} comptes` : a.label })),
+    setApp: (a: string) => set({ app: a === "cortifree" ? null : a, compte: null, c: null, vue: view === "models" && a !== "cortifree" ? null : params.get("vue") }),
     cid,
     close: () => set({ c: null, edit: null }),
     editing,
@@ -313,7 +324,7 @@ export function useCarouselsViewModel() {
     plan,
     gallery,
     detail,
-    loading: cid ? detailData === undefined : view === "plan" ? dayData === undefined : listData === undefined,
+    loading: cid ? detailData === undefined : view === "models" ? false : view === "plan" ? dayData === undefined : listData === undefined,
     review: { decide, busy, advance, setAdvance, error, flash },
     syncNote: sync ? (sync.error ? `Dernière synchro en erreur : ${sync.error}` : `synchro ${formatAgo(sync.at)}`) : null,
   };
