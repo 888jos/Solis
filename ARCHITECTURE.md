@@ -82,7 +82,21 @@ row of KPIs, then the charts that explain them, then the detail table. Every car
 | Bank CSV import, manual entries | none | through the Dépenses page |
 | OpenAI / Anthropic admin cost APIs | OPENAI_ADMIN_KEY, ANTHROPIC_ADMIN_KEY | not provided yet → NotConnected |
 | Airtable UGC base appDXNkfK2prnjyud | AIRTABLE_TOKEN | not provided yet; snapshot import via mutation |
-| Telegram brief | TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID | daily brief |
+| Telegram brief | TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID | daily brief, hourly source watchdog, daily anomalies |
+| Stripe (Otto) | STRIPE_OTTO_KEY (restricted, balance transactions read) | not provided yet; Otto revenue falls back to the Mac push (collected, fees not deducted) |
+| Meta Ads (CortiFree) | META_ACCESS_TOKEN, META_AD_ACCOUNT_ID, optional META_GRAPH_VERSION, META_APP_SLUG | not provided yet → NotConnected on Acquisition |
+| Claude weekly review | ANTHROPIC_API_KEY (regular key, model claude-opus-5-5) | not provided yet → skipped |
+
+## Pilotage (page Aujourd'hui, convex/pilot.ts)
+
+- Goals (table `goals`), experiments (`experiments`), annotations (`annotations`): values are never stored, they are
+  computed at read time by `metricValue(project, metric, from, to)` from the real tables. Add a metric there and in `METRICS`.
+- Actions of the day: open alerts, versions to publish/rejected, unanswered ≤3★ reviews, Otto videos to validate,
+  experiments past their end, goals behind pace, bank statement older than 35 days.
+- `convex/watchdog.ts`: hourly source alerts (one message when it breaks, one when it is back) and daily anomalies
+  (last data day vs the same weekday of the 4 previous weeks, ±50 %), both through the `alerts` table.
+- `convex/review.ts`: Monday review written by Claude from `pilot.weeklyFacts` (aggregates only).
+- Otto is a project, not an App Store app: `OTHER_PROJECTS` in src/lib/apps.ts, `ottoWindow` in convex/otto.ts.
 
 `convex/sources/asc.ts` is the shared App Store Connect client (JWT, paging, Sales report download + TSV parse).
 Syncs: an `internalAction` in `convex/sources/<x>.ts` ("use node"), writing through `internalMutation`s in a
