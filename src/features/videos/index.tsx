@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, Megaphone, X } from "lucide-react";
 import { useEffect } from "react";
 import { Badge, Card, EmptyState, PageHeader, Segmented, Skeleton, SourceNote } from "@/ui";
 import { useVideosViewModel, type MediaItem, type TabKey } from "./useVideosViewModel";
+import type { Speaker, VideoScript } from "./scripts";
 import "./videos.css";
 
 type Item = MediaItem & { heroes: string[]; size: string; dims: string };
@@ -19,6 +20,109 @@ function Tile({ item, onOpen, ratio }: { item: Item; onOpen: (key: string) => vo
         )}
       </span>
     </button>
+  );
+}
+
+const SPEAKER: Record<Speaker, { label: string; status: "good" | "neutral" }> = {
+  lipsync: { label: "Lip sync", status: "good" },
+  voiceover: { label: "Voix off", status: "neutral" },
+  none: { label: "Muet", status: "neutral" },
+};
+
+function ScriptCard({ script, vm }: { script: VideoScript; vm: ReturnType<typeof useVideosViewModel> }) {
+  const missing = [
+    ...script.missing.fish.map((m) => `Fish : ${m}`),
+    ...script.missing.captures.map((m) => `Capture app : ${m}`),
+    ...script.missing.montage.filter((m) => m !== "Rien d'autre").map((m) => `Montage : ${m}`),
+  ];
+  return (
+    <Card title={script.title} subtitle={`${script.duration} · ${script.shots.length} plans · voix = sous-titres, aucun texte ajouté`}>
+      <div className="table-wrap vd-script">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Image</th>
+              <th>Plan</th>
+              <th>Qui parle</th>
+              <th>Réplique (= sous-titre)</th>
+              <th>Son</th>
+            </tr>
+          </thead>
+          <tbody>
+            {script.shots.map((shot, i) => {
+              const media = shot.image ? vm.mediaByKey?.get(shot.image) : undefined;
+              const sp = SPEAKER[shot.speaker];
+              return (
+                <tr key={i} className={shot.promo ? "vd-script__promo" : undefined}>
+                  <td className="num">
+                    <strong>{i + 1}</strong>
+                    <div className="muted">{shot.time}</div>
+                  </td>
+                  <td className="vd-script__img">
+                    {media ? (
+                      <button type="button" className="vd-script__thumb" onClick={() => vm.openItem(media.key)} title={media.title}>
+                        <img src={media.thumb ?? media.url ?? ""} alt={media.title} loading="lazy" />
+                      </button>
+                    ) : (
+                      <span className="vd-script__thumb vd-script__thumb--todo">
+                        <ImageOff size={16} aria-hidden />
+                        {shot.image ? "Pas synchronisée" : "À faire"}
+                      </span>
+                    )}
+                    {shot.image && <div className="muted vd-script__path">{shot.image.split("/").pop()}</div>}
+                    {shot.imageNote && <div className="muted vd-script__path">{shot.imageNote}</div>}
+                  </td>
+                  <td>
+                    {shot.promo && (
+                      <span className="vd-script__tag">
+                        <Megaphone size={12} aria-hidden /> Promo app
+                      </span>
+                    )}
+                    {shot.plan}
+                  </td>
+                  <td>
+                    <div>{shot.who}</div>
+                    <Badge status={sp.status} icon={false}>
+                      {sp.label}
+                    </Badge>
+                  </td>
+                  <td className="vd-script__line">{shot.line ? `“${shot.line}”` : <span className="muted">—</span>}</td>
+                  <td className="muted">{shot.sound}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="vd-script__foot">
+        <div>
+          <div className="muted">Autres hooks (1re réplique)</div>
+          <ul>
+            {script.hooks.map((h) => (
+              <li key={h}>“{h}”</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="muted">Légende du post</div>
+          <p>{script.caption}</p>
+        </div>
+        <div>
+          <div className="muted">Reste à faire</div>
+          {missing.length ? (
+            <ul>
+              {missing.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+          ) : (
+            <p>Tout existe déjà.</p>
+          )}
+        </div>
+      </div>
+      {script.note && <p className="muted vd-script__note">{script.note}</p>}
+    </Card>
   );
 }
 
@@ -79,7 +183,19 @@ export default function VideosPage() {
     : "Images et clips générés pour faire les vidéos";
 
   let body;
-  if (vm.loading) body = <Skeleton height={420} />;
+  if (vm.tab === "scripts")
+    body = vm.scripts.length ? (
+      <div className="stack">
+        {vm.scripts.map((sc) => (
+          <ScriptCard key={sc.id} script={sc} vm={vm} />
+        ))}
+      </div>
+    ) : (
+      <Card>
+        <EmptyState title="Aucun script pour ce projet" />
+      </Card>
+    );
+  else if (vm.loading) body = <Skeleton height={420} />;
   else if (!d || d.empty)
     body = (
       <Card>

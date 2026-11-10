@@ -3,6 +3,7 @@ import type { FunctionReturnType } from "convex/server";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSolisQuery } from "@/lib/convex";
+import { SCRIPTS } from "./scripts";
 
 type Library = FunctionReturnType<typeof api.media.library>;
 export type MediaItem = Library["items"][number];
@@ -10,6 +11,7 @@ export type MediaItem = Library["items"][number];
 export const PROJECTS: Record<string, string> = { questirl: "Quest IRL", otto: "Otto", cortifree: "CortiFree" };
 
 export const TABS = [
+  { value: "scripts", label: "Scripts" },
   { value: "storyboards", label: "Storyboards" },
   { value: "bank", label: "Banque d'images" },
   { value: "clips", label: "Clips" },
@@ -65,7 +67,7 @@ export function useVideosViewModel() {
   const [params, setParams] = useSearchParams();
   const project = params.get("projet") || "questirl";
   const tabParam = params.get("tab");
-  const tab: TabKey = TABS.some((t) => t.value === tabParam) ? (tabParam as TabKey) : "storyboards";
+  const tab: TabKey = TABS.some((t) => t.value === tabParam) ? (tabParam as TabKey) : "scripts";
   const category = params.get("cat") || "heroes";
   const hero = params.get("heros") || "";
   const [chosenOnly, setChosenOnly] = useState(false);
@@ -130,7 +132,9 @@ export function useVideosViewModel() {
     setProject: (p: string) => setParam("projet", p, "questirl"),
     tab,
     tabs: [...TABS],
-    setTab: (t: TabKey) => setParam("tab", t, "storyboards"),
+    setTab: (t: TabKey) => setParam("tab", t, "scripts"),
+    scripts: project === "questirl" ? SCRIPTS.filter((s) => !hero || s.hero === hero) : [],
+    mediaByKey: derived?.byKey ?? null,
     heroOptions: [{ value: "", label: "Tous" }, ...HEROES.map((h) => ({ value: h, label: cap(h) }))],
     hero,
     setHero: (h: string) => setParam("heros", h, ""),
