@@ -162,6 +162,8 @@ const PROVIDERS = [
   { appSlug: "cortifree", source: "amplitude", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], fetch: (f: string, t: string) => fetchAmplitude("CORTIFREE", f, t) },
   // Quest IRL moves from PostHog to Amplitude: once its Amplitude keys are set on Convex, PostHog is skipped.
   { appSlug: "questirl", source: "amplitude_questirl", envs: ["AMPLITUDE_QUESTIRL_API_KEY", "AMPLITUDE_QUESTIRL_SECRET_KEY"], fetch: (f: string, t: string) => fetchAmplitude("QUESTIRL", f, t) },
+  // Cocorise moves from Firebase Analytics (no API access) to Amplitude once its keys are set on Convex.
+  { appSlug: "cocorise", source: "amplitude_cocorise", envs: ["AMPLITUDE_COCORISE_API_KEY", "AMPLITUDE_COCORISE_SECRET_KEY"], fetch: (f: string, t: string) => fetchAmplitude("COCORISE", f, t) },
   { appSlug: "questirl", source: "posthog", envs: ["POSTHOG_QUESTIRL_HOST", "POSTHOG_QUESTIRL_PROJECT_ID", "POSTHOG_QUESTIRL_PERSONAL_KEY"], fetch: fetchPosthog, unless: ["AMPLITUDE_QUESTIRL_API_KEY"] },
 ];
 
