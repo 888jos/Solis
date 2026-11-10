@@ -1329,4 +1329,52 @@ a.kpi--link:hover {
 a.kpi--link:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+
+/* Interactive globe (src/ui/charts/Globe.tsx) */
+.globe {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.globe canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.globe__tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-pop), 0 0 18px rgba(62, 224, 122, 0.15);
+  backdrop-filter: blur(6px);
+  font-size: 12.5px;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.globe__tip strong {
+  font-weight: 600;
+}
+
+.globe__tip span {
+  color: var(--good-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.globe__tip[hidden] {
+  display: none;
 }

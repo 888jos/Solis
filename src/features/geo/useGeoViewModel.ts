@@ -183,6 +183,7 @@ export function useGeoViewModel() {
     latestDayLabel: latestDay ? formatDayLong(latestDay) : null,
     kpis,
     netBars,
+    globePoints: (netBars ?? []).map((b) => ({ code: b.key, value: b.value, label: label(b.key), valueLabel: `${formatEur(b.value)} net` })),
     totalNet,
     netSubtitle,
     netLimit: NET_LIMIT,

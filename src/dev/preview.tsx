@@ -1,11 +1,10 @@
-// Dev-only page (dev-preview.html, never built): the real Shell and UI components with made-up numbers,
-// to check the look without signing in. The sidebar links lead to real pages, which need Convex auth.
+// Dev-only page (dev-preview.html, never built): the real UI components with made-up numbers,
+// to check the look without signing in (the Shell is left out: its live counters need Convex auth).
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { CreditCard, Download, Hourglass, Receipt, Scale, Wallet } from "lucide-react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Shell } from "@/app/Shell";
 import { applyStoredTheme } from "@/features/settings/theme";
 import { FiltersProvider } from "@/lib/filters";
 import { AppLabel, BarList, Card, Kpi, PageHeader, Sparkline } from "@/ui";
@@ -48,7 +47,7 @@ function Preview() {
       <div className="f-geo">
         <div className="geo-hero">
           <div className="geo-hero__globe">
-            <Globe points={bars.map((b) => ({ code: b.key, value: b.value }))} />
+            <Globe points={bars.map((b) => ({ code: b.key, value: b.value, label: b.label, valueLabel: `${eur(b.value)} net` }))} />
           </div>
           <Card title="Où se fait le net ?" subtitle="Remboursements déduits" action={<span className="geo-total num">3 548,00 €</span>}>
             <BarList items={bars} formatValue={eur} />
@@ -74,9 +73,16 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <FiltersProvider>
           <Routes>
-            <Route element={<Shell />}>
-              <Route path="*" element={<Preview />} />
-            </Route>
+            <Route
+              path="*"
+              element={
+                <div className="main panel-grain" style={{ margin: 12 }}>
+                  <main className="content">
+                    <Preview />
+                  </main>
+                </div>
+              }
+            />
           </Routes>
         </FiltersProvider>
       </BrowserRouter>

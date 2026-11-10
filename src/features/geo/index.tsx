@@ -61,7 +61,7 @@ export default function GeoPage() {
       )}
 
       <div className="geo-hero">
-        <div className="geo-hero__globe">{vm.netBars && vm.netBars.length > 0 && <Globe points={vm.netBars.map((b) => ({ code: b.key, value: b.value }))} />}</div>
+        <div className="geo-hero__globe">{vm.netBars && vm.netBars.length > 0 && <Globe points={vm.globePoints} />}</div>
         <Card title="Où se fait le net ?" subtitle={vm.netSubtitle} action={vm.totalNet && <span className="geo-total num">{vm.totalNet}</span>}>
           {!vm.netBars ? <Skeleton height={240} /> : vm.netBars.length ? <BarList items={vm.netBars} formatValue={vm.formatEur} limit={vm.netLimit} /> : <EmptyState title="Aucun net sur la période" />}
         </Card>
