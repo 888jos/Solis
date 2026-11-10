@@ -1,4 +1,5 @@
 import { AppLabel, BarList, Card, DataTable, EmptyState, Kpi, KpiSkeleton, NotConnected, PageHeader, Skeleton, SourceNote, type Column } from "@/ui";
+import { Globe } from "@/ui/charts/Globe";
 import { useGeoViewModel, type CountryRow } from "./useGeoViewModel";
 import "./geo.css";
 
@@ -59,11 +60,14 @@ export default function GeoPage() {
         <KpiSkeleton count={4} />
       )}
 
-      <div className="grid grid--2">
+      <div className="geo-hero">
+        <div className="geo-hero__globe">{vm.netBars && vm.netBars.length > 0 && <Globe points={vm.netBars.map((b) => ({ code: b.key, value: b.value }))} />}</div>
         <Card title="Où se fait le net ?" subtitle={vm.netSubtitle} action={vm.totalNet && <span className="geo-total num">{vm.totalNet}</span>}>
           {!vm.netBars ? <Skeleton height={240} /> : vm.netBars.length ? <BarList items={vm.netBars} formatValue={vm.formatEur} limit={vm.netLimit} /> : <EmptyState title="Aucun net sur la période" />}
         </Card>
+      </div>
 
+      <div className="grid grid--2">
         <Card title="Où sont les abonnés payants ?" subtitle={vm.activeSubtitle ?? "Dernier rapport Subscription de la période"}>
           {!vm.activeBars ? (
             <Skeleton height={240} />
@@ -75,17 +79,13 @@ export default function GeoPage() {
             <EmptyState title="Aucun abonné payant actif" />
           )}
         </Card>
-      </div>
 
-      {vm.multiples && (
-        <div className="grid grid--3">
-          {vm.multiples.map((m) => (
-            <Card key={m.slug} title={<AppLabel slug={m.slug} />} subtitle="Top 5 pays par net" action={<span className="geo-total num">{m.total}</span>}>
-              {m.items.length ? <BarList items={m.items} formatValue={vm.formatEur} /> : <EmptyState title="Aucun net sur la période" />}
-            </Card>
-          ))}
-        </div>
-      )}
+        {vm.multiples?.map((m) => (
+          <Card key={m.slug} title={<AppLabel slug={m.slug} />} subtitle="Top 5 pays par net" action={<span className="geo-total num">{m.total}</span>}>
+            {m.items.length ? <BarList items={m.items} formatValue={vm.formatEur} /> : <EmptyState title="Aucun net sur la période" />}
+          </Card>
+        ))}
+      </div>
 
       <Card
         title="Détail par pays"

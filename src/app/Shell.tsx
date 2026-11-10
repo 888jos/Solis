@@ -1,9 +1,8 @@
 import { Menu, X } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { appColor } from "@/lib/apps";
 import { PERIODS, useFilters } from "@/lib/filters";
-import { AppPicker, Segmented, Skeleton } from "@/ui";
+import { AppIcon, AppPicker, Segmented, Skeleton } from "@/ui";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { PAGES, SECTIONS } from "./routes";
 
@@ -46,10 +45,10 @@ export function Shell() {
         </div>
         {SECTIONS.map((section) => (
           <nav key={section}>
-            <div className="nav-section__label">{section}</div>
+            <div className="nav-section__label">{section === "Apps" || section === "Projets" ? "Business" : section}</div>
             {PAGES.filter((p) => p.section === section).map((p) => (
               <NavLink key={p.id} to={{ pathname: p.path, search }} end className="nav-item">
-                {p.path.startsWith("/apps/") ? <span className="nav-item__dot" style={{ background: appColor(p.path.split("/")[2]) }} aria-hidden /> : <p.icon />}
+                {/^\/(apps|projets)\//.test(p.path) ? <AppIcon slug={p.path.split("/")[2]} size={24} /> : <p.icon />}
                 {p.label}
               </NavLink>
             ))}
@@ -58,7 +57,7 @@ export function Shell() {
         <div className="sidebar__footer">Données réelles · App Store Connect, RevenueCat, Amplitude, PostHog</div>
       </aside>
       <div className="scrim" onClick={() => setNavOpen(false)} />
-      <div className="main">
+      <div className="main panel-grain">
         <div className={`topbar${showFilters ? "" : " topbar--bare"}`}>
           <button className="btn btn--ghost topbar__menu" onClick={() => setNavOpen(true)} aria-label="Ouvrir le menu">
             <Menu />

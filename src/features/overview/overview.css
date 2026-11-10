@@ -24,11 +24,19 @@
   text-decoration: none;
 }
 
-/* KPI row: 6 tiles, 3 per row on medium screens, 2 on phones */
+/* KPI rows: 2 big tiles (net, spend) then 4 smaller ones; 2 per row on phones */
 .ov-kpis {
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-4);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.ov-kpis > .kpi {
+  grid-column: span 3;
+}
+
+.ov-kpis > .kpi--big {
+  grid-column: span 6;
 }
 
 .ov-kpis .kpi {
@@ -50,10 +58,6 @@
   color: var(--text-2);
 }
 
-.ov-kpi-spark {
-  height: 26px;
-  margin-top: 4px;
-}
 
 .ov-total {
   font-size: 13px;
@@ -238,9 +242,9 @@
   color: var(--text-2);
 }
 
-@media (max-width: 1400px) {
-  .ov-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 1240px) {
+  .ov-kpis > .kpi {
+    grid-column: span 6;
   }
 }
 
@@ -252,8 +256,10 @@
 
 @media (max-width: 860px) {
   .ov-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+  .ov-kpis > .kpi--big {
+    grid-column: span 12;
   }
   .ov-kpis .kpi__foot {
     white-space: normal;
