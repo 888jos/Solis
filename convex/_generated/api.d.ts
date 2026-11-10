@@ -10,7 +10,6 @@
 
 import type * as acquisition from "../acquisition.js";
 import type * as aso from "../aso.js";
-import type * as asoAstro from "../asoAstro.js";
 import type * as asoData from "../asoData.js";
 import type * as auth from "../auth.js";
 import type * as brief from "../brief.js";
@@ -95,7 +94,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   acquisition: typeof acquisition;
   aso: typeof aso;
-  asoAstro: typeof asoAstro;
   asoData: typeof asoData;
   auth: typeof auth;
   brief: typeof brief;

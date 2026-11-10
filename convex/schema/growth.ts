@@ -98,8 +98,9 @@ export const growthTables = {
     source: v.optional(v.union(v.literal("metadata"), v.literal("manual"), v.literal("astro"))),
     addedAt: v.optional(v.number()),
     removedAt: v.optional(v.number()), // untracked from the UI; kept so metadata seeding does not bring it back
-    // From Astro (scripts/astro_sync.py): Apple Search Ads popularity (5-100), Astro difficulty (0-100),
-    // number of apps ranking on the keyword, Astro's last refresh.
+    // Popularity (5-100, estimated from App Store suggestions), difficulty (0-100, strength of the top 10),
+    // number of competing apps: computed by convex/sources/aso.ts. statsSource "astro" marks the values of
+    // the one-off Astro import (2026-11-11), replaced as Solis recomputes each keyword.
     popularity: v.optional(v.number()),
     difficulty: v.optional(v.number()),
     competitors: v.optional(v.number()),

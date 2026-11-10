@@ -79,7 +79,7 @@ row of KPIs, then the charts that explain them, then the detail table. Every car
 | PostHog | POSTHOG_QUESTIRL_HOST, POSTHOG_QUESTIRL_PROJECT_ID, POSTHOG_QUESTIRL_PERSONAL_KEY | Quest IRL |
 | iTunes Search / Lookup (public) | none | ratings per country, top-10 strength for keyword difficulty, rank fallback |
 | App Store search + suggestions (public, MZStore / MZSearchHints, storefront header) | none | ASO: real search order (~250) per keyword per day, estimated popularity every 14 days |
-| Astro (Mac app) | none (scripts/astro_sync.py, Mac sync token) | one-off import of history before 2026-11-11; Solis does not depend on it |
+| Astro (Mac app) | none | history imported once on 2026-11-11 (ranks before that day); no code depends on it any more |
 | FX rates (public, cdn.jsdelivr.net/npm/@fawazahmed0/currency-api) | none | daily EUR rates |
 | Bank CSV import, manual entries | none | through the Dépenses page |
 | OpenAI / Anthropic admin cost APIs | OPENAI_ADMIN_KEY, ANTHROPIC_ADMIN_KEY | not provided yet → NotConnected |
