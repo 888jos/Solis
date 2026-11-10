@@ -14,7 +14,9 @@ export function Shell() {
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
   const { period, setPeriod, app, setApp } = useFilters();
-  const search = location.search;
+  // Only the global filters (period, app) follow you from page to page; page-specific params
+  // (tabs, views, categories) stay on their own page.
+  const search = globalSearch(location.search);
   const current = PAGES.find((p) => p.path === location.pathname);
   const showFilters = !NO_FILTERS.has(location.pathname);
 
@@ -82,4 +84,17 @@ export function Shell() {
       </div>
     </div>
   );
+}
+
+const GLOBAL_PARAMS = ["p", "app"];
+
+function globalSearch(search: string): string {
+  const from = new URLSearchParams(search);
+  const kept = new URLSearchParams();
+  for (const key of GLOBAL_PARAMS) {
+    const value = from.get(key);
+    if (value) kept.set(key, value);
+  }
+  const s = kept.toString();
+  return s ? `?${s}` : "";
 }

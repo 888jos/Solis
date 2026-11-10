@@ -25,6 +25,9 @@ crons.cron("ai api costs", "25 5 * * *", internal.sources.aiCosts.syncRecent, {}
 // Creates this month's copy of each monthly expense (idempotent): daily so a new template lands quickly.
 crons.cron("recurring expenses", "40 0 * * *", internal.expensesData.materializeRecurring, {});
 
+// Watchdog: one Telegram message when a source breaks or falls behind, one when it is back.
+crons.cron("source watchdog", "55 * * * *", internal.watchdog.checkSources, {});
+
 // Telegram: daily brief ~07:30/08:30 Paris; weekly recap Monday afternoon, once Apple has published Sunday.
 crons.cron("daily brief", "30 6 * * *", internal.brief.sendDaily, {});
 crons.cron("weekly recap", "30 14 * * 1", internal.brief.sendWeekly, {});

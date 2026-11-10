@@ -28,6 +28,7 @@ import type * as lib_apps from "../lib/apps.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_fx from "../lib/fx.js";
+import type * as lib_http from "../lib/http.js";
 import type * as lib_validate from "../lib/validate.js";
 import type * as lib_vat from "../lib/vat.js";
 import type * as media from "../media.js";
@@ -70,6 +71,7 @@ import type * as ugc from "../ugc.js";
 import type * as ugcData from "../ugcData.js";
 import type * as versions from "../versions.js";
 import type * as versionsData from "../versionsData.js";
+import type * as watchdog from "../watchdog.js";
 
 import type {
   ApiFromModules,
@@ -98,6 +100,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/dates": typeof lib_dates;
   "lib/fx": typeof lib_fx;
+  "lib/http": typeof lib_http;
   "lib/validate": typeof lib_validate;
   "lib/vat": typeof lib_vat;
   media: typeof media;
@@ -140,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   ugcData: typeof ugcData;
   versions: typeof versions;
   versionsData: typeof versionsData;
+  watchdog: typeof watchdog;
 }>;
 
 /**

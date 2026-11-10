@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalAction, type ActionCtx } from "../_generated/server";
 import { addDays, isoDay } from "../lib/dates";
+import { fetchRetry } from "../lib/http";
 
 // Engagement sync: daily active / new users, sessions, rolling 30-day actives and daily retention cohorts.
 // CortiFree → Amplitude Dashboard REST API (GET only). Quest IRL → PostHog HogQL query API (read-only query).
@@ -20,7 +21,6 @@ function env(name: string): string {
 }
 
 const compact = (day: string) => day.replaceAll("-", "");
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /* ---------------- Amplitude (CortiFree, Quest IRL) ---------------- */
 
@@ -32,15 +32,10 @@ async function amplitudeGet(app: string, path: string, params: Record<string, st
   const base = (process.env[`AMPLITUDE_${app}_API_BASE_URL`] || legacyBase || "https://amplitude.com").replace(/\/$/, "");
   const auth = Buffer.from(`${env(`AMPLITUDE_${app}_API_KEY`)}:${env(`AMPLITUDE_${app}_SECRET_KEY`)}`).toString("base64");
   const url = `${base}${path}?${new URLSearchParams(params)}`;
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
-    if (res.status === 429 && attempt < 4) {
-      await sleep(2000 * (attempt + 1));
-      continue;
-    }
-    if (!res.ok) throw new Error(`Amplitude ${res.status} sur ${path}: ${(await res.text()).slice(0, 200)}`);
-    return res.json();
-  }
+  // Retries 429 (Amplitude rejects concurrent Dashboard API queries) and 5xx.
+  const res = await fetchRetry(url, { headers: { Authorization: `Basic ${auth}` } }, { retries: 4, baseDelayMs: 2000 });
+  if (!res.ok) throw new Error(`Amplitude ${res.status} sur ${path}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
 }
 
 /** Map of day → value from a Dashboard API series response (first segment). */
@@ -102,7 +97,7 @@ const PH_FILTER = "properties.$lib = 'posthog-ios'";
 
 async function hogql(query: string): Promise<any[][]> {
   const host = env("POSTHOG_QUESTIRL_HOST").replace(/\/$/, "");
-  const res = await fetch(`${host}/api/projects/${env("POSTHOG_QUESTIRL_PROJECT_ID")}/query/`, {
+  const res = await fetchRetry(`${host}/api/projects/${env("POSTHOG_QUESTIRL_PROJECT_ID")}/query/`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env("POSTHOG_QUESTIRL_PERSONAL_KEY")}`, "Content-Type": "application/json" },
     body: JSON.stringify({ query: { kind: "HogQLQuery", query: `${query} LIMIT ${POSTHOG_LIMIT}` } }),

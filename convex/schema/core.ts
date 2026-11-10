@@ -26,4 +26,16 @@ export const coreTables = {
     sentAt: v.optional(v.number()),
     error: v.optional(v.string()),
   }).index("by_date", ["date"]),
+
+  // Alerts pushed to Telegram (source down, metric anomaly). One open row per key until it resolves,
+  // so an alert is sent once when it starts and once when it ends, never every hour.
+  alerts: defineTable({
+    key: v.string(), // e.g. "source:revenuecat", "anomaly:cocorise:net"
+    kind: v.union(v.literal("source"), v.literal("anomaly")),
+    message: v.string(),
+    openedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_key_opened", ["key", "openedAt"])
+    .index("by_opened", ["openedAt"]),
 };

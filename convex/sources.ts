@@ -55,6 +55,10 @@ export const SOURCES: SourceDef[] = [
   { source: "airtable_ugc", name: "Airtable · base UGC", feeds: "Créateurs UGC, Acquisition", job: "airtable", envs: ["AIRTABLE_TOKEN"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "fx", name: "Taux de change EUR", feeds: "Conversions en euros", job: "fx", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "telegram_brief", name: "Telegram · brief", feeds: "Brief du matin, récap du lundi", job: "brief", envs: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"], cadence: "chaque jour 06:30 UTC", staleAfterHours: 50 },
+  // Pushed from the Mac (scripts in otto-video-factory / carousel factory), no cron on Convex.
+  { source: "otto_sync", name: "Otto · Convex prod + usine vidéo", feeds: "Otto, Vidéos", job: null, envs: [], cadence: "poussé depuis le Mac", staleAfterHours: 26 },
+  { source: "media_sync", name: "Médiathèque", feeds: "Vidéos, Carrousels", job: null, envs: [], cadence: "poussé depuis le Mac", staleAfterHours: 50 },
+  { source: "carousel_factory", name: "Carousel Factory", feeds: "Carrousels", job: null, envs: [], cadence: "poussé depuis le Mac", staleAfterHours: 50 },
 ];
 
 /** A "running" row older than this was killed (timeout, redeploy): not running any more. */

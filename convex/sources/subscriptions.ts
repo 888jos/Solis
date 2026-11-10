@@ -6,6 +6,7 @@ import { internalAction } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import { APPS, appByAppleId, type AppSlug } from "../lib/apps";
 import { addDays, isoDay } from "../lib/dates";
+import { fetchRetry } from "../lib/http";
 import { fetchEurRates } from "../lib/fx";
 import { ascSalesReport } from "./asc";
 
@@ -135,7 +136,7 @@ async function rcGet(path: string): Promise<any> {
   const key = process.env.REVENUECAT_CORTIFREE_SECRET_KEY;
   const project = process.env.REVENUECAT_CORTIFREE_PROJECT_ID;
   if (!key || !project) throw new Error("REVENUECAT_CORTIFREE_SECRET_KEY / REVENUECAT_CORTIFREE_PROJECT_ID missing");
-  const res = await fetch(`https://api.revenuecat.com/v2/projects/${project}/${path}`, { headers: { Authorization: `Bearer ${key}` } });
+  const res = await fetchRetry(`https://api.revenuecat.com/v2/projects/${project}/${path}`, { headers: { Authorization: `Bearer ${key}` } });
   if (!res.ok) throw new Error(`RevenueCat ${res.status} on ${path.split("?")[0]}: ${(await res.text()).slice(0, 200)}`);
   return res.json();
 }
