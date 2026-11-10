@@ -1,0 +1,63 @@
+.f-otto {
+  gap: var(--space-4);
+}
+
+.f-otto code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.f-otto .page-header a {
+  color: inherit;
+}
+
+.f-otto .ot-kpis {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+}
+
+.f-otto .ot-section {
+  margin: var(--space-3) 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.f-otto .ot-offers {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.f-otto .ot-offer {
+  justify-content: space-between;
+  font-size: 13px;
+  gap: var(--space-2);
+}
+
+.f-otto .ot-video {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  text-decoration: none;
+  max-width: 420px;
+  min-width: 0;
+}
+
+.f-otto .ot-video:hover .ot-video__caption {
+  text-decoration: underline;
+}
+
+.f-otto .ot-video__caption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .f-otto .ot-video {
+    max-width: 200px;
+  }
+}

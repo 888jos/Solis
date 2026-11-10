@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Clapperboard, Download, Euro, GalleryHorizontalEnd, Globe2, LayoutDashboard, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 // The sidebar and the router both read this list. One entry per feature module in src/features/.
@@ -21,13 +21,16 @@ export const PAGES: PageDef[] = [
   { id: "acquisition", path: "/acquisition", label: "Acquisition", section: "Croissance", icon: Download, Component: lazy(() => import("@/features/acquisition")) },
   { id: "ugc", path: "/ugc", label: "Créateurs UGC", section: "Croissance", icon: Clapperboard, Component: lazy(() => import("@/features/ugc")) },
   { id: "carousels", path: "/carrousels", label: "Carrousels", section: "Croissance", icon: GalleryHorizontalEnd, Component: lazy(() => import("@/features/carousels")) },
+  { id: "videos", path: "/videos", label: "Vidéos", section: "Croissance", icon: Film, Component: lazy(() => import("@/features/videos")) },
   { id: "aso", path: "/aso", label: "ASO", section: "Croissance", icon: Search, Component: lazy(() => import("@/features/aso")) },
   { id: "engagement", path: "/engagement", label: "Engagement", section: "Produit", icon: Activity, Component: lazy(() => import("@/features/engagement")) },
   { id: "reviews", path: "/avis", label: "Avis & notes", section: "Produit", icon: Star, Component: lazy(() => import("@/features/reviews")) },
   { id: "versions", path: "/versions", label: "Versions", section: "Produit", icon: Rocket, Component: lazy(() => import("@/features/versions")) },
-  { id: "app-cortifree", path: "/apps/cortifree", label: "CortiFree", section: "Apps", icon: AppWindow, Component: lazy(() => import("@/features/app-cortifree")) },
-  { id: "app-cocorise", path: "/apps/cocorise", label: "Cocorise", section: "Apps", icon: AppWindow, Component: lazy(() => import("@/features/app-cocorise")) },
-  { id: "app-questirl", path: "/apps/questirl", label: "Quest IRL", section: "Apps", icon: AppWindow, Component: lazy(() => import("@/features/app-questirl")) },
+  { id: "app-cortifree", path: "/apps/cortifree", label: "CortiFree", section: "Projets", icon: AppWindow, Component: lazy(() => import("@/features/app-cortifree")) },
+  { id: "app-cocorise", path: "/apps/cocorise", label: "Cocorise", section: "Projets", icon: AppWindow, Component: lazy(() => import("@/features/app-cocorise")) },
+  { id: "app-questirl", path: "/apps/questirl", label: "Quest IRL", section: "Projets", icon: AppWindow, Component: lazy(() => import("@/features/app-questirl")) },
+  // Projects that are not App Store apps.
+  { id: "project-otto", path: "/projets/otto", label: "Otto", section: "Projets", icon: MessageCircleHeart, Component: lazy(() => import("@/features/project-otto")) },
   { id: "sources", path: "/sources", label: "Sources", section: "Système", icon: Plug, Component: lazy(() => import("@/features/sources")) },
   { id: "settings", path: "/reglages", label: "Réglages", section: "Système", icon: Settings, Component: lazy(() => import("@/features/settings")) },
 ];
