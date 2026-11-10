@@ -224,11 +224,13 @@ const STATS_CHUNK = 8;
 export const statsChunk = internalAction({
   args: { runId: v.optional(v.id("syncRuns")), done: v.optional(v.number()), retries: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const runId = args.runId ?? (await ctx.runMutation(internal.syncRuns.start, { source: "aso_stats" }));
+    // One syncRuns row per lot: a first pass takes hours and must never look "interrupted".
+    const runId = await ctx.runMutation(internal.syncRuns.start, { source: "aso_stats" });
     let done = args.done ?? 0;
+    let lot = 0;
     const { batch, remaining } = await ctx.runQuery(internal.asoData.pendingStats, { limit: STATS_CHUNK });
     if (!batch.length) {
-      await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: done, message: `${done} mots-clés recalculés` });
+      await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: 0, message: `à jour (${done} recalculés)` });
       return;
     }
     for (const k of batch) {
@@ -240,20 +242,22 @@ export const statsChunk = internalAction({
       if (blocked) {
         const retries = (args.retries ?? 0) + 1;
         if (retries > 6) {
-          await ctx.runMutation(internal.syncRuns.finish, { runId, status: "error", rows: done, message: `App Store refuse les requêtes (HTTP ${blocked.blocked}), ${remaining + batch.length} mots-clés non recalculés` });
+          await ctx.runMutation(internal.syncRuns.finish, { runId, status: "error", rows: lot, message: `App Store refuse les requêtes (HTTP ${blocked.blocked}), ${remaining + batch.length} mots-clés non recalculés` });
           return;
         }
-        await ctx.scheduler.runAfter(retries * 120_000, internal.sources.aso.statsChunk, { runId, done, retries });
+        await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: lot, message: `pause (HTTP ${blocked.blocked}), reprise dans ${retries * 2} min · ${remaining + batch.length} restants` });
+        await ctx.scheduler.runAfter(retries * 120_000, internal.sources.aso.statsChunk, { done, retries });
         return;
       }
       const ids = search && !("blocked" in search) ? search.ids : [];
       const difficulty = await estimateDifficulty(ids, k.country, app.appStoreId);
       await ctx.runMutation(internal.asoData.writeStats, { id: k.id, popularity: popularity as number, difficulty, competitors: ids.length });
       done++;
+      lot++;
       await sleep(SPACING_MS);
     }
-    if (remaining > 0) await ctx.scheduler.runAfter(SPACING_MS, internal.sources.aso.statsChunk, { runId, done, retries: 0 });
-    else await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: done, message: `${done} mots-clés recalculés` });
+    await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: lot, message: remaining > 0 ? `lot de ${lot} · ${remaining} restants` : `terminé · ${done} recalculés` });
+    if (remaining > 0) await ctx.scheduler.runAfter(SPACING_MS, internal.sources.aso.statsChunk, { done, retries: 0 });
   },
 });
 
@@ -262,11 +266,13 @@ export const rankChunk = internalAction({
   args: { runId: v.optional(v.id("syncRuns")), done: v.optional(v.number()), retries: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const date = isoDay(new Date());
-    const runId = args.runId ?? (await ctx.runMutation(internal.syncRuns.start, { source: "aso_ranks" }));
+    // One syncRuns row per lot (see statsChunk).
+    const runId = await ctx.runMutation(internal.syncRuns.start, { source: "aso_ranks" });
     let done = args.done ?? 0;
+    let lot = 0;
     const { batch, remaining } = await ctx.runQuery(internal.asoData.pendingKeywords, { date, limit: CHUNK });
     if (!batch.length) {
-      await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: done });
+      await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: 0, message: `à jour (${done} mesurés aujourd'hui)` });
       return;
     }
     for (let i = 0; i < batch.length; i++) {
@@ -283,18 +289,20 @@ export const rankChunk = internalAction({
       if ("blocked" in result) {
         const retries = (args.retries ?? 0) + 1;
         if (retries > 6) {
-          await ctx.runMutation(internal.syncRuns.finish, { runId, status: "error", rows: done, message: `iTunes Search refuse les requêtes (HTTP ${result.blocked}), ${remaining + batch.length - i} mots-clés non mesurés` });
+          await ctx.runMutation(internal.syncRuns.finish, { runId, status: "error", rows: lot, message: `App Store refuse les requêtes (HTTP ${result.blocked}), ${remaining + batch.length - i} mots-clés non mesurés` });
           return;
         }
-        await ctx.scheduler.runAfter(retries * 120_000, internal.sources.aso.rankChunk, { runId, done, retries });
+        await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: lot, message: `pause (HTTP ${result.blocked}), reprise dans ${retries * 2} min · ${remaining + batch.length - i} restants` });
+        await ctx.scheduler.runAfter(retries * 120_000, internal.sources.aso.rankChunk, { done, retries });
         return;
       }
       await ctx.runMutation(internal.asoData.upsertRanking, { ...k, date, rank: result.rank, topCompetitor: result.topCompetitor, resultCount: result.resultCount, source: result.source });
       done++;
+      lot++;
       if (i < batch.length - 1) await sleep(SPACING_MS);
     }
-    if (remaining > 0) await ctx.scheduler.runAfter(SPACING_MS, internal.sources.aso.rankChunk, { runId, done, retries: 0 });
-    else await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: done });
+    await ctx.runMutation(internal.syncRuns.finish, { runId, status: "ok", rows: lot, message: remaining > 0 ? `lot de ${lot} · ${remaining} restants` : `terminé · ${done} mesurés aujourd'hui` });
+    if (remaining > 0) await ctx.scheduler.runAfter(SPACING_MS, internal.sources.aso.rankChunk, { done, retries: 0 });
   },
 });
 

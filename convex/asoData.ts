@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { addDays } from "./lib/dates";
 
 // Internal model helpers for the ASO feature (non-node): written by convex/sources/aso.ts.
@@ -148,26 +148,23 @@ export const writeStats = internalMutation({
     ctx.db.patch(id, { popularity, difficulty: difficulty ?? undefined, competitors, statsSource: "solis", statsUpdatedAt: Date.now() }),
 });
 
-/** True while a stats run started less than an hour ago is still going. */
+/** True while the stats chain is going (same rule as rankRunActive). */
 export const statsRunActive = internalQuery({
   args: {},
-  handler: async (ctx) => {
-    const run = await ctx.db.query("syncRuns").withIndex("by_source_started", (q) => q.eq("source", "aso_stats")).order("desc").first();
-    return !!run && run.status === "running" && Date.now() - run.startedAt < RANK_RUN_STALE_MS;
-  },
+  handler: (ctx) => chainActive(ctx, "aso_stats"),
 });
 
-/** True while a rank run started less than an hour ago is still going (avoids parallel chains). */
+export async function chainActive(ctx: QueryCtx, source: string): Promise<boolean> {
+  const run = await ctx.db.query("syncRuns").withIndex("by_source_started", (q) => q.eq("source", source)).order("desc").first();
+  if (!run) return false;
+  if (run.status === "running") return Date.now() - run.startedAt < RANK_RUN_STALE_MS;
+  return /restants/.test(run.message ?? "") && Date.now() - (run.finishedAt ?? run.startedAt) < 10 * 60_000;
+}
+
+/** True while a rank chain is going: a lot is running, or the last lot ended < 10 min ago with keywords left. */
 export const rankRunActive = internalQuery({
   args: {},
-  handler: async (ctx) => {
-    const run = await ctx.db
-      .query("syncRuns")
-      .withIndex("by_source_started", (q) => q.eq("source", "aso_ranks"))
-      .order("desc")
-      .first();
-    return !!run && run.status === "running" && Date.now() - run.startedAt < RANK_RUN_STALE_MS;
-  },
+  handler: (ctx) => chainActive(ctx, "aso_ranks"),
 });
 
 export const RANK_RUN_STALE_MS = 60 * 60_000;

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { normalizeKeyword, RANK_RUN_STALE_MS } from "./asoData";
+import { chainActive, normalizeKeyword, RANK_RUN_STALE_MS } from "./asoData";
 import { appBySlug } from "./lib/apps";
 import { addDays } from "./lib/dates";
 import { authMutation, authQuery } from "./lib/auth";
@@ -132,12 +132,7 @@ export const removeKeyword = authMutation({
 export const refresh = authMutation({
   args: {},
   handler: async (ctx) => {
-    const running = await ctx.db
-      .query("syncRuns")
-      .withIndex("by_source_started", (q) => q.eq("source", "aso_ranks"))
-      .order("desc")
-      .first();
-    if (running?.status === "running" && Date.now() - running.startedAt < RANK_RUN_STALE_MS) return { started: false };
+    if (await chainActive(ctx, "aso_ranks")) return { started: false };
     await ctx.scheduler.runAfter(0, internal.sources.aso.syncRecent, {});
     return { started: true };
   },
