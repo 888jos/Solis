@@ -32,4 +32,14 @@ export const pilotTables = {
     label: v.string(),
     createdAt: v.number(),
   }).index("by_day", ["day"]),
+
+  // Weekly review written by Claude from the week's aggregates (convex/review.ts).
+  reviews: defineTable({
+    weekStart: v.string(), // Monday, YYYY-MM-DD
+    weekEnd: v.string(),
+    text: v.string(),
+    model: v.string(),
+    createdAt: v.number(),
+    sentAt: v.optional(v.number()),
+  }).index("by_week", ["weekStart"]),
 };

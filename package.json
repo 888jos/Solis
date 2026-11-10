@@ -15,6 +15,7 @@
     "deploy": "npm test && node scripts/export-models.mjs && convex deploy -y --cmd 'npx vite build' --cmd-url-env-var-name VITE_CONVEX_URL && wrangler deploy"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@auth/core": "^0.41.3",
     "@convex-dev/auth": "^0.0.98",
     "convex": "1.48.0",

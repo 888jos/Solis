@@ -233,3 +233,10 @@
     flex: 1 1 140px;
   }
 }
+
+.f-today .td-review {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.55;
+}

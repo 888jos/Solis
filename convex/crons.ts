@@ -27,9 +27,13 @@ crons.cron("recurring expenses", "40 0 * * *", internal.expensesData.materialize
 
 // Watchdog: one Telegram message when a source breaks or falls behind, one when it is back.
 crons.cron("source watchdog", "55 * * * *", internal.watchdog.checkSources, {});
+// Unusual moves on the last data day (Apple publishes ~13:00 UTC, Otto is pushed from the Mac).
+crons.cron("anomalies", "20 15 * * *", internal.watchdog.checkAnomalies, {});
 
 // Telegram: daily brief ~07:30/08:30 Paris; weekly recap Monday afternoon, once Apple has published Sunday.
 crons.cron("daily brief", "30 6 * * *", internal.brief.sendDaily, {});
 crons.cron("weekly recap", "30 14 * * 1", internal.brief.sendWeekly, {});
+// Weekly review written by Claude from the week's aggregates, right after the numbers recap.
+crons.cron("weekly review", "45 14 * * 1", internal.review.weekly, {});
 
 export default crons;

@@ -55,6 +55,7 @@ export const SOURCES: SourceDef[] = [
   { source: "airtable_ugc", name: "Airtable · base UGC", feeds: "Créateurs UGC, Acquisition", job: "airtable", envs: ["AIRTABLE_TOKEN"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "fx", name: "Taux de change EUR", feeds: "Conversions en euros", job: "fx", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "telegram_brief", name: "Telegram · brief", feeds: "Brief du matin, récap du lundi", job: "brief", envs: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"], cadence: "chaque jour 06:30 UTC", staleAfterHours: 50 },
+  { source: "weekly_review", name: "Claude · revue de la semaine", feeds: "Aujourd'hui, Telegram", job: null, envs: ["ANTHROPIC_API_KEY"], cadence: "chaque lundi 14:45 UTC", staleAfterHours: 24 * 8 },
   // Pushed from the Mac (scripts in otto-video-factory / carousel factory), no cron on Convex.
   { source: "otto_sync", name: "Otto · Convex prod + usine vidéo", feeds: "Otto, Vidéos", job: null, envs: [], cadence: "poussé depuis le Mac", staleAfterHours: 26 },
   { source: "media_sync", name: "Médiathèque", feeds: "Vidéos, Carrousels", job: null, envs: [], cadence: "poussé depuis le Mac", staleAfterHours: 50 },

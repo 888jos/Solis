@@ -349,6 +349,17 @@ export default function TodayPage() {
           <Pulse vm={vm} />
         </Card>
       </div>
+      <Card
+        title="Que retenir de la semaine ?"
+        subtitle={vm.review ? `${vm.review.title} · écrite par Claude chaque lundi, à partir des chiffres` : "Écrite par Claude chaque lundi, à partir des chiffres de la semaine"}
+        action={
+          <button type="button" className="btn" onClick={vm.onWriteReview} disabled={vm.reviewBusy}>
+            {vm.reviewBusy ? "Rédaction…" : "Écrire maintenant"}
+          </button>
+        }
+      >
+        {vm.review ? <p className="td-review">{vm.review.text}</p> : <p className="td-empty">Pas encore de revue. La première arrive lundi prochain (ou maintenant, avec le bouton).</p>}
+      </Card>
       <div id="objectifs">
         <Card title={`Suis-je dans les clous pour ${vm.monthLabel} ?`} subtitle="Valeur du mois, projection en fin de mois au rythme actuel, cible">
           <Goals vm={vm} />

@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useState } from "react";
 import { appColor, appName } from "@/lib/apps";
-import { useSolisMutation, useSolisQuery } from "@/lib/convex";
+import { useSolisAction, useSolisMutation, useSolisQuery } from "@/lib/convex";
 import { change, formatDay, formatDayLong, formatDecimal, formatEur, formatInt, formatMonthLong, formatPct } from "@/lib/format";
 import type { Status } from "@/ui";
 
@@ -54,6 +54,9 @@ export function useTodayViewModel() {
   const removeExperiment = useSolisMutation(api.pilot.removeExperiment);
   const addAnnotation = useSolisMutation(api.pilot.addAnnotation);
   const removeAnnotation = useSolisMutation(api.pilot.removeAnnotation);
+  const review = useSolisQuery(api.pilot.latestReview, {});
+  const writeReview = useSolisAction(api.review.writeNow);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -68,7 +71,7 @@ export function useTodayViewModel() {
     }
   };
 
-  const loading = !today || !catalog || !goals || !experiments || !annotations;
+  const loading = !today || !catalog || !goals || !experiments || !annotations || review === undefined;
   if (loading) return { loading: true as const, monthLabel: formatMonthLong(month) };
 
   const metricsFor = (project: string) => catalog.metrics.filter((m) => m.projects.includes(project));
@@ -152,6 +155,21 @@ export function useTodayViewModel() {
     projects: catalog.projects.map((p) => ({ value: p, label: projectName(p) })),
     metricsFor,
     kinds: Object.entries(KIND_LABEL).filter(([k]) => k !== "release").map(([value, label]) => ({ value, label })),
+    review: review ? { title: `Semaine du ${formatDay(review.weekStart)} au ${formatDay(review.weekEnd)}`, text: review.text } : null,
+    reviewBusy,
+    onWriteReview: async () => {
+      setReviewBusy(true);
+      setError(null);
+      try {
+        const res = await writeReview({});
+        if (res.status === "skipped") setError("Ajoute ANTHROPIC_API_KEY dans les variables Convex pour que Claude écrive la revue.");
+        else if (res.status === "error") setError(`Revue impossible : ${res.text}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setReviewBusy(false);
+      }
+    },
     error,
     clearError: () => setError(null),
     onSetGoal: (project: string, metric: string, target: number) => run(() => setGoal({ project, metric, month, target: unitOf(metric) === "pct" ? target / 100 : target })),

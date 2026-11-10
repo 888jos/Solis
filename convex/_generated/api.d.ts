@@ -39,6 +39,7 @@ import type * as profitability from "../profitability.js";
 import type * as questirlAnalytics from "../questirlAnalytics.js";
 import type * as revenue from "../revenue.js";
 import type * as revenueData from "../revenueData.js";
+import type * as review from "../review.js";
 import type * as reviews from "../reviews.js";
 import type * as reviewsData from "../reviewsData.js";
 import type * as schema_analytics from "../schema/analytics.js";
@@ -113,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   questirlAnalytics: typeof questirlAnalytics;
   revenue: typeof revenue;
   revenueData: typeof revenueData;
+  review: typeof review;
   reviews: typeof reviews;
   reviewsData: typeof reviewsData;
   "schema/analytics": typeof schema_analytics;

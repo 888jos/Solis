@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
-import { internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { APPS } from "./lib/apps";
 import { authMutation, authQuery } from "./lib/auth";
 import { addDays, isoDay } from "./lib/dates";
@@ -332,3 +332,111 @@ export const addAnnotation = authMutation({
 });
 
 export const removeAnnotation = authMutation({ args: { id: v.id("annotations") }, handler: (ctx, { id }) => ctx.db.delete(id) });
+
+/* ---------------- Anomalies (daily, used by convex/watchdog.ts) ---------------- */
+
+const ANOMALY_CHECKS: { project: string; metric: string; minBaseline: number; source: "apple" | "otto" }[] = [
+  ...APPS.map((a) => ({ project: a.slug as string, metric: "net", minBaseline: 3, source: "apple" as const })),
+  { project: "studio", metric: "downloads", minBaseline: 5, source: "apple" },
+  { project: "otto", metric: "reports", minBaseline: 5, source: "otto" },
+  { project: "otto", metric: "payments", minBaseline: 1, source: "otto" },
+];
+
+/**
+ * Last data day vs the average of the same weekday over the 4 previous weeks. Flags a move of 50 %
+ * or more, only when the baseline is big enough to mean something.
+ */
+export const anomalies = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const days = await dataDays(ctx);
+    const out: { key: string; project: string; metric: string; day: string; value: number; baseline: number; change: number }[] = [];
+    for (const c of ANOMALY_CHECKS) {
+      const day = days[c.source];
+      if (!day) continue;
+      const value = await metricValue(ctx, c.project, c.metric, day, day);
+      if (value == null) continue;
+      const past: number[] = [];
+      for (let w = 1; w <= 4; w++) {
+        const d = addDays(day, -7 * w);
+        const x = await metricValue(ctx, c.project, c.metric, d, d);
+        if (x != null) past.push(x);
+      }
+      if (past.length < 3) continue;
+      const baseline = past.reduce((t, x) => t + x, 0) / past.length;
+      if (baseline < c.minBaseline) continue;
+      const delta = (value - baseline) / baseline;
+      if (Math.abs(delta) >= 0.5) out.push({ key: `anomaly:${c.project}:${c.metric}:${day}`, project: c.project, metric: c.metric, day, value, baseline, change: delta });
+    }
+    return out;
+  },
+});
+
+/* ---------------- Weekly review (facts for Claude, storage) ---------------- */
+
+/**
+ * Everything the weekly review may talk about, as compact numbers: the last 7 data days vs the 7
+ * before, goals, experiments, open alerts, annotations and the best/worst Otto videos of the week.
+ */
+export const weeklyFacts = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const days = await dataDays(ctx);
+    const window = (end: string) => ({ from: addDays(end, -6), to: end, prevFrom: addDays(end, -13), prevTo: addDays(end, -7) });
+    const metrics: { project: string; metric: string; label: string; from: string; to: string; value: number | null; previous: number | null }[] = [];
+    for (const project of PROJECTS) {
+      for (const [metric, def] of Object.entries(METRICS)) {
+        if (!def.projects(project)) continue;
+        const end = days[def.source];
+        if (!end) continue;
+        const w = window(end);
+        metrics.push({ project, metric, label: def.label, from: w.from, to: w.to, value: await metricValue(ctx, project, metric, w.from, w.to), previous: await metricValue(ctx, project, metric, w.prevFrom, w.prevTo) });
+      }
+    }
+    const month = parisDay(Date.now()).slice(0, 7);
+    const goals = [];
+    for (const g of await ctx.db.query("goals").withIndex("by_month", (q) => q.eq("month", month)).collect()) {
+      const p = await goalProgress(ctx, g, days);
+      goals.push({ project: g.project, metric: METRICS[g.metric]?.label ?? g.metric, target: g.target, value: p.value, projection: p.projection });
+    }
+    const experiments = [];
+    for (const e of await ctx.db.query("experiments").withIndex("by_start").order("desc").take(10)) {
+      experiments.push({ title: e.title, hypothesis: e.hypothesis, project: e.project, metric: METRICS[e.metric]?.label ?? e.metric, status: e.status, decision: e.decision ?? null, result: await experimentResult(ctx, e, days) });
+    }
+    const alerts = (await ctx.db.query("alerts").withIndex("by_opened").order("desc").take(50)).filter((a) => a.resolvedAt === undefined).map((a) => a.message);
+    const since = addDays(parisDay(Date.now()), -14);
+    const annotations = (await ctx.db.query("annotations").withIndex("by_day", (q) => q.gte("day", since)).collect()).map((a) => `${a.day} ${a.project} : ${a.label}`);
+    const weekAgo = Date.now() - 7 * 86400000;
+    const videos = await ctx.db.query("ottoVideos").withIndex("by_posted", (q) => q.gte("postedAt", weekAgo)).collect();
+    videos.sort((a, b) => b.views - a.views);
+    const pick = (x: (typeof videos)[number]) => ({ account: x.account, platform: x.platform, views: x.views, likes: x.likes, comments: x.comments, caption: x.caption.slice(0, 140) });
+    const snap = await ctx.db.query("ottoSnapshot").first();
+    return {
+      dataDays: days,
+      metrics,
+      goals,
+      experiments,
+      alerts,
+      annotations,
+      otto: {
+        videosThisWeek: videos.length,
+        top: videos.slice(0, 5).map(pick),
+        bottom: videos.slice(-3).map(pick),
+        toValidate: snap?.validation.filter((x) => x.status === "a_valider").reduce((t, x) => t + x.count, 0) ?? null,
+      },
+    };
+  },
+});
+
+export const storeReview = internalMutation({
+  args: { weekStart: v.string(), weekEnd: v.string(), text: v.string(), model: v.string(), sentAt: v.optional(v.number()) },
+  handler: (ctx, args) => ctx.db.insert("reviews", { ...args, createdAt: Date.now() }),
+});
+
+export const latestReview = authQuery({
+  args: {},
+  handler: async (ctx) => {
+    const r = await ctx.db.query("reviews").order("desc").first();
+    return r ? { weekStart: r.weekStart, weekEnd: r.weekEnd, text: r.text, createdAt: r.createdAt } : null;
+  },
+});
