@@ -47,6 +47,8 @@ export const SOURCES: SourceDef[] = [
   { source: "aso_metadata", name: "App Store Connect · fiches", feeds: "ASO", job: "aso", envs: ASC, cadence: "chaque jour", staleAfterHours: 50 },
   { source: "aso_ranks", name: "iTunes Search · positions", feeds: "ASO", job: "aso", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "amplitude", name: "Amplitude · CortiFree", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
+  { source: "amplitude_questirl", name: "Amplitude · Quest IRL", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_QUESTIRL_API_KEY", "AMPLITUDE_QUESTIRL_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
+  { source: "amplitude_cocorise", name: "Amplitude · Cocorise", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_COCORISE_API_KEY", "AMPLITUDE_COCORISE_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "posthog", name: "PostHog · Quest IRL", feeds: "Engagement", job: "engagement", envs: ["POSTHOG_QUESTIRL_HOST", "POSTHOG_QUESTIRL_PROJECT_ID", "POSTHOG_QUESTIRL_PERSONAL_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "openai_api", name: "OpenAI · coûts API", feeds: "Dépenses", job: "aiCosts", envs: ["OPENAI_ADMIN_KEY"], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "anthropic_api", name: "Anthropic · coûts API", feeds: "Dépenses", job: "aiCosts", envs: ["ANTHROPIC_ADMIN_KEY"], cadence: "chaque jour", staleAfterHours: 50 },
