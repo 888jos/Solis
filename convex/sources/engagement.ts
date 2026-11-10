@@ -25,9 +25,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /* ---------------- Amplitude (CortiFree, Quest IRL) ---------------- */
 
 // One Amplitude project per app: AMPLITUDE_<APP>_API_KEY / _SECRET_KEY, optional AMPLITUDE_<APP>_API_BASE_URL
-// (e.g. https://analytics.eu.amplitude.com for an EU project). Default: AMPLITUDE_API_BASE_URL, then US.
+// (e.g. https://analytics.eu.amplitude.com for an EU project). Default: US (CortiFree still honours AMPLITUDE_API_BASE_URL).
 async function amplitudeGet(app: string, path: string, params: Record<string, string>): Promise<any> {
-  const base = (process.env[`AMPLITUDE_${app}_API_BASE_URL`] || process.env.AMPLITUDE_API_BASE_URL || "https://amplitude.com").replace(/\/$/, "");
+  // The global AMPLITUDE_API_BASE_URL predates per-app projects and only describes CortiFree's (EU) project.
+  const legacyBase = app === "CORTIFREE" ? process.env.AMPLITUDE_API_BASE_URL : undefined;
+  const base = (process.env[`AMPLITUDE_${app}_API_BASE_URL`] || legacyBase || "https://amplitude.com").replace(/\/$/, "");
   const auth = Buffer.from(`${env(`AMPLITUDE_${app}_API_KEY`)}:${env(`AMPLITUDE_${app}_SECRET_KEY`)}`).toString("base64");
   const url = `${base}${path}?${new URLSearchParams(params)}`;
   for (let attempt = 0; ; attempt++) {
