@@ -8,7 +8,7 @@ import { authAction, authQuery } from "./lib/auth";
 // Sources page model: registry of every data source, its sync job, freshness from syncRuns and the
 // presence (never the value) of the env vars it needs.
 
-export type JobId = "revenue" | "subscriptions" | "reviews" | "versions" | "aso" | "engagement" | "aiCosts" | "airtable" | "fx" | "brief" | "stripe" | "metaAds";
+export type JobId = "revenue" | "subscriptions" | "reviews" | "versions" | "aso" | "engagement" | "aiCosts" | "airtable" | "fx" | "brief" | "stripe" | "metaAds" | "ascAnalytics";
 
 type SyncRef = FunctionReference<"action", "internal", Record<string, never>>;
 
@@ -25,6 +25,7 @@ const JOBS: Record<JobId, { ref: SyncRef; label: string }> = {
   brief: { ref: internal.brief.sendDailyNow as SyncRef, label: "Brief Telegram" },
   stripe: { ref: internal.sources.stripe.syncRecent as SyncRef, label: "Stripe Otto" },
   metaAds: { ref: internal.sources.metaAds.syncRecent as SyncRef, label: "Meta Ads" },
+  ascAnalytics: { ref: internal.sources.ascAnalytics.syncRecent as SyncRef, label: "Analytics App Store" },
 };
 
 type SourceDef = {
@@ -46,6 +47,7 @@ export const SOURCES: SourceDef[] = [
   { source: "asc_reviews", name: "App Store Connect · avis", feeds: "Avis & notes", job: "reviews", envs: ASC, cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "itunes_ratings", name: "iTunes Lookup · notes par pays", feeds: "Avis & notes", job: "reviews", envs: [], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_versions", name: "App Store Connect · versions", feeds: "Versions", job: "versions", envs: ASC, cadence: "toutes les 6 h", staleAfterHours: 18 },
+  { source: "asc_analytics", name: "App Store Connect · analytics (fiche)", feeds: "Acquisition (impressions, vues, conversion)", job: "ascAnalytics", envs: ASC, cadence: "2 fois par jour", staleAfterHours: 30 },
   { source: "aso_metadata", name: "App Store Connect · fiches", feeds: "ASO", job: "aso", envs: ASC, cadence: "chaque jour", staleAfterHours: 50 },
   { source: "aso_ranks", name: "iTunes Search · positions", feeds: "ASO", job: "aso", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "amplitude", name: "Amplitude · CortiFree", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },

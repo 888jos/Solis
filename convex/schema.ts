@@ -9,6 +9,7 @@ import { paidTables } from "./schema/paid";
 import { pilotTables } from "./schema/pilot";
 import { productTables } from "./schema/product";
 import { projectTables } from "./schema/projects";
+import { storeAnalyticsTables } from "./schema/storeAnalytics";
 import { revenueTables } from "./schema/revenue";
 import { subscriptionTables } from "./schema/subscriptions";
 
@@ -26,4 +27,5 @@ export default defineSchema({
   ...projectTables,
   ...pilotTables,
   ...paidTables,
+  ...storeAnalyticsTables,
 });

@@ -33,12 +33,47 @@ function countryName(code: string): string {
 const SOURCE_LABEL: Record<string, string> = { amplitude: "Amplitude", posthog: "PostHog" };
 const plural = (n: number, one: string, many: string) => (Math.abs(n) > 1 ? many : one);
 
+const STORE_SOURCE_LABEL: Record<string, string> = {
+  "App Store search": "Recherche App Store",
+  "App Store browse": "Navigation App Store",
+  "App referrer": "Autre app (TikTok, Insta…)",
+  "Web referrer": "Site web (Safari)",
+  "App Clip": "App Clip",
+  Notification: "Notification App Store",
+  Unavailable: "Inconnue",
+};
+
 /** Acquisition page ViewModel: Apple downloads, UGC views, spend and the download → paid ratio, ready to render. */
 export function useAcquisitionViewModel() {
   const period = usePeriod();
   const app = useAppFilter();
   const data = useSolisQuery(api.acquisition.overview, { from: period.from, to: period.to, prevFrom: period.prevFrom, prevTo: period.prevTo, bucket: period.bucket, app });
   const adsData = useSolisQuery(api.paid.adsSummary, { from: period.from, to: period.to, app });
+  const storeData = useSolisQuery(api.storeAnalytics.funnel, { from: period.from, to: period.to, prevFrom: period.prevFrom, prevTo: period.prevTo, app });
+  const rate = (n: number, d: number) => (d > 0 ? n / d : null);
+  const store = !storeData
+    ? { kind: "loading" as const }
+    : !storeData.connected
+      ? { kind: "pending" as const, message: storeData.lastRun?.message ?? null }
+      : {
+          kind: "ok" as const,
+          lastDay: storeData.lastDay ? formatDay(storeData.lastDay) : null,
+          kpis: [
+            { key: "imp", label: "Impressions", value: formatInt(storeData.current.impressions), delta: change(storeData.current.impressions, storeData.previous.impressions), foot: `préc. ${formatInt(storeData.previous.impressions)}`, hint: "Ton icône vue dans une liste (recherche, top, onglets), hors fiche" },
+            { key: "pv", label: "Vues de la fiche", value: formatInt(storeData.current.pageViews), delta: change(storeData.current.pageViews, storeData.previous.pageViews), foot: `${formatPct(rate(storeData.current.uniquePageViews, storeData.current.uniqueImpressions))} des visiteurs uniques`, hint: "Vues de la page produit App Store" },
+            { key: "dl", label: "1ers téléchargements", value: formatInt(storeData.current.firstDownloads), delta: change(storeData.current.firstDownloads, storeData.previous.firstDownloads), foot: `préc. ${formatInt(storeData.previous.firstDownloads)}`, hint: "Rapport App Downloads d'Apple, toutes sources" },
+            { key: "cvr", label: "Conversion fiche", value: formatPct(rate(storeData.current.firstDownloads, storeData.current.uniquePageViews)), delta: null, foot: `préc. ${formatPct(rate(storeData.previous.firstDownloads, storeData.previous.uniquePageViews))}`, hint: "1ers téléchargements ÷ visiteurs uniques de la fiche" },
+          ],
+          sources: storeData.sources.map((s) => ({
+            key: s.sourceType,
+            source: STORE_SOURCE_LABEL[s.sourceType] ?? s.sourceType,
+            impressions: formatInt(s.impressions),
+            pageViews: formatInt(s.pageViews),
+            downloads: formatInt(s.firstDownloads),
+            pageRate: formatPct(rate(s.uniquePageViews, s.uniqueImpressions)),
+            cvr: formatPct(rate(s.firstDownloads, s.uniquePageViews)),
+          })),
+        };
   const ads = !adsData
     ? { kind: "loading" as const }
     : !adsData.connected
@@ -211,6 +246,7 @@ export function useAcquisitionViewModel() {
     : undefined;
 
   return {
+    store,
     ads,
     loading,
     notConnected,

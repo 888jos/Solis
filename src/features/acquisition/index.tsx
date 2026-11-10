@@ -59,6 +59,38 @@ export default function AcquisitionPage() {
         </Card>
       </div>
 
+      <Card
+        title="Ma fiche App Store convertit-elle ?"
+        subtitle={vm.store.kind === "ok" ? `Impressions → vues de la fiche → 1ers téléchargements, par source${vm.store.lastDay ? ` · données Apple jusqu'au ${vm.store.lastDay}` : ""}` : "Impressions → vues de la fiche → 1ers téléchargements, par source"}
+      >
+        {vm.store.kind === "loading" ? (
+          <Skeleton height={120} />
+        ) : vm.store.kind === "pending" ? (
+          <EmptyState title="Rapports demandés à Apple">Apple génère les premiers rapports Analytics 1 à 2 jours après la demande (faite le 10 nov.). Ils arriveront ici tout seuls.{vm.store.message ? ` Dernière synchro : ${vm.store.message}` : ""}</EmptyState>
+        ) : (
+          <div className="stack">
+            <div className="grid grid--kpi">
+              {vm.store.kpis.map((k) => (
+                <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} foot={k.foot} hint={k.hint} />
+              ))}
+            </div>
+            <DataTable
+              columns={[
+                { key: "source", header: "Source", cell: (r) => r.source },
+                { key: "imp", header: "Impressions", align: "right", cell: (r) => <span className="num">{r.impressions}</span> },
+                { key: "pv", header: "Vues fiche", align: "right", cell: (r) => <span className="num">{r.pageViews}</span> },
+                { key: "pr", header: <span className="aq-hide-sm" title="Visiteurs uniques de la fiche ÷ impressions uniques">Clic</span>, align: "right", cell: (r) => <span className="num aq-hide-sm">{r.pageRate}</span> },
+                { key: "dl", header: "Téléch.", align: "right", cell: (r) => <span className="num">{r.downloads}</span> },
+                { key: "cvr", header: <span title="1ers téléchargements ÷ visiteurs uniques de la fiche">Conv.</span>, align: "right", cell: (r) => <strong className="num">{r.cvr}</strong> },
+              ]}
+              rows={vm.store.sources}
+              rowKey={(r) => r.key}
+              empty={<EmptyState title="Aucune donnée sur la période" />}
+            />
+          </div>
+        )}
+      </Card>
+
       <Card title="La pub payante est-elle rentable ?" subtitle="Meta Ads · dépense, installations rapportées par Meta, coût par installation">
         {vm.ads.kind === "loading" ? (
           <Skeleton height={120} />

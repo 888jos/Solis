@@ -17,6 +17,8 @@ crons.cron("amplitude + posthog", "50 1,7,13,19 * * *", internal.sources.engagem
 
 // Growth.
 crons.cron("airtable ugc", "10 2,8,14,20 * * *", internal.sources.airtable.syncRecent, {});
+// App Store Analytics Reports (impressions, product page views, first downloads by source): daily instances.
+crons.cron("asc analytics", "10 7,15 * * *", internal.sources.ascAnalytics.syncRecent, {});
 crons.cron("aso metadata + ranks", "15 4 * * *", internal.sources.aso.syncRecent, {});
 
 // Stripe (Otto) and Meta Ads (CortiFree): skipped until their keys are set on Convex.
