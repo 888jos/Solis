@@ -13,7 +13,9 @@ const BUTTONS: { action: ReviewAction; label: string; key: string; tone: string;
   { action: "no", label: "Rejeter", key: "X", tone: "critical", Icon: X },
 ];
 
-export function CarouselDetail({ detail, review, onClose, onEdit }: { detail: Detail; review: VM["review"]; onClose: () => void; onEdit: () => void }) {
+const LOCAL_EDITOR = "http://localhost:5180";
+
+export function CarouselDetail({ detail, review, onClose }: { detail: Detail; review: VM["review"]; onClose: () => void; onEdit?: () => void }) {
   const [copied, setCopied] = useState(false);
 
   // V / R / X review shortcuts, ignored while typing.
@@ -53,10 +55,12 @@ export function CarouselDetail({ detail, review, onClose, onEdit }: { detail: De
           <p className="muted">{detail.meta}</p>
         </div>
         <Badge status={detail.status.tone}>{detail.status.label}</Badge>
-        <button type="button" className="btn" onClick={onEdit}>
+        {/* The editor runs on the Mac (cf editor) and edits Carousel Factory's own files: no copy here. */}
+        <a className="btn" href={`${LOCAL_EDITOR}/c/${encodeURIComponent(detail.cid)}`} target="_blank" rel="noreferrer"
+          title="Ouvre l'éditeur sur le Mac (localhost:5180)">
           <Pencil />
           Modifier
-        </button>
+        </a>
       </div>
 
       <div className="cr-detail">
