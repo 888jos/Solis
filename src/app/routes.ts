@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, Compass, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 // The sidebar and the router both read this list. One entry per feature module in src/features/.
@@ -12,6 +12,7 @@ export type PageDef = {
 };
 
 export const PAGES: PageDef[] = [
+  { id: "today", path: "/aujourdhui", label: "Aujourd'hui", section: "Pilotage", icon: Compass, Component: lazy(() => import("@/features/today")) },
   { id: "overview", path: "/", label: "Vue d'ensemble", section: "Pilotage", icon: LayoutDashboard, Component: lazy(() => import("@/features/overview")) },
   { id: "profitability", path: "/rentabilite", label: "Rentabilité", section: "Pilotage", icon: Scale, Component: lazy(() => import("@/features/profitability")) },
   { id: "revenue", path: "/revenus", label: "Revenus", section: "Revenus", icon: Euro, Component: lazy(() => import("@/features/revenue")) },
