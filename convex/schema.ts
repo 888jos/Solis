@@ -5,6 +5,7 @@ import { contentTables } from "./schema/content";
 import { coreTables } from "./schema/core";
 import { expenseTables } from "./schema/expenses";
 import { growthTables } from "./schema/growth";
+import { paidTables } from "./schema/paid";
 import { pilotTables } from "./schema/pilot";
 import { productTables } from "./schema/product";
 import { projectTables } from "./schema/projects";
@@ -24,4 +25,5 @@ export default defineSchema({
   ...contentTables,
   ...projectTables,
   ...pilotTables,
+  ...paidTables,
 });

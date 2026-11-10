@@ -38,6 +38,22 @@ export function useAcquisitionViewModel() {
   const period = usePeriod();
   const app = useAppFilter();
   const data = useSolisQuery(api.acquisition.overview, { from: period.from, to: period.to, prevFrom: period.prevFrom, prevTo: period.prevTo, bucket: period.bucket, app });
+  const adsData = useSolisQuery(api.paid.adsSummary, { from: period.from, to: period.to, app });
+  const ads = !adsData
+    ? { kind: "loading" as const }
+    : !adsData.connected
+      ? { kind: "notConnected" as const, configured: adsData.configured }
+      : {
+          kind: "ok" as const,
+          kpis: [
+            { key: "spend", label: "Dépense pub", value: formatEur(adsData.spend), delta: change(adsData.spend, adsData.prevSpend), invertDelta: true, foot: `préc. ${formatEur(adsData.prevSpend)}` },
+            { key: "installs", label: "Installations (Meta)", value: formatInt(adsData.installs), delta: change(adsData.installs, adsData.prevInstalls), foot: `préc. ${formatInt(adsData.prevInstalls)}` },
+            { key: "cpi", label: "Coût par installation", value: adsData.cpi == null ? "—" : formatEur(adsData.cpi), delta: adsData.cpi == null || adsData.prevCpi == null ? null : change(adsData.cpi, adsData.prevCpi), invertDelta: true, foot: adsData.prevCpi == null ? "" : `préc. ${formatEur(adsData.prevCpi)}` },
+            { key: "ctr", label: "Taux de clic", value: adsData.impressions ? formatPct(adsData.clicks / adsData.impressions) : "—", delta: null, foot: `${formatInt(adsData.impressions)} impressions` },
+          ],
+          campaigns: adsData.campaigns.map((c) => ({ id: c.id, name: c.name, appSlug: c.appSlug, spend: formatEur(c.spend), installs: formatInt(c.installs), cpi: c.cpi == null ? "—" : formatEur(c.cpi), clicks: formatInt(c.clicks) })),
+          syncedAt: adsData.syncedAt,
+        };
 
   const loading = data === undefined;
   const notConnected = data !== undefined && data.latestDay == null;
@@ -195,6 +211,7 @@ export function useAcquisitionViewModel() {
     : undefined;
 
   return {
+    ads,
     loading,
     notConnected,
     subtitle,

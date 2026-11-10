@@ -82,7 +82,18 @@ export const overview = authQuery({
     }
     // Otto (ottoknows.it, Stripe): counted as collected, Stripe fees not deducted, only on the all-projects view.
     if (!app) {
-      const ottoRows = await ctx.db.query("ottoDaily").withIndex("by_day", (q) => q.lte("day", to)).collect();
+      // Stripe connected: gross = what customers paid, net = payout after Stripe fees and refunds.
+      const stripeRows = await ctx.db.query("stripeDaily").withIndex("by_project_day", (q) => q.eq("project", "otto").lte("day", to)).collect();
+      for (const r of stripeRows) {
+        if (!r.gross && !r.net) continue;
+        if (!firstSale || r.day < firstSale) firstSale = r.day;
+        const m = get(r.day.slice(0, 7));
+        appEntry(m.byApp, "otto").proceeds += r.net;
+        m.sales.grossEur += r.gross;
+        m.sales.exVatEur += r.net;
+        m.sales.proceedsEur += r.net;
+      }
+      const ottoRows = stripeRows.length ? [] : await ctx.db.query("ottoDaily").withIndex("by_day", (q) => q.lte("day", to)).collect();
       for (const r of ottoRows) {
         if (!r.revenueCents) continue;
         const eur = r.revenueCents / 100;

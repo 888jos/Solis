@@ -19,6 +19,10 @@ crons.cron("amplitude + posthog", "50 1,7,13,19 * * *", internal.sources.engagem
 crons.cron("airtable ugc", "10 2,8,14,20 * * *", internal.sources.airtable.syncRecent, {});
 crons.cron("aso metadata + ranks", "15 4 * * *", internal.sources.aso.syncRecent, {});
 
+// Stripe (Otto) and Meta Ads (CortiFree): skipped until their keys are set on Convex.
+crons.cron("stripe otto", "25 */6 * * *", internal.sources.stripe.syncRecent, {});
+crons.cron("meta ads", "40 3,9,15,21 * * *", internal.sources.metaAds.syncRecent, {});
+
 // Money helpers.
 crons.cron("fx rates", "0 5 * * *", internal.fx.syncRecent, {});
 crons.cron("ai api costs", "25 5 * * *", internal.sources.aiCosts.syncRecent, {});

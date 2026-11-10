@@ -56,8 +56,28 @@ export async function ottoWindow(
   }
   const r2 = (n: number) => Math.round(n * 100) / 100;
   const fix = (t: typeof cur) => ({ reports: t.reports, paid: t.paid, revenue: r2(t.revenue), aiCost: r2(t.aiCost), margin: r2(t.revenue - t.aiCost) });
+  // Stripe connected: revenue becomes what Stripe actually pays out (fees and refunds deducted).
+  const stripe = await ctx.db
+    .query("stripeDaily")
+    .withIndex("by_project_day", (q) => q.eq("project", "otto").gte("day", win.prevFrom).lte("day", win.to))
+    .collect();
+  const stripeConnected = stripe.length > 0 || (await ctx.db.query("stripeDaily").first()) != null;
+  if (stripeConnected) {
+    cur.revenue = 0;
+    prev.revenue = 0;
+    series.clear();
+    for (const r of stripe) {
+      const t = r.day >= win.from && r.day <= win.to ? cur : r.day >= win.prevFrom && r.day <= win.prevTo ? prev : null;
+      if (!t) continue;
+      t.revenue += r.net;
+      if (t === cur && bucketOf) {
+        const k = bucketOf(r.day);
+        if (k) series.set(k, (series.get(k) ?? 0) + r.net);
+      }
+    }
+  }
   const lastSync = await ctx.db.query("syncRuns").withIndex("by_source_started", (q) => q.eq("source", SOURCE)).order("desc").first();
-  return { current: fix(cur), previous: fix(prev), series, syncedAt: lastSync?.finishedAt ?? null };
+  return { current: fix(cur), previous: fix(prev), series, syncedAt: lastSync?.finishedAt ?? null, revenueSource: stripeConnected ? ("stripe_net" as const) : ("collected" as const) };
 }
 
 type Totals = { reports: number; paid: number; revenueCents: number; aiCostMicroUsd: number };

@@ -59,6 +59,35 @@ export default function AcquisitionPage() {
         </Card>
       </div>
 
+      <Card title="La pub payante est-elle rentable ?" subtitle="Meta Ads · dépense, installations rapportées par Meta, coût par installation">
+        {vm.ads.kind === "loading" ? (
+          <Skeleton height={120} />
+        ) : vm.ads.kind === "notConnected" ? (
+          <NotConnected source="Meta Ads" missing={vm.ads.configured ? "une première synchro (page Sources)" : "META_ACCESS_TOKEN et META_AD_ACCOUNT_ID dans les variables Convex"} />
+        ) : (
+          <div className="stack">
+            <div className="grid grid--kpi">
+              {vm.ads.kpis.map((k) => (
+                <Kpi key={k.key} label={k.label} value={k.value} delta={k.delta} invertDelta={k.invertDelta} foot={k.foot} />
+              ))}
+            </div>
+            <DataTable
+              columns={[
+                { key: "name", header: "Campagne", cell: (r) => r.name },
+                { key: "app", header: "App", cell: (r) => <AppLabel slug={r.appSlug} /> },
+                { key: "spend", header: "Dépense", align: "right", cell: (r) => <span className="num">{r.spend}</span> },
+                { key: "installs", header: "Install.", align: "right", cell: (r) => <span className="num">{r.installs}</span> },
+                { key: "cpi", header: "CPI", align: "right", cell: (r) => <strong className="num">{r.cpi}</strong> },
+              ]}
+              rows={vm.ads.campaigns}
+              rowKey={(r) => r.id}
+              empty={<EmptyState title="Aucune dépense sur la période" />}
+            />
+            <SourceNote source="Meta Marketing API" updatedAt={vm.ads.syncedAt} />
+          </div>
+        )}
+      </Card>
+
       <Card
         title="Les vidéos UGC font-elles monter les téléchargements ?"
         subtitle={ugc.kind === "ok" ? `${vm.bucketLabel} · vues comptées le jour de publication de la vidéo · CortiFree` : "Vues des vidéos UGC face aux téléchargements, sur les mêmes dates"}

@@ -146,7 +146,7 @@ export function useOverviewViewModel() {
       value: formatEur(netTotal),
       delta: netPrev == null ? null : change(netTotal, netPrev),
       foot: prevFoot(netPrev == null ? null : formatEur(netPrev)),
-      hint: `Ce qu'Apple verse : après TVA et commission, remboursements déduits${otto ? " · plus Otto : encaissé Stripe, frais Stripe non déduits" : ""}${cmpNote}`,
+      hint: `Ce qu'Apple verse : après TVA et commission, remboursements déduits${otto ? (otto.revenueSource === "stripe_net" ? " · plus Otto : net Stripe, frais et remboursements déduits" : " · plus Otto : encaissé, frais Stripe non déduits") : ""}${cmpNote}`,
       spark: netSpark,
     },
     e
@@ -242,7 +242,7 @@ export function useOverviewViewModel() {
       color: OTTO_COLOR,
       net: formatEur(otto.revenue),
       netDelta: change(otto.revenue, otto.prev.revenue),
-      netFoot: `encaissé Stripe · préc. ${formatEur(otto.prev.revenue)}`,
+      netFoot: `${otto.revenueSource === "stripe_net" ? "net Stripe" : "encaissé"} · préc. ${formatEur(otto.prev.revenue)}`,
       spark: otto.series,
       version: null,
       versionFoot: `Marge après IA : ${formatEur(otto.margin)}`,

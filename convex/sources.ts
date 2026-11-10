@@ -8,7 +8,7 @@ import { authAction, authQuery } from "./lib/auth";
 // Sources page model: registry of every data source, its sync job, freshness from syncRuns and the
 // presence (never the value) of the env vars it needs.
 
-export type JobId = "revenue" | "subscriptions" | "reviews" | "versions" | "aso" | "engagement" | "aiCosts" | "airtable" | "fx" | "brief";
+export type JobId = "revenue" | "subscriptions" | "reviews" | "versions" | "aso" | "engagement" | "aiCosts" | "airtable" | "fx" | "brief" | "stripe" | "metaAds";
 
 type SyncRef = FunctionReference<"action", "internal", Record<string, never>>;
 
@@ -23,6 +23,8 @@ const JOBS: Record<JobId, { ref: SyncRef; label: string }> = {
   airtable: { ref: internal.sources.airtable.syncRecent as SyncRef, label: "UGC" },
   fx: { ref: internal.fx.syncRecent as SyncRef, label: "Taux de change" },
   brief: { ref: internal.brief.sendDailyNow as SyncRef, label: "Brief Telegram" },
+  stripe: { ref: internal.sources.stripe.syncRecent as SyncRef, label: "Stripe Otto" },
+  metaAds: { ref: internal.sources.metaAds.syncRecent as SyncRef, label: "Meta Ads" },
 };
 
 type SourceDef = {
@@ -55,6 +57,8 @@ export const SOURCES: SourceDef[] = [
   { source: "airtable_ugc", name: "Airtable · base UGC", feeds: "Créateurs UGC, Acquisition", job: "airtable", envs: ["AIRTABLE_TOKEN"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "fx", name: "Taux de change EUR", feeds: "Conversions en euros", job: "fx", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "telegram_brief", name: "Telegram · brief", feeds: "Brief du matin, récap du lundi", job: "brief", envs: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"], cadence: "chaque jour 06:30 UTC", staleAfterHours: 50 },
+  { source: "stripe_otto", name: "Stripe · Otto", feeds: "Otto, Vue d'ensemble, Rentabilité", job: "stripe", envs: ["STRIPE_OTTO_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },
+  { source: "meta_ads", name: "Meta Ads · CortiFree", feeds: "Acquisition, Aujourd'hui", job: "metaAds", envs: ["META_ACCESS_TOKEN", "META_AD_ACCOUNT_ID"], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "weekly_review", name: "Claude · revue de la semaine", feeds: "Aujourd'hui, Telegram", job: null, envs: ["ANTHROPIC_API_KEY"], cadence: "chaque lundi 14:45 UTC", staleAfterHours: 24 * 8 },
   // Pushed from the Mac (scripts in otto-video-factory / carousel factory), no cron on Convex.
   { source: "otto_sync", name: "Otto · Convex prod + usine vidéo", feeds: "Otto, Vidéos", job: null, envs: [], cadence: "poussé depuis le Mac", staleAfterHours: 26 },
