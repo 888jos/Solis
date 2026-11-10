@@ -14,7 +14,7 @@ product health for every app (CortiFree, Cocorise, Quest IRL). Single user (Jos)
 | Hosting | Cloudflare Worker `solis` serving the static SPA (`wrangler.jsonc`, `dist/`) |
 | Frontend | Vite + React 19 + TypeScript + react-router 7, no UI framework, hand-written design system |
 | Backend | Convex project `solis` (team driftstudio). Dev deployment `giddy-bullfrog-898` |
-| Auth | Single access token. Every public Convex function uses `authQuery` / `authMutation` / `authAction` from `convex/lib/auth.ts`. Never export a raw `query`/`mutation`/`action`. |
+| Auth | Email + password (Convex Auth, `convex/auth.ts`), only the addresses in `SOLIS_ALLOWED_EMAILS` (default: Jos's two). Password stored as a hash in `SOLIS_PASSWORD_HASH` (`scripts/hash-password.mjs`). Every public Convex function uses `authQuery` / `authMutation` / `authAction` from `convex/lib/auth.ts`. Never export a raw `query`/`mutation`/`action`. Prod: https://solis.jossel1-biot.workers.dev |
 
 ## MVVM, per feature
 
@@ -95,5 +95,5 @@ for the cron) and, if relevant, `backfill`. Crons are registered in `convex/cron
   in parallel: keep your files compiling at all times, write files whole, retry if a push fails because of
   someone else's file).
 - Run an internal action: `npx convex run sources/revenue:backfill '{}'`.
-- Frontend dev server: http://localhost:5199 (already running). Access: `/?k=<dev token>`.
+- Frontend dev server: http://localhost:5199 (already running). Sign in with email + password.
 - Typecheck: `npx tsc -p .` (frontend + convex types).

@@ -4,7 +4,6 @@ import { useConvex } from "convex/react";
 import { useCallback, useRef, useState } from "react";
 import { useSolisAction, useSolisMutation } from "@/lib/convex";
 import { formatDay, formatEur, formatInt } from "@/lib/format";
-import { getToken } from "@/lib/session";
 import { categoryLabel } from "./categories";
 import { decodeBytes, parseBankCsv, ROLE_LABELS, type ParseResult, type ParsedTx } from "./csv";
 
@@ -53,7 +52,6 @@ export function useImportViewModel() {
           for (let i = 0; i < debits.length; i += 2000) {
             const slice = debits.slice(i, i + 2000);
             const res = await convex.query(api.expenses.previewImport, {
-              token: getToken() ?? "",
               dateFrom: dates[0],
               dateTo: dates[dates.length - 1],
               rows: slice.map((d) => ({ externalId: d.externalId, label: d.label, vendorHint: d.vendorHint })),

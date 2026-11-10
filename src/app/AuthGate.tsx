@@ -1,33 +1,43 @@
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Lock } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { clearToken, getToken, setToken } from "@/lib/session";
 
-/** Blocks the app until the device holds a valid access token. */
+/** Blocks the app until Jos is signed in (email + password, allowed addresses only: convex/auth.ts). */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const [token, setLocal] = useState(getToken());
-  const status = useQuery(api.session.check, token ? { token } : "skip");
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.session.me, isAuthenticated ? {} : "skip");
+  const { signIn } = useAuthActions();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (token && status === undefined)
+  if (isLoading || (isAuthenticated && me === undefined))
     return (
       <div className="muted" style={{ minHeight: "100%", display: "grid", placeItems: "center", padding: 16 }} aria-busy="true">
         Connexion…
       </div>
     );
-  if (token && status === true) return <>{children}</>;
+  if (isAuthenticated && me?.email) return <>{children}</>;
 
   return (
     <div style={{ minHeight: "100%", display: "grid", placeItems: "center", padding: 16 }}>
       <form
         className="card"
         style={{ width: "100%", maxWidth: 380, padding: 24, display: "flex", flexDirection: "column", gap: 12 }}
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          const value = new FormData(e.currentTarget).get("token")?.toString().trim() ?? "";
-          if (!value) return;
-          setToken(value);
-          setLocal(value);
+          const form = new FormData(e.currentTarget);
+          setBusy(true);
+          setError(null);
+          try {
+            const res = await signIn("password", { email: String(form.get("email") ?? ""), password: String(form.get("password") ?? "") });
+            if (!res.signingIn) setError("Email ou mot de passe incorrect");
+          } catch {
+            setError("Email ou mot de passe incorrect");
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <div className="row">
@@ -35,18 +45,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <strong style={{ fontSize: 16 }}>Solis</strong>
         </div>
         <p className="secondary" style={{ margin: 0 }}>
-          <Lock size={13} style={{ verticalAlign: -2 }} /> Accès privé. Ouvre ton lien d'accès ou colle ta clé.
+          <Lock size={13} style={{ verticalAlign: -2 }} /> Accès privé.
         </p>
-        {token && status === false && <span className="badge badge--critical">Clé refusée</span>}
-        <input className="input" name="token" type="password" autoComplete="current-password" placeholder="Clé d'accès" style={{ height: 38 }} />
-        <button className="btn btn--primary" style={{ height: 38 }}>
-          Entrer
+        {error && <span className="badge badge--critical">{error}</span>}
+        <input className="input" name="email" type="email" autoComplete="username" placeholder="Email" required style={{ height: 38 }} />
+        <input className="input" name="password" type="password" autoComplete="current-password" placeholder="Mot de passe" required style={{ height: 38 }} />
+        <button className="btn btn--primary" style={{ height: 38 }} disabled={busy}>
+          {busy ? "Connexion…" : "Se connecter"}
         </button>
-        {token && (
-          <button type="button" className="btn btn--ghost" onClick={() => (clearToken(), setLocal(null))}>
-            Oublier la clé de cet appareil
-          </button>
-        )}
       </form>
     </div>
   );

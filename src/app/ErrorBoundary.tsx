@@ -1,6 +1,5 @@
 import { AlertTriangle, Lock } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { clearToken } from "@/lib/session";
 import { EmptyState } from "@/ui";
 
 type Props = { children: ReactNode; /** Wraps the whole app: no shell around it, so center the message. */ fullPage?: boolean };
@@ -30,21 +29,20 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     const body = isUnauthorized(error) ? (
       <EmptyState
-        title="Clé d'accès refusée"
+        title="Accès refusé"
         icon={<Lock />}
         action={
           <button
             className="btn btn--primary"
             onClick={() => {
-              clearToken();
               window.location.reload();
             }}
           >
-            Saisir la clé
+            Se reconnecter
           </button>
         }
       >
-        La clé enregistrée sur cet appareil n'est plus valide.
+        La session Google de cet appareil n'est plus valide.
       </EmptyState>
     ) : (
       <EmptyState

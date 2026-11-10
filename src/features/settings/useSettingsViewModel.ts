@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { APPS } from "@/lib/apps";
 import { useSolisQuery } from "@/lib/convex";
 import { formatAgo, formatDayLong, formatPct } from "@/lib/format";
-import { clearToken } from "@/lib/session";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { getThemePref, setThemePref, type ThemePref } from "./theme";
 
 type QueryResult<Q> = Q extends RegisteredQuery<any, any, infer R> ? Awaited<R> : never;
@@ -47,8 +47,10 @@ export function useSettingsViewModel() {
     setTheme(pref);
   };
 
-  const forgetDevice = () => {
-    clearToken();
+  const { signOut } = useAuthActions();
+  const me = useSolisQuery(api.session.me, {});
+  const forgetDevice = async () => {
+    await signOut();
     window.location.assign("/");
   };
 
@@ -160,6 +162,7 @@ export function useSettingsViewModel() {
     theme,
     changeTheme,
     forgetDevice,
+    email: me?.email ?? null,
     apps,
     money: MONEY_DEFINITIONS,
     vat,

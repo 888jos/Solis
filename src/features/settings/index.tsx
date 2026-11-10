@@ -52,12 +52,12 @@ export default function SettingsPage() {
             </div>
             <div className="set-row">
               <div>
-                <div className="set-row__label">Clé d'accès</div>
-                <div className="set-row__hint">Enregistrée dans ce navigateur. Il faudra rouvrir le lien d'accès.</div>
+                <div className="set-row__label">Compte</div>
+                <div className="set-row__hint">Connecté{vm.email ? ` : ${vm.email}` : ""}.</div>
               </div>
               <button type="button" className="btn" onClick={vm.forgetDevice}>
                 <KeyRound />
-                Oublier la clé
+                Se déconnecter
               </button>
             </div>
           </div>
