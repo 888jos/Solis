@@ -9,11 +9,13 @@ import { applyStoredTheme } from "@/features/settings/theme";
 import { PAGES, REDIRECTS } from "@/app/routes";
 import { Shell } from "@/app/Shell";
 import { FiltersProvider } from "@/lib/filters";
+import { installStaleBuildReload } from "@/lib/staleBuild";
 import { ModelsStandalone } from "@/features/carousels/ModelsStandalone";
 import "@/ui/tokens.css";
 import "@/ui/base.css";
 
 applyStoredTheme();
+installStaleBuildReload();
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 const standaloneModels = import.meta.env.DEV && window.location.pathname === "/modeles";

@@ -37,7 +37,7 @@ export const metadata = authQuery({
   },
 });
 
-/** Tracked keywords with their latest rank and the rank 7 days before it. */
+/** Tracked keywords with their latest rank, the rank 7 days before it and Astro's stats. */
 export const keywords = authQuery({
   args: { app: v.optional(v.union(v.string(), v.null())) },
   handler: async (ctx, { app }) => {
@@ -47,15 +47,16 @@ export const keywords = authQuery({
     const rows = [];
     for (const k of tracked) {
       if (k.removedAt) continue;
-      const range = (q: any) => q.eq("appSlug", k.appSlug).eq("keyword", k.keyword).eq("country", k.country);
-      const latest = await ctx.db.query("asoRankings").withIndex("by_app_keyword_date", range).order("desc").first();
-      const weekAgo = latest
-        ? await ctx.db
-            .query("asoRankings")
-            .withIndex("by_app_keyword_date", (q) => range(q).lte("date", addDays(latest.date, -7)))
-            .order("desc")
-            .first()
-        : null;
+      // Denormalized by writeRank; rows written before that fall back to two index reads.
+      let latest: { date: string; rank: number | null; topCompetitor?: string; source?: string } | null = k.lastRankDate ? { date: k.lastRankDate, rank: k.lastRank ?? null, source: k.lastRankSource } : null;
+      let prev: { date: string; rank: number | null } | null = k.prevRankDate ? { date: k.prevRankDate, rank: k.prevRank ?? null } : null;
+      if (!latest) {
+        const range = (q: any) => q.eq("appSlug", k.appSlug).eq("keyword", k.keyword).eq("country", k.country);
+        const l = await ctx.db.query("asoRankings").withIndex("by_app_keyword_date", range).order("desc").first();
+        latest = l ? { date: l.date, rank: l.rank, topCompetitor: l.topCompetitor, source: l.source } : null;
+        const p = l ? await ctx.db.query("asoRankings").withIndex("by_app_keyword_date", (q) => range(q).lte("date", addDays(l.date, -7))).order("desc").first() : null;
+        prev = p ? { date: p.date, rank: p.rank } : null;
+      }
       rows.push({
         id: k._id,
         appSlug: k.appSlug,
@@ -64,15 +65,19 @@ export const keywords = authQuery({
         source: k.source ?? "metadata",
         date: latest?.date ?? null,
         rank: latest ? latest.rank : null,
+        rankSource: latest?.source ?? "itunes",
         measured: !!latest,
         topCompetitor: latest?.topCompetitor ?? null,
-        resultCount: latest?.resultCount ?? null,
-        prevDate: weekAgo?.date ?? null,
-        prevRank: weekAgo ? weekAgo.rank : null,
-        prevMeasured: !!weekAgo,
+        prevDate: prev?.date ?? null,
+        prevRank: prev ? prev.rank : null,
+        prevMeasured: !!prev,
+        popularity: k.popularity ?? null,
+        difficulty: k.difficulty ?? null,
+        competitors: k.competitors ?? null,
+        astroUpdatedAt: k.astroUpdatedAt ?? null,
       });
     }
-    return { sync: await latestRun(ctx, "aso_ranks"), rows };
+    return { sync: await latestRun(ctx, "aso_ranks"), astro: await latestRun(ctx, "astro"), rows };
   },
 });
 
@@ -84,7 +89,7 @@ export const history = authQuery({
       .query("asoRankings")
       .withIndex("by_app_keyword_date", (q) => q.eq("appSlug", appSlug).eq("keyword", keyword).eq("country", country).gte("date", from).lte("date", to))
       .collect();
-    return rows.map((r) => ({ date: r.date, rank: r.rank, topCompetitor: r.topCompetitor ?? null }));
+    return rows.map((r) => ({ date: r.date, rank: r.rank, topCompetitor: r.topCompetitor ?? null, source: r.source ?? "itunes" }));
   },
 });
 

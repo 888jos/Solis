@@ -95,9 +95,22 @@ export const growthTables = {
     appSlug: v.string(),
     keyword: v.string(), // lowercase, trimmed
     country: v.string(), // lowercase iTunes storefront, e.g. "us", "fr"
-    source: v.optional(v.union(v.literal("metadata"), v.literal("manual"))),
+    source: v.optional(v.union(v.literal("metadata"), v.literal("manual"), v.literal("astro"))),
     addedAt: v.optional(v.number()),
     removedAt: v.optional(v.number()), // untracked from the UI; kept so metadata seeding does not bring it back
+    // From Astro (scripts/astro_sync.py): Apple Search Ads popularity (5-100), Astro difficulty (0-100),
+    // number of apps ranking on the keyword, Astro's last refresh.
+    popularity: v.optional(v.number()),
+    difficulty: v.optional(v.number()),
+    competitors: v.optional(v.number()),
+    astroUpdatedAt: v.optional(v.number()),
+    // Denormalized latest measure (any source), so the keyword list never scans the history.
+    lastRank: v.optional(v.union(v.number(), v.null())),
+    lastRankDate: v.optional(v.string()),
+    lastRankSource: v.optional(v.string()),
+    prevRank: v.optional(v.union(v.number(), v.null())), // latest measure at least 7 days before lastRankDate
+    prevRankDate: v.optional(v.string()),
+    itunesDate: v.optional(v.string()), // last day the iTunes tracker measured it
   })
     .index("by_app", ["appSlug"])
     .index("by_app_keyword_country", ["appSlug", "keyword", "country"]),
@@ -108,8 +121,11 @@ export const growthTables = {
     keyword: v.string(),
     country: v.string(),
     date: v.string(),
-    rank: v.union(v.number(), v.null()), // null = not in top 200
+    rank: v.union(v.number(), v.null()), // null = not ranked (iTunes: not in top 200; Astro: not in its depth)
     topCompetitor: v.optional(v.string()),
     resultCount: v.optional(v.number()),
+    // "astro" = real App Store search results measured by Astro on the Mac; "itunes" (or absent) = public
+    // iTunes Search API. One row per day: an Astro measure replaces an iTunes one, never the reverse.
+    source: v.optional(v.union(v.literal("itunes"), v.literal("astro"))),
   }).index("by_app_keyword_date", ["appSlug", "keyword", "country", "date"]).index("by_date", ["date"]),
 };

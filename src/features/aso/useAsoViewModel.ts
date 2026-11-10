@@ -23,7 +23,44 @@ const STATE_LABELS: Record<string, string> = {
   PROCESSING_FOR_DISTRIBUTION: "en traitement",
 };
 
-const ROWS_PREVIEW = 25;
+const ROWS_PREVIEW = 50;
+
+/** Store localizations Apple indexes for a storefront (first = main). */
+const STORE_LOCALES: Record<string, string[]> = {
+  us: ["en-US", "es-MX"], gb: ["en-GB", "en-US"], ca: ["en-CA", "fr-CA", "en-US"], au: ["en-AU", "en-GB", "en-US"], ie: ["en-GB", "en-US"],
+  fr: ["fr-FR"], be: ["fr-FR", "nl-NL"], ch: ["de-DE", "fr-FR"], es: ["es-ES"], mx: ["es-MX"], de: ["de-DE"], it: ["it"], nl: ["nl-NL"],
+  se: ["sv"], no: ["no"], dk: ["da"], fi: ["fi"], jp: ["ja"], kr: ["ko"], br: ["pt-BR"], pt: ["pt-PT"],
+};
+
+export type Coverage = "title" | "subtitle" | "keywords" | "combined" | "missing" | "unknown";
+const COVERAGE_LABEL: Record<Coverage, string> = { title: "Titre", subtitle: "Sous-titre", keywords: "Champ mots-clés", combined: "Combiné", missing: "Absent", unknown: "—" };
+
+const words = (s: string | undefined) => new Set((s ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+
+/** Where the keyword's words sit in the live listing of that storefront (Apple combines title, subtitle and keyword field). */
+function coverage(keyword: string, rows: { name?: string; subtitle?: string; keywords?: string }[]): Coverage {
+  if (!rows.length) return "unknown";
+  const kw = [...words(keyword)];
+  if (!kw.length) return "unknown";
+  const title = new Set(rows.flatMap((r) => [...words(r.name)]));
+  const sub = new Set(rows.flatMap((r) => [...words(r.subtitle)]));
+  const field = new Set(rows.flatMap((r) => [...words(r.keywords)]));
+  if (kw.every((w) => title.has(w))) return "title";
+  if (kw.every((w) => sub.has(w) || title.has(w))) return "subtitle";
+  if (kw.every((w) => field.has(w))) return "keywords";
+  if (kw.every((w) => title.has(w) || sub.has(w) || field.has(w))) return "combined";
+  return "missing";
+}
+
+/** Astro-style opportunity: popular, not too hard, and we are not already on top. 0-100. */
+function opportunity(popularity: number | null, difficulty: number | null, rank: number | null): number | null {
+  if (popularity == null) return null;
+  const ease = difficulty == null ? 0.5 : 1 - difficulty / 100;
+  const headroom = rank == null ? 1 : rank <= 3 ? 0.1 : rank <= 10 ? 0.4 : rank <= 50 ? 0.8 : 1;
+  return Math.round(popularity * ease * headroom);
+}
+
+export type SortKey = "rank" | "popularity" | "opportunity" | "difficulty" | "keyword";
 
 export const TRACK_COUNTRIES = ["us", "fr", "de", "es", "it", "gb", "ca", "au", "jp", "kr", "br", "nl", "se", "ch", "be"];
 
@@ -107,6 +144,13 @@ export type KeywordRowVM = {
   move: RankMove;
   topCompetitor: string | null;
   manual: boolean;
+  popularity: number | null;
+  difficulty: number | null;
+  competitors: number | null;
+  opportunity: number | null;
+  coverage: Coverage;
+  coverageLabel: string;
+  sourceLabel: string;
   selected: boolean;
   select: () => void;
 };
@@ -125,6 +169,9 @@ export function useAsoViewModel() {
   const [country, setCountry] = useState<string>("all");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [search, setSearch] = useState("");
+  const [onlyOpportunities, setOnlyOpportunities] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "pending" | "started" | "busy">("idle");
 
   /* ---------- Metadata ---------- */
@@ -197,11 +244,30 @@ export function useAsoViewModel() {
   const activeCountry = country !== "all" && countries.includes(country) ? country : "all";
 
   const keyOf = (r: { appSlug: string; keyword: string; country: string }) => `${r.appSlug}|${r.country}|${r.keyword}`;
-  const filtered = allRows.filter((r) => activeCountry === "all" || r.country === activeCountry);
+  const liveRows = (meta?.rows ?? []).filter((r) => (r.channel ?? "live") === "live");
+  const listingFor = (appSlug: string, c: string) => liveRows.filter((r) => r.appSlug === appSlug && (STORE_LOCALES[c] ?? []).includes(r.locale));
+  const q = search.trim().toLowerCase();
+  const enriched = allRows.map((r) => ({ ...r, opp: opportunity(r.popularity, r.difficulty, r.rank), cov: coverage(r.keyword, listingFor(r.appSlug, r.country)) }));
+  const filtered = enriched.filter(
+    (r) =>
+      (activeCountry === "all" || r.country === activeCountry) &&
+      (!q || r.keyword.includes(q)) &&
+      (!onlyOpportunities || ((r.opp ?? 0) >= 20 && (r.rank == null || r.rank > 10))),
+  );
+  const rankKey = (r: (typeof enriched)[number]) => (r.measured ? (r.rank ?? 1000) : 2000);
   const sorted = [...filtered].sort((a, b) => {
-    const ra = a.measured ? (a.rank ?? 1000) : 2000;
-    const rb = b.measured ? (b.rank ?? 1000) : 2000;
-    return ra - rb || a.keyword.localeCompare(b.keyword, "fr");
+    switch (sortKey) {
+      case "popularity":
+        return (b.popularity ?? -1) - (a.popularity ?? -1) || rankKey(a) - rankKey(b);
+      case "opportunity":
+        return (b.opp ?? -1) - (a.opp ?? -1) || (b.popularity ?? -1) - (a.popularity ?? -1);
+      case "difficulty":
+        return (a.difficulty ?? 999) - (b.difficulty ?? 999) || (b.popularity ?? -1) - (a.popularity ?? -1);
+      case "keyword":
+        return a.keyword.localeCompare(b.keyword, "fr");
+      default:
+        return rankKey(a) - rankKey(b) || (b.popularity ?? -1) - (a.popularity ?? -1) || a.keyword.localeCompare(b.keyword, "fr");
+    }
   });
   const defaultKey = sorted.length ? keyOf(sorted[0]) : null;
   const selectedRow = allRows.find((r) => keyOf(r) === selectedKey) ?? sorted.find((r) => keyOf(r) === defaultKey) ?? null;
@@ -214,10 +280,17 @@ export function useAsoViewModel() {
     countryName: countryLabel(r.country),
     rank: r.rank,
     measured: r.measured,
-    rankLabel: !r.measured ? "pas encore mesuré" : r.rank == null ? "hors top 200" : `#${r.rank}`,
+    rankLabel: !r.measured ? "pas encore mesuré" : r.rank == null ? "non classé" : `#${r.rank}`,
     move: rankMove(r.rank, r.measured, r.prevRank, r.prevMeasured),
     topCompetitor: r.topCompetitor,
     manual: r.source === "manual",
+    popularity: r.popularity,
+    difficulty: r.difficulty,
+    competitors: r.competitors,
+    opportunity: r.opp,
+    coverage: r.cov,
+    coverageLabel: COVERAGE_LABEL[r.cov],
+    sourceLabel: r.rankSource === "astro" ? `App Store (Astro) · ${r.date ? formatDay(r.date) : ""}` : `iTunes Search · ${r.date ? formatDay(r.date) : ""}`,
     selected: selectedRow != null && keyOf(r) === keyOf(selectedRow),
     select: () => setSelectedKey(keyOf(r)),
   }));
@@ -236,7 +309,7 @@ export function useAsoViewModel() {
     issues: apps.reduce((n, a) => n + a.shippedIssueCount, 0),
   };
 
-  const bucketLabels = { top10: "Top 10", top50: "11 à 50", top200: "51 à 200", absent: "Hors top 200" } as const;
+  const bucketLabels = { top10: "Top 10", top50: "11 à 50", top200: "51 à 200", absent: "Non classé" } as const;
   const distribution = (Object.keys(bucketLabels) as (keyof typeof bucketLabels)[]).map((bucket) => ({
     key: bucket,
     label: bucketLabels[bucket],
@@ -275,15 +348,15 @@ export function useAsoViewModel() {
       x,
       series: [{ key: "rank", label: `Rang · ${appName(selectedRow.appSlug)}`, color: appColor(selectedRow.appSlug), values: x.map((d) => byDate.get(d) ?? null) }],
       facts: [
-        { label: "Rang actuel", value: selectedRow.measured ? (selectedRow.rank == null ? "hors top 200" : `#${selectedRow.rank}`) : "—" },
+        { label: "Rang actuel", value: selectedRow.measured ? (selectedRow.rank == null ? "non classé" : `#${selectedRow.rank}`) : "—" },
         { label: "Meilleur rang", value: ranks.length ? `#${Math.min(...ranks)}` : "—" },
         { label: "Jours mesurés", value: formatInt(history.length) },
-        { label: "Jours hors top 200", value: formatInt(absentDays) },
+        { label: "Jours non classé", value: formatInt(absentDays) },
       ],
       topCompetitor: selectedRow.topCompetitor,
       /** A line needs two ranked days. */
       drawable: x.filter((d) => byDate.get(d) != null).length >= 2,
-      notDrawable: ranks.length === 0 ? "Hors top 200 sur tous les jours mesurés de la période." : "Un seul jour dans le top 200 pour l'instant : la courbe apparaît au deuxième.",
+      notDrawable: ranks.length === 0 ? "Non classé sur tous les jours mesurés de la période." : "Un seul jour classé pour l'instant : la courbe apparaît au deuxième.",
       formatValue: (v: number) => (v < 1 ? "" : `#${formatInt(v)}`),
       formatX: formatDay,
       formatXLong: formatDayLong,
@@ -333,10 +406,27 @@ export function useAsoViewModel() {
     distributionByApp,
     countryFilter: {
       value: activeCountry,
-      options: [{ value: "all", label: "Tous" }, ...countries.map((c) => ({ value: c, label: c.toUpperCase() }))],
+      options: [{ value: "all", label: "Tous les pays" }, ...countries.map((c) => ({ value: c, label: `${c.toUpperCase()} · ${countryLabel(c)} (${allRows.filter((r) => r.country === c).length})` }))],
       set: setCountry,
     },
     keywordRows: showAll ? keywordRows : keywordRows.slice(0, ROWS_PREVIEW),
+    tableControls: {
+      sortKey,
+      sorts: [
+        { value: "rank" as SortKey, label: "Rang" },
+        { value: "opportunity" as SortKey, label: "Opportunité" },
+        { value: "popularity" as SortKey, label: "Popularité" },
+        { value: "difficulty" as SortKey, label: "Facilité" },
+        { value: "keyword" as SortKey, label: "A → Z" },
+      ],
+      setSort: setSortKey,
+      search,
+      setSearch,
+      onlyOpportunities,
+      toggleOpportunities: () => setOnlyOpportunities((x) => !x),
+      count: filtered.length,
+    },
+    astroSync: kw?.astro ?? null,
     keywordMore: keywordRows.length > ROWS_PREVIEW ? { showAll, hidden: keywordRows.length - ROWS_PREVIEW, total: keywordRows.length, toggle: () => setShowAll((x) => !x) } : null,
     chart,
     addForm: {

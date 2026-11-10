@@ -12,7 +12,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "deploy": "npm test && node scripts/export-models.mjs && convex deploy -y --cmd 'npx vite build' --cmd-url-env-var-name VITE_CONVEX_URL && wrangler deploy"
+    "deploy": "npm test && node scripts/export-models.mjs && node scripts/keep-old-assets.mjs save && convex deploy -y --cmd 'npx vite build && node scripts/keep-old-assets.mjs restore' --cmd-url-env-var-name VITE_CONVEX_URL && wrangler deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

@@ -48,6 +48,7 @@ export const SOURCES: SourceDef[] = [
   { source: "itunes_ratings", name: "iTunes Lookup · notes par pays", feeds: "Avis & notes", job: "reviews", envs: [], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_versions", name: "App Store Connect · versions", feeds: "Versions", job: "versions", envs: ASC, cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_analytics", name: "App Store Connect · analytics (fiche)", feeds: "Acquisition (impressions, vues, conversion)", job: "ascAnalytics", envs: ASC, cadence: "2 fois par jour", staleAfterHours: 30 },
+  { source: "astro", name: "Astro · mots-clés et positions App Store", feeds: "ASO (popularité, difficulté, rangs)", job: null, envs: [], cadence: "poussé depuis le Mac (scripts/astro_sync.py)", staleAfterHours: 50 },
   { source: "aso_metadata", name: "App Store Connect · fiches", feeds: "ASO", job: "aso", envs: ASC, cadence: "chaque jour", staleAfterHours: 50 },
   { source: "aso_ranks", name: "iTunes Search · positions", feeds: "ASO", job: "aso", envs: [], cadence: "chaque jour", staleAfterHours: 50 },
   { source: "amplitude", name: "Amplitude · CortiFree", feeds: "Engagement", job: "engagement", envs: ["AMPLITUDE_CORTIFREE_API_KEY", "AMPLITUDE_CORTIFREE_SECRET_KEY"], cadence: "toutes les 6 h", staleAfterHours: 18 },

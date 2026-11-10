@@ -1,5 +1,7 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { addDays } from "./lib/dates";
 
 // Internal model helpers for the ASO feature (non-node): written by convex/sources/aso.ts.
 
@@ -63,26 +65,46 @@ export const replaceLocalizations = internalMutation({
   },
 });
 
-/** Tracked keywords that have no snapshot for `date` yet (optionally one app only). */
+/** Tracked keywords that the iTunes tracker has not measured on `date` yet. */
 export const pendingKeywords = internalQuery({
   args: { date: v.string(), limit: v.number() },
   handler: async (ctx, { date, limit }) => {
     const keywords = await ctx.db.query("asoKeywords").collect();
     const out: { appSlug: string; keyword: string; country: string }[] = [];
     let remaining = 0;
-    for (const k of keywords) {
-      if (k.removedAt) continue;
-      const done = await ctx.db
-        .query("asoRankings")
-        .withIndex("by_app_keyword_date", (q) => q.eq("appSlug", k.appSlug).eq("keyword", k.keyword).eq("country", k.country).eq("date", date))
-        .first();
-      if (done) continue;
+    // Best-ranked first, so a run cut short still measured what matters.
+    const todo = keywords
+      .filter((k) => !k.removedAt && k.itunesDate !== date)
+      .sort((a, b) => (a.lastRank ?? 9999) - (b.lastRank ?? 9999) || (b.popularity ?? 0) - (a.popularity ?? 0));
+    for (const k of todo) {
       if (out.length < limit) out.push({ appSlug: k.appSlug, keyword: k.keyword, country: k.country });
       else remaining++;
     }
     return { batch: out, remaining };
   },
 });
+
+type RankRow = { appSlug: string; keyword: string; country: string; date: string; rank: number | null; topCompetitor?: string; resultCount?: number };
+
+/**
+ * Writes one day's rank (Astro wins over iTunes for the same day) and refreshes the keyword's
+ * denormalized latest / 7-days-before measure. Returns false when an Astro row kept its place.
+ */
+export async function writeRank(ctx: MutationCtx, row: RankRow, source: "itunes" | "astro", keyword?: Doc<"asoKeywords"> | null): Promise<boolean> {
+  const range = (q: any) => q.eq("appSlug", row.appSlug).eq("keyword", row.keyword).eq("country", row.country);
+  const existing = await ctx.db.query("asoRankings").withIndex("by_app_keyword_date", (q) => range(q).eq("date", row.date)).first();
+  if (existing && existing.source === "astro" && source === "itunes") return false;
+  const doc = { ...row, source };
+  if (existing) await ctx.db.replace(existing._id, doc);
+  else await ctx.db.insert("asoRankings", doc);
+
+  const k = keyword ?? (await ctx.db.query("asoKeywords").withIndex("by_app_keyword_country", (q) => q.eq("appSlug", row.appSlug).eq("keyword", row.keyword).eq("country", row.country)).first());
+  if (k && (!k.lastRankDate || row.date >= k.lastRankDate)) {
+    const before = await ctx.db.query("asoRankings").withIndex("by_app_keyword_date", (q) => range(q).lte("date", addDays(row.date, -7))).order("desc").first();
+    await ctx.db.patch(k._id, { lastRank: row.rank, lastRankDate: row.date, lastRankSource: source, prevRank: before ? before.rank : undefined, prevRankDate: before?.date });
+  }
+  return true;
+}
 
 export const upsertRanking = internalMutation({
   args: {
@@ -95,12 +117,9 @@ export const upsertRanking = internalMutation({
     resultCount: v.optional(v.number()),
   },
   handler: async (ctx, row) => {
-    const existing = await ctx.db
-      .query("asoRankings")
-      .withIndex("by_app_keyword_date", (q) => q.eq("appSlug", row.appSlug).eq("keyword", row.keyword).eq("country", row.country).eq("date", row.date))
-      .first();
-    if (existing) await ctx.db.replace(existing._id, row);
-    else await ctx.db.insert("asoRankings", row);
+    const k = await ctx.db.query("asoKeywords").withIndex("by_app_keyword_country", (q) => q.eq("appSlug", row.appSlug).eq("keyword", row.keyword).eq("country", row.country)).first();
+    await writeRank(ctx, row, "itunes", k);
+    if (k) await ctx.db.patch(k._id, { itunesDate: row.date });
   },
 });
 

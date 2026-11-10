@@ -1,5 +1,6 @@
 import { AlertTriangle, Lock } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { isStaleChunkError, reloadForNewBuild } from "@/lib/staleBuild";
 import { EmptyState } from "@/ui";
 
 type Props = { children: ReactNode; /** Wraps the whole app: no shell around it, so center the message. */ fullPage?: boolean };
@@ -18,7 +19,14 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
+  /** A page of the previous deploy: reload once instead of showing an error. */
+  private reloading = false;
+
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (isStaleChunkError(error) && reloadForNewBuild()) {
+      this.reloading = true;
+      return;
+    }
     console.error("Solis: page error", error, info.componentStack);
   }
 
@@ -27,6 +35,9 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    if (this.reloading) {
+      return <EmptyState title="Nouvelle version de Solis" icon={<AlertTriangle />}>Chargement de la dernière version…</EmptyState>;
+    }
     const body = isUnauthorized(error) ? (
       <EmptyState
         title="Accès refusé"

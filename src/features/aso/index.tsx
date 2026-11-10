@@ -15,7 +15,7 @@ export default function Page() {
     <div className="f-aso stack" style={{ gap: "var(--space-5)" }}>
       <PageHeader
         title="ASO"
-        subtitle="Fiches App Store par langue et position des mots-clés dans la recherche"
+        subtitle="Mots-clés, positions dans la recherche App Store, popularité et fiches par langue"
         actions={
           <button className="btn" type="button" onClick={vm.refresh} disabled={vm.refreshState !== "idle" || vm.ranksRunning} title="Relit App Store Connect et mesure les mots-clés pas encore mesurés aujourd'hui">
             <RefreshCw />
@@ -33,7 +33,7 @@ export default function Page() {
         <>
           <div className="grid grid--kpi">
             <Kpi label="Mots-clés suivis" value={formatInt(vm.kpis.tracked)} foot={`${vm.kpis.countries} pays · ${vm.kpis.measured} mesurés`} />
-            <Kpi label="Classés dans le top 200" value={formatInt(vm.kpis.ranked)} foot={`dont ${formatInt(vm.kpis.top10)} dans le top 10`} />
+            <Kpi label="Mots-clés classés" value={formatInt(vm.kpis.ranked)} foot={`dont ${formatInt(vm.kpis.top10)} dans le top 10`} />
             <Kpi
               label="Évolution sur 7 jours"
               value={vm.kpis.comparable ? `${vm.kpis.up} ↑ · ${vm.kpis.down} ↓` : "—"}
@@ -56,7 +56,7 @@ export default function Page() {
                   <BarList items={vm.distribution} formatValue={formatInt} />
                   {vm.distributionByApp.length > 1 && (
                     <div className="stack" style={{ gap: "var(--space-2)" }}>
-                      <div className="aso-section-label">Classés top 200, par app</div>
+                      <div className="aso-section-label">Classés, par app</div>
                       <BarList items={vm.distributionByApp} formatValue={formatInt} />
                     </div>
                   )}
@@ -83,7 +83,8 @@ export default function Page() {
 
           <div className="aso-sources">
             <SourceNote source="Métadonnées : App Store Connect" updatedAt={vm.metaSync?.lastOkAt ?? null} />
-            <SourceNote source="Rangs : API iTunes Search (top 200, proche de la recherche App Store)" updatedAt={vm.ranksSync?.lastOkAt ?? null} />
+            <SourceNote source="Rangs App Store, popularité, difficulté : Astro (Mac)" updatedAt={vm.astroSync?.lastOkAt ?? null} />
+            <SourceNote source="Rangs quotidiens : API iTunes Search (top 200)" updatedAt={vm.ranksSync?.lastOkAt ?? null} />
           </div>
         </>
       )}

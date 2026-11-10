@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Daily Astro → Solis sync: opens Astro hidden, waits for its refresh, pushes keywords and ranks.
+     Install: cp scripts/com.drift.solis-astro.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.drift.solis-astro.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.drift.solis-astro</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/jos/Developer/Solis/scripts/astro_sync.py</string>
+    <string>--refresh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/jos/Library/Logs/solis-astro.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jos/Library/Logs/solis-astro.log</string>
+</dict>
+</plist>

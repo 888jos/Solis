@@ -46,6 +46,18 @@ function Move({ move }: { move: RankMove }) {
   }
 }
 
+function Meter({ value, tone }: { value: number | null; tone: "pop" | "diff" }) {
+  if (value == null) return <span className="muted">—</span>;
+  return (
+    <span className="aso-meter" title={String(value)}>
+      <span className="num">{value}</span>
+      <span className="aso-meter__bar">
+        <span className={`aso-meter__fill aso-meter__fill--${tone}`} style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
+      </span>
+    </span>
+  );
+}
+
 function AddKeyword({ form }: { form: AsoViewModel["addForm"] }) {
   const [appSlug, setAppSlug] = useState<string>(form.apps[0]?.value ?? "");
   const [keyword, setKeyword] = useState("");
@@ -108,9 +120,24 @@ export function KeywordTable({ vm }: { vm: AsoViewModel }) {
       ),
     },
     { key: "country", header: "Pays", cell: (r) => <span title={r.countryName}>{r.country.toUpperCase()}</span> },
-    { key: "rank", header: "Rang", align: "right", cell: (r) => (r.rank != null ? <strong className="num">{r.rankLabel}</strong> : <span className="muted">{r.rankLabel}</span>) },
+    {
+      key: "rank",
+      header: "Rang",
+      align: "right",
+      cell: (r) => (
+        <span title={r.sourceLabel}>{r.rank != null ? <strong className="num">{r.rankLabel}</strong> : <span className="muted">{r.rankLabel}</span>}</span>
+      ),
+    },
     { key: "move", header: "vs 7 j", align: "right", cell: (r) => <Move move={r.move} /> },
-    { key: "competitor", header: "1er concurrent", cell: (r) => <span className="aso-competitor">{r.topCompetitor ?? "—"}</span> },
+    { key: "pop", header: <span title="Popularité Apple Search Ads (5 à 100), via Astro">Popularité</span>, align: "right", cell: (r) => <Meter value={r.popularity} tone="pop" /> },
+    { key: "diff", header: <span title="Difficulté Astro (0 à 100) : force des apps déjà classées">Difficulté</span>, align: "right", cell: (r) => <Meter value={r.difficulty} tone="diff" /> },
+    { key: "opp", header: <span title="Popularité × facilité × marge de progression (0 à 100)">Opportunité</span>, align: "right", cell: (r) => (r.opportunity == null ? <span className="muted">—</span> : <strong className="num">{r.opportunity}</strong>) },
+    { key: "apps", header: <span className="aso-hide-sm" title="Nombre d'apps classées sur ce mot-clé (Astro)">Apps</span>, align: "right", cell: (r) => <span className="num muted aso-hide-sm">{r.competitors ?? "—"}</span> },
+    {
+      key: "cov",
+      header: <span className="aso-hide-sm" title="Où sont les mots du mot-clé dans la fiche en ligne de ce pays">Fiche</span>,
+      cell: (r) => <span className={`aso-cov aso-cov--${r.coverage} aso-hide-sm`}>{r.coverageLabel}</span>,
+    },
     {
       key: "actions",
       header: "",
@@ -133,11 +160,27 @@ export function KeywordTable({ vm }: { vm: AsoViewModel }) {
   return (
     <Card
       title="Où se classent les mots-clés suivis ?"
-      subtitle="Position de l'app dans la recherche iTunes, top 200, mesurée chaque jour"
-      action={vm.countryFilter.options.length > 2 ? <Segmented label="Pays" value={vm.countryFilter.value} options={vm.countryFilter.options} onChange={vm.countryFilter.set} /> : undefined}
+      subtitle="Rang dans la recherche App Store (Astro, jusqu'à #999) ou iTunes Search (top 200) · popularité et difficulté d'Astro"
       flush
       footer={<AddKeyword form={vm.addForm} />}
     >
+      <div className="aso-controls">
+        <input className="input aso-search" type="search" placeholder="Chercher un mot-clé" value={vm.tableControls.search} onChange={(e) => vm.tableControls.setSearch(e.target.value)} aria-label="Chercher un mot-clé" />
+        {vm.countryFilter.options.length > 2 && (
+          <select className="select" value={vm.countryFilter.value} onChange={(e) => vm.countryFilter.set(e.target.value)} aria-label="Pays">
+            {vm.countryFilter.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        )}
+        <Segmented label="Trier par" value={vm.tableControls.sortKey} options={vm.tableControls.sorts} onChange={vm.tableControls.setSort} />
+        <button type="button" className={`btn${vm.tableControls.onlyOpportunities ? " aso-on" : ""}`} aria-pressed={vm.tableControls.onlyOpportunities} onClick={vm.tableControls.toggleOpportunities} title="Opportunité ≥ 20 et pas encore dans le top 10">
+          Opportunités
+        </button>
+        <span className="muted aso-count">{vm.tableControls.count} mots-clés</span>
+      </div>
       <DataTable
         columns={columns}
         rows={vm.keywordRows}
