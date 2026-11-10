@@ -159,13 +159,13 @@ def main() -> None:
         created = updated = 0
         for i in range(0, len(keywords), BATCH_KEYWORDS):
             res = call("mutation", "asoAstro:upsertKeywords", {"rows": keywords[i : i + BATCH_KEYWORDS]}) or {}
-            created += res.get("created", 0)
-            updated += res.get("updated", 0)
+            created += int(res.get("created", 0))
+            updated += int(res.get("updated", 0))
         log(f"mots-clés : {created} ajoutés, {updated} mis à jour")
         written = 0
         for i in range(0, len(todo), BATCH_RANKS):
             res = call("mutation", "asoAstro:upsertRanks", {"rows": todo[i : i + BATCH_RANKS]}) or {}
-            written += res.get("written", 0)
+            written += int(res.get("written", 0))
             if (i // BATCH_RANKS) % 25 == 0:
                 log(f"positions : {min(i + BATCH_RANKS, len(todo))}/{len(todo)}")
         msg = f"{len(keywords)} mots-clés ({created} nouveaux), {written} positions envoyées, données Astro au {last_day}"
