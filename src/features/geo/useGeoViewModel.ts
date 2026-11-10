@@ -110,7 +110,7 @@ export function useGeoViewModel() {
   const netBars: BarListItem[] | null = data
     ? data.countries
         .filter((r) => r.proceedsEur > 0.005)
-        .map((r) => ({ key: r.country, label: label(r.country), value: r.proceedsEur, color: "var(--series-4)", hint: `${countryName(r.country)} : ${formatEur(r.proceedsEur)} net, ${formatEur(r.grossEur)} brut` }))
+        .map((r) => ({ key: r.country, label: label(r.country), value: r.proceedsEur, hint: `${countryName(r.country)} : ${formatEur(r.proceedsEur)} net, ${formatEur(r.grossEur)} brut` }))
     : null;
   const totalNet = data ? formatEur(data.totals.proceedsEur) : null;
   const NET_LIMIT = 12;
@@ -120,7 +120,7 @@ export function useGeoViewModel() {
     ? data.countries
         .filter((r) => r.activePaid > 0)
         .sort((a, b) => b.activePaid - a.activePaid || a.country.localeCompare(b.country))
-        .map((r) => ({ key: r.country, label: label(r.country), value: r.activePaid, color: "var(--series-5)", hint: `${countryName(r.country)} : ${formatInt(r.activePaid)} abonnés payants` }))
+        .map((r) => ({ key: r.country, label: label(r.country), value: r.activePaid, color: "var(--glow-violet)", hint: `${countryName(r.country)} : ${formatInt(r.activePaid)} abonnés payants` }))
     : null;
   const activeSubtitle = data?.activeDay ? `Rapport Subscription du ${formatDayLong(data.activeDay)} · ${formatInt(data.activeTotal)} au total, hors essais gratuits` : null;
 

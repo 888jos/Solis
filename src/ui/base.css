@@ -851,3 +851,311 @@ button {
     padding-right: 14px;
   }
 }
+
+/* ==========================================================================
+   Night look (dark theme, the default): near-black canvas, big rounded panel with a dot grain,
+   KPI tiles with a glowing curve, App Store icons, thin blue-teal ranking bars.
+   Everything stays token-driven, so the light theme keeps working.
+   ========================================================================== */
+.shell {
+  background: var(--sidebar);
+}
+
+.sidebar {
+  border-right: 0;
+  padding: 22px 14px 16px;
+  gap: 14px;
+}
+
+.sidebar__brand {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 10px 6px;
+}
+
+.sidebar__brand small {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+}
+
+.nav-section__label {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  padding: 0 12px 6px;
+}
+
+.nav-item {
+  height: 36px;
+  padding: 0 12px;
+  gap: 11px;
+  border-radius: 10px;
+  color: var(--text);
+  opacity: 0.86;
+}
+
+.nav-item:hover {
+  opacity: 1;
+}
+
+.nav-item[aria-current="page"] {
+  opacity: 1;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+.nav-item[aria-current="page"] svg {
+  color: inherit;
+}
+
+/* Business section: App Store icons instead of glyphs */
+.nav-item .app-icon {
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+}
+
+.app-icon {
+  display: inline-block;
+  flex: none;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.app-chip .app-icon {
+  margin-right: 1px;
+}
+
+/* Main panel: one big rounded card floating on the canvas */
+.main {
+  position: relative;
+  margin: 12px 12px 12px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  min-height: calc(100vh - 24px);
+  overflow: clip;
+}
+
+.panel-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(var(--grain) 1px, transparent 1.3px);
+  background-size: 7px 7px;
+  -webkit-mask-image: linear-gradient(180deg, #000, rgba(0, 0, 0, 0.2) 70%);
+  mask-image: linear-gradient(180deg, #000, rgba(0, 0, 0, 0.2) 70%);
+}
+
+.topbar {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border-bottom-color: transparent;
+  padding: 16px 28px 4px;
+}
+
+.content {
+  position: relative;
+  padding: 12px 28px 32px;
+  gap: var(--space-5);
+}
+
+.page-header h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.page-header p {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* Cards: soft top-lit gradient, fine border */
+.card {
+  position: relative;
+  background: linear-gradient(180deg, var(--card-top), var(--surface));
+  border-radius: var(--radius-lg);
+}
+
+/* KPI tiles: label, big number, glowing curve bottom-right */
+.kpi {
+  overflow: hidden;
+  padding: 18px 20px;
+  gap: 6px;
+  min-height: 118px;
+  container-type: inline-size;
+}
+
+.kpi::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: radial-gradient(var(--grain) 1px, transparent 1.3px);
+  background-size: 5px 5px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 40%, #000);
+  mask-image: linear-gradient(90deg, transparent 40%, #000);
+}
+
+.kpi > * {
+  position: relative;
+  z-index: 1;
+}
+
+.kpi__label {
+  font-size: 13px;
+}
+
+.kpi__value {
+  font-size: 28px;
+  font-weight: 600;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.kpi--big {
+  min-height: 156px;
+  padding: 20px 22px;
+}
+
+.kpi--big .kpi__value {
+  font-size: 36px;
+}
+
+.kpi__spark {
+  position: absolute;
+  z-index: 0;
+  right: 16px;
+  bottom: 16px;
+  width: 50%;
+}
+
+.kpi--big .kpi__spark {
+  width: 55%;
+}
+
+/* Narrow tile: the curve goes under the number instead of beside it */
+@container (max-width: 250px) {
+  .kpi__spark {
+    position: static;
+    width: 100%;
+    margin-top: 6px;
+  }
+}
+
+/* App filter: App Store icons as pills (top right) */
+.app-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.app-pills button {
+  border: 0;
+  background: transparent;
+  padding: 2px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.app-pills button[data-dim="true"] {
+  opacity: 0.4;
+  filter: saturate(0.3);
+}
+
+.app-pills button[aria-pressed="true"]:not(.app-pills__all) {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.app-pills button:hover {
+  opacity: 1;
+  filter: none;
+}
+
+.app-pills__all {
+  height: 30px;
+  padding: 0 10px !important;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-2);
+}
+
+.app-pills__all[aria-pressed="true"] {
+  background: var(--control-on);
+  color: var(--text);
+}
+
+/* Ranking bars: label + value on one line, thin glowing bar under it */
+.hbars {
+  display: flex;
+  flex-direction: column;
+}
+
+.hbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label value" "bar bar";
+  row-gap: 8px;
+  padding: 11px 0 10px;
+  border-top: 1px solid var(--border);
+}
+
+.hbar:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.hbar__label {
+  grid-area: label;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.hbar__value {
+  grid-area: value;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.hbar__track {
+  grid-area: bar;
+  height: 3px;
+  background: transparent;
+  overflow: visible;
+}
+
+.hbar__fill {
+  display: block;
+  border-radius: 3px;
+  background: var(--bar, linear-gradient(90deg, var(--bar-from), var(--bar-to)));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--bar, var(--bar-to)) 45%, transparent);
+}
+
+@media (max-width: 860px) {
+  .main {
+    margin: 0;
+    border-radius: 0;
+    border: 0;
+    min-height: 100vh;
+  }
+  .content {
+    padding: 12px 16px 24px;
+  }
+  .page-header h1 {
+    font-size: 24px;
+  }
+  .kpi--big .kpi__value {
+    font-size: 28px;
+  }
+}

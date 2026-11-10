@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Database, Info, Minus, PlugZap, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
-import { APPS, appColor, appName, type AppSlug } from "@/lib/apps";
+import { APPS, appColor, appIcon, appName, type AppSlug } from "@/lib/apps";
 import { formatAgo, formatPct } from "@/lib/format";
 
 /* ---------- Page header ---------- */
@@ -50,16 +50,16 @@ export function Delta({ value, invert }: { value: number | null; invert?: boolea
   );
 }
 
-export function Kpi({ label, value, delta, invertDelta, foot, spark, hint }: { label: ReactNode; value: ReactNode; delta?: number | null; invertDelta?: boolean; foot?: ReactNode; spark?: ReactNode; hint?: string }) {
+export function Kpi({ label, value, delta, invertDelta, foot, spark, hint, big }: { label: ReactNode; value: ReactNode; delta?: number | null; invertDelta?: boolean; foot?: ReactNode; spark?: ReactNode; hint?: string; big?: boolean }) {
   return (
-    <div className="card kpi" title={hint}>
+    <div className={`card kpi${big ? " kpi--big" : ""}${spark ? " kpi--spark" : ""}`} title={hint}>
       <div className="kpi__label">{label}</div>
       <div className="kpi__value num">{value}</div>
       <div className="kpi__foot">
         {delta !== undefined && <Delta value={delta} invert={invertDelta} />}
         {foot && <span>{foot}</span>}
       </div>
-      {spark}
+      {spark && <div className="kpi__spark">{spark}</div>}
     </div>
   );
 }
@@ -92,24 +92,36 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
 }
 
 /* ---------- App label ---------- */
+/** App Store icon of an app, with its series color as a fallback when there is no icon. */
+export function AppIcon({ slug, size = 16 }: { slug: string; size?: number }) {
+  const src = appIcon(slug);
+  const style = { width: size, height: size, borderRadius: Math.round(size * 0.24) };
+  return src ? <img className="app-icon" src={src} alt="" style={style} /> : <span className="app-icon" style={{ ...style, background: appColor(slug) }} aria-hidden />;
+}
+
 export function AppLabel({ slug, name }: { slug: string; name?: string }) {
   const app = APPS.find((a) => a.slug === slug);
   return (
     <span className="app-chip">
-      <span className="app-dot" style={{ background: appColor(slug) }} />
+      <AppIcon slug={slug} size={15} />
       {name ?? app?.name ?? appName(slug)}
     </span>
   );
 }
 
+/** App filter: one App Store icon per app (top right of every page). Clicking the active one shows all apps again. */
 export function AppPicker({ value, onChange }: { value: AppSlug | null; onChange: (v: AppSlug | null) => void }) {
   return (
-    <Segmented<string>
-      label="App"
-      value={value ?? "all"}
-      onChange={(v) => onChange(v === "all" ? null : (v as AppSlug))}
-      options={[{ value: "all", label: "Toutes" }, ...APPS.map((a) => ({ value: a.slug, label: <AppLabel slug={a.slug} /> }))]}
-    />
+    <div className="app-pills" role="group" aria-label="App">
+      <button type="button" className="app-pills__all" aria-pressed={value == null} onClick={() => onChange(null)}>
+        Toutes
+      </button>
+      {APPS.map((a) => (
+        <button key={a.slug} type="button" title={a.name} aria-label={a.name} aria-pressed={value === a.slug} data-dim={value != null && value !== a.slug} onClick={() => onChange(value === a.slug ? null : a.slug)}>
+          <AppIcon slug={a.slug} size={26} />
+        </button>
+      ))}
+    </div>
   );
 }
 

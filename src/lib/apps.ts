@@ -18,3 +18,8 @@ export function appName(slug: string | null | undefined): string {
   if (!slug) return "Studio";
   return appBySlug(slug)?.name ?? OTHER_PROJECTS[slug]?.name ?? slug;
 }
+
+/** App Store icon (exported from the App Store listing into public/app-icons/). */
+export function appIcon(slug: string): string | null {
+  return appBySlug(slug) || slug === "otto" ? `/app-icons/${slug}.${slug === "otto" ? "png" : "jpg"}` : null;
+}
