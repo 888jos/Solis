@@ -1032,11 +1032,16 @@ button {
   z-index: 0;
   right: 16px;
   bottom: 16px;
-  width: 50%;
+  width: 44%;
 }
 
 .kpi--big .kpi__spark {
-  width: 55%;
+  width: 50%;
+}
+
+/* Text keeps the left half so the curve never runs under it */
+.kpi--spark > .kpi__foot {
+  max-width: 50%;
 }
 
 /* Narrow tile: the curve goes under the number instead of beside it */
@@ -1045,6 +1050,9 @@ button {
     position: static;
     width: 100%;
     margin-top: 6px;
+  }
+  .kpi--spark > .kpi__foot {
+    max-width: none;
   }
 }
 
