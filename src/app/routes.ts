@@ -1,4 +1,4 @@
-import { Activity, AppWindow, ChartLine, Compass, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, ChartLine, TrendingUp, Compass, Clapperboard, Download, Euro, Film, GalleryHorizontalEnd, Globe2, LayoutDashboard, MessageCircleHeart, Plug, Receipt, Repeat, Rocket, Scale, Search, Settings, Star, type LucideIcon } from "lucide-react";
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 
 // The sidebar and the router both read this list. One entry per feature module in src/features/.
@@ -36,6 +36,7 @@ export const PAGES: PageDef[] = [
   { id: "acquisition", path: "/acquisition", label: "Acquisition", section: "Croissance", icon: Download, Component: lazy(() => import("@/features/acquisition")) },
   { id: "aso", path: "/aso", label: "ASO", section: "Croissance", icon: Search, Component: lazy(() => import("@/features/aso")) },
 
+  { id: "performance", path: "/marketing", label: "Performance", section: "Marketing", icon: TrendingUp, Component: lazy(() => import("@/features/performance")) },
   { id: "videos", path: "/videos", label: "Vidéos", section: "Marketing", icon: Film, Component: lazy(() => import("@/features/videos")) },
   { id: "carousels", path: "/carrousels", label: "Carrousels", section: "Marketing", icon: GalleryHorizontalEnd, Component: lazy(() => import("@/features/carousels")) },
   { id: "ugc", path: "/ugc", label: "Créateurs UGC", section: "Marketing", icon: Clapperboard, Component: lazy(() => import("@/features/ugc")) },

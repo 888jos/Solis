@@ -245,6 +245,7 @@ export function useCarouselsViewModel() {
       cid: d.cid,
       title: d.topic || d.cid,
       meta: `@${d.account} · ${d.templateName} · ${d.slides.length} slides · ${formatDay(new Date(d.createdAt).toISOString())}`,
+      formatName: d.templateName.startsWith("Format : ") ? d.templateName.slice("Format : ".length) : null,
       status: statusOf(d.status),
       pendingSync: d.decisionPending,
       slides: d.slides,

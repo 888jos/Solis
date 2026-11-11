@@ -918,3 +918,23 @@
   margin: 0;
   font-size: 14px;
 }
+
+/* reference favourite under the carousel being validated */
+.f-carousels .cr-detail__main {
+  min-width: 0;
+}
+.f-carousels .cr-reference {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.f-carousels .cr-reference__label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.f-carousels .cr-slide--ref img {
+  height: min(300px, 40vh);
+}

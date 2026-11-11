@@ -16,6 +16,8 @@ crons.cron("versions + builds", "45 */6 * * *", internal.sources.versions.syncRe
 crons.cron("amplitude + posthog", "50 1,7,13,19 * * *", internal.sources.engagement.syncRecent, {});
 
 // Growth.
+// Post for Me: every account's posts and metrics (page Performance).
+crons.cron("post for me", "7 */3 * * *", internal.sources.postforme.syncRecent, {});
 crons.cron("airtable ugc", "10 2,8,14,20 * * *", internal.sources.airtable.syncRecent, {});
 // App Store Analytics Reports (impressions, product page views, first downloads by source): daily instances.
 crons.cron("asc analytics", "10 7,15 * * *", internal.sources.ascAnalytics.syncRecent, {});

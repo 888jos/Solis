@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Card } from "@/ui";
 import { SHORTCUTS, type ReviewAction, type useCarouselsViewModel } from "../useCarouselsViewModel";
+import { useModelsViewModel } from "../useModelsViewModel";
 
 type VM = ReturnType<typeof useCarouselsViewModel>;
 type Detail = NonNullable<VM["detail"]>;
@@ -17,6 +18,9 @@ const LOCAL_EDITOR = "http://localhost:5180";
 
 export function CarouselDetail({ detail, review, onClose }: { detail: Detail; review: VM["review"]; onClose: () => void; onEdit?: () => void }) {
   const [copied, setCopied] = useState(false);
+  // While carousels are being validated, show the favourite they copy right next to them (Jos 11/11).
+  const models = useModelsViewModel();
+  const reference = detail.formatName ? models.models.find((m) => m.name === detail.formatName) : undefined;
 
   // V / R / X review shortcuts, ignored while typing.
   useEffect(() => {
@@ -64,6 +68,7 @@ export function CarouselDetail({ detail, review, onClose }: { detail: Detail; re
       </div>
 
       <div className="cr-detail">
+        <div className="cr-detail__main">
         <div className="cr-strip" tabIndex={0} aria-label="Slides">
           {detail.slides.map((src, i) => (
             <figure key={src} className="cr-slide">
@@ -76,6 +81,24 @@ export function CarouselDetail({ detail, review, onClose }: { detail: Detail; re
             </figure>
           ))}
           {!detail.slides.length && <p className="muted">Les images n'ont pas encore été envoyées depuis le Mac.</p>}
+        </div>
+        {reference && reference.original.length > 0 && (
+          <div className="cr-reference">
+            <p className="cr-reference__label">
+              Modèle de référence · {reference.reference}
+            </p>
+            <div className="cr-strip cr-strip--ref" aria-label="Modèle de référence">
+              {reference.original.map((src, i) => (
+                <figure key={src} className="cr-slide cr-slide--ref">
+                  <img src={src} alt={`Référence ${i + 1}`} loading="lazy" />
+                  <figcaption className="num">
+                    {i + 1}/{reference.original.length}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        )}
         </div>
 
         <div className="cr-panel">
