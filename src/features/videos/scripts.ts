@@ -78,7 +78,7 @@ export const SCRIPTS: VideoScript[] = [
     id: "lorian_call",
     hero: "lorian",
     title: "Lorian — « quand quelqu'un t'appelle au lieu d'écrire »",
-    duration: "~27 s",
+    duration: "~29 s",
     hooks: ["My phone is ringing. Nobody warned me.", "Who raised you to call without texting first?"],
     caption: "Still not answering Jake. But I called my mom.",
     shots: [
@@ -99,7 +99,7 @@ export const SCRIPTS: VideoScript[] = [
     id: "merion_books",
     hero: "merion",
     title: "Merion — « 14 livres achetés, 0 lus »",
-    duration: "~27 s",
+    duration: "~28 s",
     hooks: ["I don't read books, I collect them.", "Buying a fifteenth book. That'll fix it."],
     caption: "10 pages a day. Book #1 is finally out of the plastic.",
     note: "Plans 3, 4 et 6 : les keyframes TABS montrent Merion L6 (robe violette) dans l'appart. 2 images en plus si on veut un L1 cohérent.",
