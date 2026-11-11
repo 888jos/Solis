@@ -395,8 +395,8 @@ export const summary = authQuery({
       };
     });
 
-    /* ---------- Otto (not an App Store app: only on the all-projects view) ---------- */
-    const ottoRaw = app ? null : await ottoWindow(ctx, { from, to, prevFrom, prevTo }, (d) => bucketOf(d, bucket as Bucket));
+    /* ---------- Otto (not an App Store app: on the all-projects view and when Otto is the filter) ---------- */
+    const ottoRaw = app && app !== "otto" ? null : await ottoWindow(ctx, { from, to, prevFrom, prevTo }, (d) => bucketOf(d, bucket as Bucket));
     const otto = ottoRaw
       ? { ...ottoRaw.current, prev: ottoRaw.previous, series: x.map((k) => round2(ottoRaw.series.get(k) ?? 0)), revenueSource: ottoRaw.revenueSource }
       : null;

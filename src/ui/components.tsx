@@ -122,7 +122,7 @@ export function AppLabel({ slug, name }: { slug: string; name?: string }) {
 }
 
 /** App filter: one App Store icon per app (top right of every page). Clicking the active one shows all apps again. */
-export function AppPicker({ value, onChange }: { value: AppSlug | null; onChange: (v: AppSlug | null) => void }) {
+export function AppPicker({ value, onChange }: { value: AppSlug | "otto" | null; onChange: (v: AppSlug | "otto" | null) => void }) {
   return (
     <div className="app-pills" role="group" aria-label="App">
       <button type="button" className="app-pills__all" aria-pressed={value == null} onClick={() => onChange(null)}>
@@ -133,6 +133,9 @@ export function AppPicker({ value, onChange }: { value: AppSlug | null; onChange
           <AppIcon slug={a.slug} size={26} />
         </button>
       ))}
+      <button type="button" title="Otto (ottoknows.it)" aria-label="Otto" aria-pressed={value === "otto"} data-dim={value != null && value !== "otto"} onClick={() => onChange(value === "otto" ? null : "otto")}>
+        <AppIcon slug="otto" size={26} />
+      </button>
     </div>
   );
 }

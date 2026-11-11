@@ -58,7 +58,7 @@ export type TimelineLane = { slug: string; name: string; color: string; events: 
 
 export function useVersionsViewModel() {
   const { app, setApp } = useFilters();
-  const fresh = useOverview(app);
+  const fresh = useOverview(app === "otto" ? null : app);
   // Keep the previous result while the next app's query loads, so switching apps never flashes skeletons.
   const last = useRef(fresh);
   if (fresh !== undefined) last.current = fresh;

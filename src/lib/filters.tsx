@@ -2,6 +2,9 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { APPS, type AppSlug } from "./apps";
 
+/** Global project filter: an App Store app, or Otto (website, no Apple data). */
+export type ProjectFilter = AppSlug | "otto";
+
 // Global filters live in the URL (?p=30d&app=cortifree) so every view is linkable and the
 // back button works. Every ViewModel reads them through usePeriod() / useAppFilter().
 export type PeriodKey = "7d" | "30d" | "90d" | "mtd" | "12m" | "all";
@@ -91,8 +94,8 @@ type Filters = {
   period: Period;
   setPeriod: (key: PeriodKey) => void;
   /** null = all apps */
-  app: AppSlug | null;
-  setApp: (app: AppSlug | null) => void;
+  app: ProjectFilter | null;
+  setApp: (app: ProjectFilter | null) => void;
 };
 
 const FiltersContext = createContext<Filters | null>(null);
@@ -101,7 +104,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   const [params, setParams] = useSearchParams();
   const periodKey = (PERIODS.some((p) => p.key === params.get("p")) ? params.get("p") : "30d") as PeriodKey;
   const appParam = params.get("app");
-  const app = APPS.some((a) => a.slug === appParam) ? (appParam as AppSlug) : null;
+  const app = appParam === "otto" || APPS.some((a) => a.slug === appParam) ? (appParam as ProjectFilter) : null;
 
   const value = useMemo<Filters>(
     () => ({
