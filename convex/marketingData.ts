@@ -4,12 +4,18 @@ import { authMutation } from "./lib/auth";
 
 // Writes for the Performance page (convex/sources/postforme.ts) and the account → project assignment.
 
-/** Otto's 8 personas (CLAUDE.md, 2026-11-08): new accounts with these handles start assigned to Otto. */
-const OTTO_HANDLES = new Set(["lola.okii", "ines.oki", "manon.okii", "chloe.okii", "leaa.oki", "camille.okii", "maelys.oki", "yasmine.oki"]);
+/** Otto's personas use handles ending in .oki / .okii (lola.okii, leaa.oki...); app accounts carry the app's name. */
+function guessProject(username: string, displayName?: string): string | undefined {
+  const names = [username, displayName ?? ""].map((s) => s.toLowerCase().replace(/\s+/g, ""));
+  if (names.some((n) => /\.okii?$/.test(n))) return "otto";
+  if (names.some((n) => n.includes("cortifree"))) return "cortifree";
+  if (names.some((n) => n.includes("questirl") || n.includes("lifequest"))) return "questirl";
+  return undefined;
+}
 export const PROJECTS = ["otto", "cortifree", "questirl"] as const;
 
 export const upsertAccount = internalMutation({
-  args: { pfmId: v.string(), platform: v.string(), username: v.string(), avatarUrl: v.optional(v.string()), status: v.optional(v.string()) },
+  args: { pfmId: v.string(), platform: v.string(), username: v.string(), displayName: v.optional(v.string()), avatarUrl: v.optional(v.string()), status: v.optional(v.string()) },
   handler: async (ctx, a) => {
     // The seed from Otto's videos used placeholder accounts: the real Post for Me account replaces them.
     const seedId = `seed:${a.platform}:${a.username.toLowerCase()}`;
@@ -21,10 +27,11 @@ export const upsertAccount = internalMutation({
     }
     const existing = await ctx.db.query("socialAccounts").withIndex("by_pfm", (q) => q.eq("pfmId", a.pfmId)).first();
     if (existing) {
-      await ctx.db.patch(existing._id, { ...a, syncedAt: Date.now() });
+      // Keep a project chosen on the page; fill it only when still unassigned.
+      await ctx.db.patch(existing._id, { ...a, project: existing.project ?? seedProject ?? guessProject(a.username, a.displayName), syncedAt: Date.now() });
       return;
     }
-    await ctx.db.insert("socialAccounts", { ...a, project: seedProject ?? (OTTO_HANDLES.has(a.username.toLowerCase()) ? "otto" : undefined), syncedAt: Date.now() });
+    await ctx.db.insert("socialAccounts", { ...a, project: seedProject ?? guessProject(a.username, a.displayName), syncedAt: Date.now() });
   },
 });
 
@@ -97,7 +104,6 @@ export const upsertPosts = internalMutation({
   args: { pfmAccountId: v.string(), day: v.string(), rows: v.array(postRow) },
   handler: async (ctx, { pfmAccountId, day, rows }) => {
     const account = await ctx.db.query("socialAccounts").withIndex("by_pfm", (q) => q.eq("pfmId", pfmAccountId)).first();
-    const project = account?.project;
     const now = Date.now();
     const gain = { views: 0, likes: 0, comments: 0, shares: 0 };
     let platform = rows[0]?.platform ?? account?.platform ?? "";
@@ -106,6 +112,7 @@ export const upsertPosts = internalMutation({
       platform = r.platform;
       handle = r.account;
       const existing = await ctx.db.query("socialPosts").withIndex("by_post", (q) => q.eq("postId", r.postId)).first();
+      const project = account?.project ?? existing?.project;
       // Metrics never go down between two reads (platforms sometimes return a stale count): keep the max.
       const views = Math.max(r.views, existing?.views ?? 0);
       const likes = Math.max(r.likes, existing?.likes ?? 0);
@@ -135,6 +142,7 @@ export const upsertPosts = internalMutation({
       else await ctx.db.insert("socialPostDaily", daily);
     }
     if (!rows.length) return;
+    const project = account?.project;
     const agg = await ctx.db.query("socialDaily").withIndex("by_account_day", (q) => q.eq("pfmAccountId", pfmAccountId).eq("day", day)).first();
     if (agg) {
       await ctx.db.patch(agg._id, { project, views: agg.views + gain.views, likes: agg.likes + gain.likes, comments: agg.comments + gain.comments, shares: agg.shares + gain.shares });
@@ -158,5 +166,23 @@ export const setAccountProject = authMutation({
       for (const s of await ctx.db.query("socialPostDaily").withIndex("by_post_day", (q) => q.eq("postId", post.postId)).collect()) await ctx.db.patch(s._id, { project: p });
     }
     for (const d of await ctx.db.query("socialDaily").withIndex("by_account_day", (q) => q.eq("pfmAccountId", account.pfmId)).collect()) await ctx.db.patch(d._id, { project: p });
+  },
+});
+
+/** After a sync: placeholder accounts from the Otto seed that no post points to any more are removed. */
+export const cleanupSeeds = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const seeds = (await ctx.db.query("socialAccounts").collect()).filter((a) => a.pfmId.startsWith("seed:"));
+    if (!seeds.length) return 0;
+    const used = new Set((await ctx.db.query("socialPosts").collect()).map((p) => p.pfmAccountId));
+    let removed = 0;
+    for (const s of seeds) {
+      if (used.has(s.pfmId)) continue;
+      for (const d of await ctx.db.query("socialDaily").withIndex("by_account_day", (q) => q.eq("pfmAccountId", s.pfmId)).collect()) await ctx.db.delete(d._id);
+      await ctx.db.delete(s._id);
+      removed++;
+    }
+    return removed;
   },
 });

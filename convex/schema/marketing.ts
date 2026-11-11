@@ -8,7 +8,8 @@ export const marketingTables = {
   socialAccounts: defineTable({
     pfmId: v.string(), // Post for Me social account id
     platform: v.string(), // tiktok | instagram | facebook | youtube | x | ...
-    username: v.string(), // without @
+    username: v.string(), // handle, without @
+    displayName: v.optional(v.string()), // what Post for Me calls the account (TikTok: the display name)
     project: v.optional(v.string()), // otto | cortifree | questirl ; unset = to assign on the page
     avatarUrl: v.optional(v.string()),
     status: v.optional(v.string()),

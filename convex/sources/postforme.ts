@@ -14,6 +14,16 @@ const API = "https://api.postforme.dev/v1";
 const MAX_PAGES = 12; // 50 posts per page
 const PLATFORMS = new Set(["tiktok", "instagram", "facebook", "youtube", "x", "threads", "linkedin", "pinterest", "bluesky"]);
 
+const HANDLE = /^[A-Za-z0-9._]{2,40}$/;
+
+/** Handle from a post: its URL (tiktok.com/@handle/...) or the account id the feed gives. */
+function handleOf(p: any): string | null {
+  const fromUrl = /tiktok\.com\/@([^/?#]+)/.exec(String(p.platform_url ?? ""))?.[1];
+  if (fromUrl && HANDLE.test(fromUrl)) return fromUrl;
+  const ext = String(p.external_account_id ?? "").replace(/^@/, "");
+  return HANDLE.test(ext) && !/^\d+$/.test(ext) ? ext : null;
+}
+
 const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : typeof x === "string" && x.trim() !== "" && Number.isFinite(Number(x)) ? Number(x) : 0);
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
 
@@ -45,20 +55,16 @@ async function sync(ctx: ActionCtx) {
     for (const a of accounts) {
       const platform = String(a.platform ?? "").toLowerCase();
       if (typeof a.id !== "string" || !PLATFORMS.has(platform)) continue;
-      const username = String(a.username ?? a.external_id ?? a.id).replace(/^@/, "").slice(0, 80);
-      await ctx.runMutation(internal.marketingData.upsertAccount, {
-        pfmId: a.id,
-        platform,
-        username,
-        avatarUrl: str(a.profile_photo_url) ?? str(a.avatar_url),
-        status: str(a.status),
-      });
+      // Post for Me gives TikTok accounts their display name ("Lola"): the handle comes from the posts.
+      const displayName = String(a.username ?? a.external_id ?? a.id).replace(/^@/, "").slice(0, 80);
+      let username = HANDLE.test(displayName) ? displayName : "";
       const rows = [];
       let cursor: string | undefined;
       try {
         for (let page = 0; page < MAX_PAGES; page++) {
           const r = await get(key, `/social-account-feeds/${a.id}`, { expand: "metrics", limit: "50", ...(cursor ? { cursor } : {}) });
           for (const p of (r.data ?? []) as any[]) {
+            if (!username) username = handleOf(p) ?? "";
             const m = p.metrics ?? {};
             const postedAt = Date.parse(String(p.posted_at ?? ""));
             if (typeof p.platform_post_id !== "string" || Number.isNaN(postedAt)) continue;
@@ -66,7 +72,7 @@ async function sync(ctx: ActionCtx) {
             rows.push({
               postId: p.platform_post_id,
               platform,
-              account: username,
+              account: "",
               url: str(p.platform_url)?.split("?")[0],
               caption: str(p.caption)?.slice(0, 300),
               postedAt,
@@ -84,13 +90,24 @@ async function sync(ctx: ActionCtx) {
           if (!cursor) break;
         }
       } catch (err) {
-        errors.push(`@${username} (${platform}) : ${(err as Error).message}`);
+        errors.push(`@${username || displayName} (${platform}) : ${(err as Error).message}`);
       }
+      if (!username) username = displayName;
+      for (const row of rows) row.account = username;
+      await ctx.runMutation(internal.marketingData.upsertAccount, {
+        pfmId: a.id,
+        platform,
+        username,
+        displayName,
+        avatarUrl: str(a.profile_photo_url) ?? str(a.avatar_url),
+        status: str(a.status),
+      });
       for (let i = 0; i < rows.length; i += 100) {
         await ctx.runMutation(internal.marketingData.upsertPosts, { pfmAccountId: a.id, day, rows: rows.slice(i, i + 100) });
       }
       posts += rows.length;
     }
+    await ctx.runMutation(internal.marketingData.cleanupSeeds, {});
     await ctx.runMutation(internal.syncRuns.finish, {
       runId,
       status: errors.length && !posts ? "error" : "ok",
