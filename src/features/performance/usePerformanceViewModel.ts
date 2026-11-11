@@ -24,7 +24,7 @@ export const platformLabel = (p: string) => PLATFORM_LABEL[p] ?? p;
 
 /** Embeddable player for a post (works without the media URL, which can expire). */
 export function embedUrl(platform: string, postId: string, url: string | null): string | null {
-  if (platform === "tiktok" && /^\d+$/.test(postId)) return `https://www.tiktok.com/embed/v2/${postId}`;
+  if (platform === "tiktok" && /^\d+$/.test(postId)) return `https://www.tiktok.com/player/v1/${postId}?music_info=1&description=1`;
   if (platform === "instagram" && url) {
     const m = /instagram\.com\/(reel|p|tv)\/([^/?#]+)/.exec(url);
     if (m) return `https://www.instagram.com/${m[1]}/${m[2]}/embed`;

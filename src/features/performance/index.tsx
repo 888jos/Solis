@@ -50,10 +50,10 @@ function Preview({ vm }: { vm: PerformanceViewModel }) {
           </button>
         </div>
         <div className="pf-modal__player">
-          {v.embed ? (
-            <iframe src={v.embed} title={`Vidéo de @${v.account}`} allow="encrypted-media; picture-in-picture" allowFullScreen />
-          ) : v.mediaUrl ? (
-            <video src={v.mediaUrl} controls playsInline poster={v.thumbnailUrl ?? undefined} />
+          {v.mediaUrl ? (
+            <video src={v.mediaUrl} controls autoPlay playsInline poster={v.thumbnailUrl ?? undefined} />
+          ) : v.embed ? (
+            <iframe src={v.embed} title={`Vidéo de @${v.account}`} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
           ) : (
             <EmptyState title="Pas d'aperçu disponible">Ouvre la vidéo sur la plateforme.</EmptyState>
           )}
