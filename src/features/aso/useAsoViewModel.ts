@@ -152,6 +152,7 @@ export type KeywordRowVM = {
   coverageLabel: string;
   sourceLabel: string;
   statsLabel: string;
+  popularityFromApple: boolean;
   statsFromAstro: boolean;
   selected: boolean;
   select: () => void;
@@ -249,7 +250,11 @@ export function useAsoViewModel() {
   const liveRows = (meta?.rows ?? []).filter((r) => (r.channel ?? "live") === "live");
   const listingFor = (appSlug: string, c: string) => liveRows.filter((r) => r.appSlug === appSlug && (STORE_LOCALES[c] ?? []).includes(r.locale));
   const q = search.trim().toLowerCase();
-  const enriched = allRows.map((r) => ({ ...r, opp: opportunity(r.popularity, r.difficulty, r.rank), cov: coverage(r.keyword, listingFor(r.appSlug, r.country)) }));
+  // Apple's own popularity (Apple Ads) when Apple lists the term, otherwise Solis' estimate.
+  const enriched = allRows.map((r) => {
+    const popularity = r.applePopularity ?? r.popularity;
+    return { ...r, popularity, opp: opportunity(popularity, r.difficulty, r.rank), cov: coverage(r.keyword, listingFor(r.appSlug, r.country)) };
+  });
   const filtered = enriched.filter(
     (r) =>
       (activeCountry === "all" || r.country === activeCountry) &&
@@ -293,7 +298,8 @@ export function useAsoViewModel() {
     coverage: r.cov,
     coverageLabel: COVERAGE_LABEL[r.cov],
     sourceLabel: `${r.rankSource === "appstore" ? "Recherche App Store" : r.rankSource === "astro" ? "Historique Astro" : "iTunes Search"} · ${r.date ? formatDay(r.date) : ""}`,
-    statsLabel: r.statsSource === "solis" ? `Calculé par Solis${r.statsUpdatedAt ? ` le ${formatDay(new Date(r.statsUpdatedAt).toISOString().slice(0, 10))}` : ""}` : r.statsSource === "astro" ? `Import Astro${r.statsUpdatedAt ? ` du ${formatDay(new Date(r.statsUpdatedAt).toISOString().slice(0, 10))}` : ""} : recalcul par Solis à venir` : "Pas encore calculé",
+    popularityFromApple: r.applePopularity != null,
+    statsLabel: r.applePopularity != null ? `Popularité Apple Ads (semaine du ${r.appleWeek ?? "?"}) : ${r.applePopularity}/100, ${r.applePopularity5 ?? "?"}/5` : r.statsSource === "solis" ? `Calculé par Solis${r.statsUpdatedAt ? ` le ${formatDay(new Date(r.statsUpdatedAt).toISOString().slice(0, 10))}` : ""}` : r.statsSource === "astro" ? `Import Astro${r.statsUpdatedAt ? ` du ${formatDay(new Date(r.statsUpdatedAt).toISOString().slice(0, 10))}` : ""} : recalcul par Solis à venir` : "Pas encore calculé",
     statsFromAstro: r.statsSource === "astro",
     selected: selectedRow != null && keyOf(r) === keyOf(selectedRow),
     select: () => setSelectedKey(keyOf(r)),
@@ -432,6 +438,7 @@ export function useAsoViewModel() {
     },
     astroSync: kw?.astro ?? null,
     statsSync: kw?.stats ?? null,
+    appleSync: kw?.apple ?? null,
     keywordMore: keywordRows.length > ROWS_PREVIEW ? { showAll, hidden: keywordRows.length - ROWS_PREVIEW, total: keywordRows.length, toggle: () => setShowAll((x) => !x) } : null,
     chart,
     addForm: {

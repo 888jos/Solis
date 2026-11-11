@@ -114,6 +114,11 @@ export const growthTables = {
     itunesDate: v.optional(v.string()), // last day the server tracker measured it (App Store search, iTunes fallback)
     statsSource: v.optional(v.string()), // "solis" (computed from App Store search + suggestions) or "astro" (imported)
     statsUpdatedAt: v.optional(v.number()),
+    // Apple's own popularity (Apple Ads Platform API, search term popularity): only for terms in the top
+    // ~500 of their genre and country. 1-100 across all genres, 1-5 tier, week it describes.
+    applePopularity: v.optional(v.number()),
+    applePopularity5: v.optional(v.number()),
+    appleWeek: v.optional(v.string()),
   })
     .index("by_app", ["appSlug"])
     .index("by_app_keyword_country", ["appSlug", "keyword", "country"]),
@@ -133,4 +138,19 @@ export const growthTables = {
     // absent) = public iTunes Search API. One row per day; priority appstore > astro > itunes.
     source: v.optional(v.union(v.literal("itunes"), v.literal("astro"), v.literal("appstore"))),
   }).index("by_app_keyword_date", ["appSlug", "keyword", "country", "date"]).index("by_date", ["date"]),
+
+  // Apple Ads Platform API, search term popularity: the most searched terms per country and genre,
+  // one row per (week, country, genre, term). Refreshed weekly (Apple publishes Mondays 07:00 UTC).
+  appleSearchTerms: defineTable({
+    week: v.string(), // the Sunday after the Sunday-Saturday week, as Apple returns it
+    country: v.string(), // lowercase
+    genre: v.string(),
+    term: v.string(), // lowercase
+    popularity: v.number(), // 1-100 across all genres in the country
+    popularity5: v.optional(v.number()),
+    popularityInGenre: v.optional(v.number()),
+    rankInGenre: v.optional(v.number()),
+  })
+    .index("by_week_country", ["week", "country"])
+    .index("by_country_term", ["country", "term"]),
 };

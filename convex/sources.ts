@@ -8,7 +8,7 @@ import { authAction, authQuery } from "./lib/auth";
 // Sources page model: registry of every data source, its sync job, freshness from syncRuns and the
 // presence (never the value) of the env vars it needs.
 
-export type JobId = "revenue" | "subscriptions" | "reviews" | "versions" | "aso" | "engagement" | "aiCosts" | "airtable" | "fx" | "brief" | "stripe" | "metaAds" | "ascAnalytics";
+export type JobId = "revenue" | "subscriptions" | "reviews" | "versions" | "aso" | "engagement" | "aiCosts" | "airtable" | "fx" | "brief" | "stripe" | "metaAds" | "ascAnalytics" | "appleAds";
 
 type SyncRef = FunctionReference<"action", "internal", Record<string, never>>;
 
@@ -26,6 +26,7 @@ const JOBS: Record<JobId, { ref: SyncRef; label: string }> = {
   stripe: { ref: internal.sources.stripe.syncRecent as SyncRef, label: "Stripe Otto" },
   metaAds: { ref: internal.sources.metaAds.syncRecent as SyncRef, label: "Meta Ads" },
   ascAnalytics: { ref: internal.sources.ascAnalytics.syncRecent as SyncRef, label: "Analytics App Store" },
+  appleAds: { ref: internal.sources.appleAds.backfill as SyncRef, label: "Apple Ads · popularité" },
 };
 
 type SourceDef = {
@@ -48,6 +49,7 @@ export const SOURCES: SourceDef[] = [
   { source: "itunes_ratings", name: "iTunes Lookup · notes par pays", feeds: "Avis & notes", job: "reviews", envs: [], cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_versions", name: "App Store Connect · versions", feeds: "Versions", job: "versions", envs: ASC, cadence: "toutes les 6 h", staleAfterHours: 18 },
   { source: "asc_analytics", name: "App Store Connect · analytics (fiche)", feeds: "Acquisition (impressions, vues, conversion)", job: "ascAnalytics", envs: ASC, cadence: "2 fois par jour", staleAfterHours: 30 },
+  { source: "apple_ads", name: "Apple Ads · popularité officielle des recherches", feeds: "ASO (popularité Apple)", job: "appleAds", envs: ["ASA_CLIENT_ID", "ASA_TEAM_ID", "ASA_KEY_ID", "ASA_PRIVATE_KEY_B64"], cadence: "chaque lundi", staleAfterHours: 24 * 8 },
   { source: "aso_stats", name: "App Store · popularité et difficulté", feeds: "ASO", job: null, envs: [], cadence: "chaque jour, chaque mot-clé tous les 14 jours", staleAfterHours: 50 },
   // Astro's history was imported once (2026-11-11); the import code is gone, Solis does not depend on it.
   { source: "astro", name: "Astro · historique importé (ponctuel)", feeds: "ASO, positions avant le 11 nov.", job: null, envs: [], cadence: "import unique, terminé", staleAfterHours: 1e9 },

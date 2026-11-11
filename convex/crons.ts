@@ -19,6 +19,8 @@ crons.cron("amplitude + posthog", "50 1,7,13,19 * * *", internal.sources.engagem
 crons.cron("airtable ugc", "10 2,8,14,20 * * *", internal.sources.airtable.syncRecent, {});
 // App Store Analytics Reports (impressions, product page views, first downloads by source): daily instances.
 crons.cron("asc analytics", "10 7,15 * * *", internal.sources.ascAnalytics.syncRecent, {});
+// Apple Ads search term popularity: Apple publishes the previous week on Mondays 07:00 UTC.
+crons.cron("apple ads popularity", "30 9 * * 1", internal.sources.appleAds.syncRecent, {});
 crons.cron("aso metadata + ranks", "15 4 * * *", internal.sources.aso.syncRecent, {});
 
 // Stripe (Otto) and Meta Ads (CortiFree): skipped until their keys are set on Convex.

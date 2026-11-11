@@ -76,10 +76,13 @@ export const keywords = authQuery({
         competitors: k.competitors ?? null,
         astroUpdatedAt: k.astroUpdatedAt ?? null,
         statsSource: k.statsSource ?? (k.popularity != null ? "astro" : null),
+        applePopularity: k.applePopularity ?? null,
+        applePopularity5: k.applePopularity5 ?? null,
+        appleWeek: k.appleWeek ?? null,
         statsUpdatedAt: k.statsUpdatedAt ?? k.astroUpdatedAt ?? null,
       });
     }
-    return { sync: await latestRun(ctx, "aso_ranks"), stats: await latestRun(ctx, "aso_stats"), astro: await latestRun(ctx, "astro"), rows };
+    return { sync: await latestRun(ctx, "aso_ranks"), stats: await latestRun(ctx, "aso_stats"), astro: await latestRun(ctx, "astro"), apple: await latestRun(ctx, "apple_ads"), rows };
   },
 });
 
@@ -135,5 +138,27 @@ export const refresh = authMutation({
     if (await chainActive(ctx, "aso_ranks")) return { started: false };
     await ctx.scheduler.runAfter(0, internal.sources.aso.syncRecent, {});
     return { started: true };
+  },
+});
+
+/** Most searched terms of the latest Apple Ads week in the studio's genres, not tracked yet (for one app or all). */
+export const discover = authQuery({
+  args: { country: v.string(), app: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { country, app }) => {
+    const latest = await ctx.db.query("appleSearchTerms").withIndex("by_week_country").order("desc").first();
+    if (!latest) return { week: null, rows: [] };
+    const rows = await ctx.db.query("appleSearchTerms").withIndex("by_week_country", (q) => q.eq("week", latest.week).eq("country", country)).collect();
+    const tracked = new Set(
+      (app ? await ctx.db.query("asoKeywords").withIndex("by_app", (q) => q.eq("appSlug", app)).collect() : await ctx.db.query("asoKeywords").collect())
+        .filter((k) => !k.removedAt && k.country === country)
+        .map((k) => k.keyword),
+    );
+    const best = new Map<string, { term: string; popularity: number; genre: string; rankInGenre: number | null }>();
+    for (const r of rows) {
+      if (tracked.has(r.term)) continue;
+      const prev = best.get(r.term);
+      if (!prev || r.popularity > prev.popularity) best.set(r.term, { term: r.term, popularity: r.popularity, genre: r.genre, rankInGenre: r.rankInGenre ?? null });
+    }
+    return { week: latest.week, rows: [...best.values()].sort((a, b) => b.popularity - a.popularity).slice(0, 40) };
   },
 });

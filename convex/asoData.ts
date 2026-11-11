@@ -168,3 +168,60 @@ export const rankRunActive = internalQuery({
 });
 
 export const RANK_RUN_STALE_MS = 60 * 60_000;
+
+/* ---------- Apple Ads search term popularity ---------- */
+
+/** Countries with at least one tracked keyword. */
+export const trackedCountries = internalQuery({
+  args: {},
+  handler: async (ctx) => [...new Set((await ctx.db.query("asoKeywords").collect()).filter((k) => !k.removedAt).map((k) => k.country))].sort(),
+});
+
+const appleTermRow = v.object({
+  week: v.string(),
+  country: v.string(),
+  genre: v.string(),
+  term: v.string(),
+  popularity: v.number(),
+  popularity5: v.optional(v.number()),
+  popularityInGenre: v.optional(v.number()),
+  rankInGenre: v.optional(v.number()),
+});
+
+/** Upserts rows keyed by (week, country, genre, term). */
+export const writeAppleTerms = internalMutation({
+  args: { rows: v.array(appleTermRow) },
+  handler: async (ctx, { rows }) => {
+    let n = 0;
+    for (const r of rows) {
+      const same = (await ctx.db.query("appleSearchTerms").withIndex("by_country_term", (q) => q.eq("country", r.country).eq("term", r.term)).collect()).find((x) => x.week === r.week && x.genre === r.genre);
+      if (same) await ctx.db.replace(same._id, r);
+      else await ctx.db.insert("appleSearchTerms", r);
+      n++;
+    }
+    return n;
+  },
+});
+
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().trim().replace(/\s+/g, " ");
+
+/** Copies Apple's latest popularity (max across genres) onto every tracked keyword that Apple lists. */
+export const applyApplePopularity = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const keywords = (await ctx.db.query("asoKeywords").collect()).filter((k) => !k.removedAt);
+    let matched = 0;
+    for (const k of keywords) {
+      const rows = await ctx.db.query("appleSearchTerms").withIndex("by_country_term", (q) => q.eq("country", k.country).eq("term", k.keyword)).collect();
+      const alt = rows.length ? [] : await ctx.db.query("appleSearchTerms").withIndex("by_country_term", (q) => q.eq("country", k.country).eq("term", fold(k.keyword))).collect();
+      const all = rows.length ? rows : alt;
+      if (!all.length) continue;
+      const week = all.reduce((m, r) => (r.week > m ? r.week : m), "");
+      const latest = all.filter((r) => r.week === week);
+      const best = latest.reduce((a, b) => (b.popularity > a.popularity ? b : a));
+      await ctx.db.patch(k._id, { applePopularity: best.popularity, applePopularity5: best.popularity5, appleWeek: week });
+      matched++;
+    }
+    return matched;
+  },
+});

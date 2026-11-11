@@ -9,3 +9,4 @@ coverage
 public/cf-models
 public/cf-phone
 .deploy-assets
+apple-ads-public-key.pem

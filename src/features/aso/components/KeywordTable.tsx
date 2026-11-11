@@ -131,11 +131,12 @@ export function KeywordTable({ vm }: { vm: AsoViewModel }) {
     { key: "move", header: "vs 7 j", align: "right", cell: (r) => <Move move={r.move} /> },
     {
       key: "pop",
-      header: <span title="Estimée (5 à 100) : nombre de lettres à taper avant que l'App Store suggère le mot-clé, et sa place dans les suggestions">Popularité</span>,
+      header: <span title="Popularité Apple Ads (1 à 100, repérée par un A) quand Apple liste le terme, sinon estimation Solis (lettres à taper avant que l'App Store le suggère)">Popularité</span>,
       align: "right",
       cell: (r) => (
-        <span title={r.statsLabel} className={r.statsFromAstro ? "aso-stale" : undefined}>
+        <span title={r.statsLabel} className={r.statsFromAstro && !r.popularityFromApple ? "aso-stale" : undefined}>
           <Meter value={r.popularity} tone="pop" />
+          {r.popularityFromApple && <span className="aso-apple" aria-label="Chiffre Apple">A</span>}
         </span>
       ),
     },

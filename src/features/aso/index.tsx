@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { formatDayLong, formatInt } from "@/lib/format";
 import { BarList, Card, EmptyState, Kpi, KpiSkeleton, NotConnected, PageHeader, Skeleton, SourceNote } from "@/ui";
+import { DiscoverCard } from "./components/DiscoverCard";
 import { KeywordTable } from "./components/KeywordTable";
 import { MetadataCard } from "./components/MetadataCard";
 import { RankHistoryCard } from "./components/RankHistoryCard";
@@ -69,6 +70,8 @@ export default function Page() {
 
           <KeywordTable vm={vm} />
 
+          <DiscoverCard vm={vm} />
+
           {vm.metaError && !vm.hasMetadata ? (
             <Card title="Fiches App Store">
               <NotConnected source="App Store Connect (métadonnées)" missing={vm.metaError} />
@@ -84,7 +87,8 @@ export default function Page() {
           <div className="aso-sources">
             <SourceNote source="Métadonnées : App Store Connect" updatedAt={vm.metaSync?.lastOkAt ?? null} />
             <SourceNote source="Rangs : recherche App Store, chaque jour" updatedAt={vm.ranksSync?.lastOkAt ?? null} />
-            <SourceNote source="Popularité estimée et difficulté : calculées par Solis" updatedAt={vm.statsSync?.lastOkAt ?? null} />
+            <SourceNote source="Popularité officielle : Apple Ads (termes les plus cherchés)" updatedAt={vm.appleSync?.lastOkAt ?? null} />
+            <SourceNote source="Popularité estimée (autres termes) et difficulté : calculées par Solis" updatedAt={vm.statsSync?.lastOkAt ?? null} />
             <SourceNote source="Historique avant le 11 nov. : import Astro (grisé tant que pas recalculé)" updatedAt={vm.astroSync?.lastOkAt ?? null} />
           </div>
         </>

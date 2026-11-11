@@ -61,6 +61,7 @@ import type * as session from "../session.js";
 import type * as sources from "../sources.js";
 import type * as sources_aiCosts from "../sources/aiCosts.js";
 import type * as sources_airtable from "../sources/airtable.js";
+import type * as sources_appleAds from "../sources/appleAds.js";
 import type * as sources_asc from "../sources/asc.js";
 import type * as sources_ascAnalytics from "../sources/ascAnalytics.js";
 import type * as sources_aso from "../sources/aso.js";
@@ -146,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   sources: typeof sources;
   "sources/aiCosts": typeof sources_aiCosts;
   "sources/airtable": typeof sources_airtable;
+  "sources/appleAds": typeof sources_appleAds;
   "sources/asc": typeof sources_asc;
   "sources/ascAnalytics": typeof sources_ascAnalytics;
   "sources/aso": typeof sources_aso;
