@@ -57,7 +57,7 @@ async function sync(ctx: ActionCtx) {
       if (typeof a.id !== "string" || !PLATFORMS.has(platform)) continue;
       // Post for Me gives TikTok accounts their display name ("Lola"): the handle comes from the posts.
       const displayName = String(a.username ?? a.external_id ?? a.id).replace(/^@/, "").slice(0, 80);
-      let username = HANDLE.test(displayName) ? displayName : "";
+      let username = platform !== "tiktok" && HANDLE.test(displayName) ? displayName : "";
       const rows = [];
       let cursor: string | undefined;
       try {
