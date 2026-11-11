@@ -349,3 +349,110 @@
 .f-videos .vd-script td:first-child {
   white-space: nowrap;
 }
+
+/* ---- script editor ---- */
+.f-videos .vd-edit__top {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.f-videos .vd-edit__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.f-videos .vd-edit__meta--wide {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: var(--space-3);
+}
+
+.f-videos .vd-edit__meta label,
+.f-videos .vd-edit__grid label,
+.f-videos .vd-edit__who {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.f-videos .vd-edit__meta textarea,
+.f-videos .vd-edit__grid textarea {
+  height: auto;
+  padding: 6px 8px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.f-videos .vd-edit__shots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.f-videos .vd-edit__shot {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.f-videos .vd-edit__shot--promo {
+  background: var(--surface-2);
+}
+
+.f-videos .vd-edit__shothead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.f-videos .vd-edit__time {
+  width: 100px;
+}
+
+.f-videos .vd-edit__grid {
+  display: grid;
+  grid-template-columns: 180px repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.f-videos .vd-edit__imgcol {
+  grid-row: span 2;
+}
+
+.f-videos .vd-edit__imgcol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.f-videos .vd-edit__imgcol .vd-script__thumb {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .f-videos .vd-edit__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.f-videos .vd-edit__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.f-videos .vd-edit__error {
+  color: var(--critical, #e5484d);
+  font-size: 13px;
+}

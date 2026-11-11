@@ -83,6 +83,7 @@ import type * as ugc from "../ugc.js";
 import type * as ugcData from "../ugcData.js";
 import type * as versions from "../versions.js";
 import type * as versionsData from "../versionsData.js";
+import type * as videoScripts from "../videoScripts.js";
 import type * as watchdog from "../watchdog.js";
 
 import type {
@@ -167,6 +168,7 @@ declare const fullApi: ApiFromModules<{
   ugcData: typeof ugcData;
   versions: typeof versions;
   versionsData: typeof versionsData;
+  videoScripts: typeof videoScripts;
   watchdog: typeof watchdog;
 }>;
 

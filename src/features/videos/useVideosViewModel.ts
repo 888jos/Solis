@@ -3,7 +3,6 @@ import type { FunctionReturnType } from "convex/server";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSolisQuery } from "@/lib/convex";
-import { SCRIPTS } from "./scripts";
 
 type Library = FunctionReturnType<typeof api.media.library>;
 export type MediaItem = Library["items"][number];
@@ -133,7 +132,6 @@ export function useVideosViewModel() {
     tab,
     tabs: [...TABS],
     setTab: (t: TabKey) => setParam("tab", t, "scripts"),
-    scripts: project === "questirl" ? SCRIPTS.filter((s) => !hero || s.hero === hero) : [],
     mediaByKey: derived?.byKey ?? null,
     heroOptions: [{ value: "", label: "Tous" }, ...HEROES.map((h) => ({ value: h, label: cap(h) }))],
     hero,

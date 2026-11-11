@@ -30,6 +30,20 @@ export const projectTables = {
     .index("by_key", ["key"])
     .index("by_project", ["project"]),
 
+  // Vidéos page > Scripts: video scripts edited in Solis (Quest IRL talking sketches). The page starts from the
+  // scripts written in src/features/videos/scripts.ts; a row here overrides the one with the same scriptId
+  // (deleted: true hides it), and new scripts only exist here. Edited from the browser, never synced from the Mac.
+  videoScripts: defineTable({
+    scriptId: v.string(),
+    project: v.string(), // questirl
+    order: v.number(),
+    deleted: v.optional(v.boolean()),
+    data: v.optional(v.any()), // VideoScript (src/features/videos/scripts.ts), checked by convex/videoScripts.ts
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["project"])
+    .index("by_script", ["scriptId"]),
+
   ottoDaily: defineTable({
     day: v.string(), // YYYY-MM-DD (Paris day, as Otto stores it)
     reports: v.number(),
